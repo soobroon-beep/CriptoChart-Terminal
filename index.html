@@ -30,6 +30,7 @@
     </div>
     <div class="top-actions">
       <span id="connection" class="connection">● Conectando</span>
+      <button id="accountBtn" class="account-btn" hidden>Iniciar sesión</button>
       <button id="themeBtn" title="Cambiar tema" class="icon-btn">◐</button>
     </div>
   </header>
@@ -91,7 +92,7 @@
     <!-- 3 · INDICADORES -->
     <section class="view" id="indicatorView">
       <div class="view-head"><div><div class="eyebrow">ANÁLISIS TÉCNICO</div><h1>Indicadores</h1></div></div>
-      <p class="intro">Activa indicadores y aparecerán directamente en el gráfico. Los cambios se guardan en este dispositivo.</p>
+      <p class="intro">Activa indicadores y aparecerán directamente en el gráfico. Los cambios se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.</p>
       <div id="indicatorList" class="settings-list"></div>
       <div class="section-label">MIS SCRIPTS</div>
       <div class="setting-row">
@@ -104,6 +105,8 @@
     <!-- 4 · AJUSTES -->
     <section class="view" id="settingsView">
       <div class="view-head"><div><div class="eyebrow">ESPACIO DE TRABAJO</div><h1>Configuración</h1></div></div>
+      <div class="section-label">CUENTA</div>
+      <div id="accountBox"></div>
       <div class="section-label">APARIENCIA</div>
       <div class="setting-row">
         <div><b>Tema</b><small>Interfaz clara u oscura</small></div>
@@ -117,7 +120,7 @@
       <button class="setting-row action-row" id="exportData"><span>Exportar mi configuración (JSON)</span><span>↗</span></button>
       <label class="setting-row action-row" for="importFile"><span>Importar configuración (JSON)</span><span>↙</span></label>
       <input type="file" id="importFile" accept="application/json" hidden>
-      <p class="small-note">Los dibujos, indicadores, temporalidad y seguimiento se guardan en este dispositivo y viajan en la exportación JSON. Esta interfaz móvil todavía no incluye el intérprete Pine ni las alertas del proyecto original. No se simulan cotizaciones.</p>
+      <p class="small-note">Los dibujos, indicadores, temporalidad y seguimiento se guardan en este dispositivo y, si inicias sesión con Google, también en tu cuenta. Viajan en la exportación JSON. Esta interfaz móvil todavía no incluye el intérprete Pine ni las alertas del proyecto original. No se simulan cotizaciones.</p>
     </section>
   </main>
 
@@ -137,6 +140,7 @@
   </div>
   <div id="toast" role="status"></div>
 </div>
+<script src="firebase-config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

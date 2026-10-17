@@ -29,3 +29,12 @@
 #toast{bottom:calc(90px + env(safe-area-inset-bottom))}
 .chart-mode #toast{bottom:calc(90px + env(safe-area-inset-bottom))}
 .view{-webkit-overflow-scrolling:touch}
+
+/* ── Cuenta de Google ── */
+.account-btn{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:18px;font-size:11px;font-weight:700;padding:7px 11px;display:flex;align-items:center;justify-content:center;min-height:34px}
+.account-btn img{width:24px;height:24px;border-radius:50%;display:block}
+.account-row{justify-content:flex-start;gap:12px}
+.avatar{width:42px;height:42px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;background:var(--raised)}
+.google-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px;padding:14px;border-radius:12px;border:1px solid var(--line);background:#fff;color:#1f1f1f;font-weight:700;font-size:14px}
+.google-btn .g{font-weight:900;color:#4285f4;font-size:18px}
+code{background:var(--raised);padding:1px 5px;border-radius:5px;font-size:10px}

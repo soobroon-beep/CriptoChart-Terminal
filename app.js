@@ -26,9 +26,15 @@ function merge(s) {
   if (typeof o.symbol !== 'string') o.symbol = o.symbols[0];
   return o;
 }
-let state;
-try { state = merge(JSON.parse(localStorage.getItem(STORE) || '{}')); } catch { state = merge({}); }
-const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch {} };
+/* Cuenta de Google (Firebase) — opcional: se activa si firebase-config.js define window.CCT_FIREBASE */
+const CFG = window.CCT_FIREBASE, cloudEnabled = !!(CFG && CFG.apiKey && CFG.projectId);
+const LASTUID = 'cct_last_uid', CLOUD_DOC = u => `users/${u}/data/cct_mobile`;
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+let uid = cloudEnabled ? lsGet(LASTUID) : null, fbUser = null, auth = null, db = null, unsubCloud = null, pushTimer = 0, lastRemote = '', syncStatus = '';
+const storeKey = () => uid ? `${STORE}_${uid}` : STORE;
+const readLocal = key => { try { return JSON.parse(lsGet(key) || '{}'); } catch { return {}; } };
+let state = merge(readLocal(storeKey()));
+const save = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch {} cloudPush(); };
 
 /* ───────── Utilidades ───────── */
 const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','⚛'],UNI:['Uniswap','🦄'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
@@ -620,7 +626,7 @@ $('#importFile').onchange = async e => {
   try {
     const data = JSON.parse(await e.target.files[0].text());
     if (!Array.isArray(data.symbols) || typeof data.symbol !== 'string') throw Error();
-    state = merge(data); save(); clearTransient(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); closeWS(); candles = []; updateChartHeader(); loadCandles(); toast('Configuración importada');
+    applyState(data); save(); toast('Configuración importada');
   } catch { toast('Archivo de configuración inválido'); }
   e.target.value = '';
 };
@@ -630,9 +636,98 @@ document.addEventListener('keydown', e => {
   document.body.classList.remove('expanded'); syncFullscreenLabel(); requestAnimationFrame(render);
 });
 
+
+/* ───────── Aplicar estado completo (importar / nube) ───────── */
+function applyState(data, soft = false) {
+  const sameChart = soft && data.symbol === state.symbol && data.interval === state.interval;
+  state = merge(data); clearTransient(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader();
+  if (!sameChart) { closeWS(); candles = []; ind = {}; loadCandles(); }
+}
+
+/* ───────── Cuenta de Google + guardado en la nube (Firebase Auth + Firestore) ───────── */
+function loadScript(src) { return new Promise((ok, fail) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => fail(Error('No se pudo cargar ' + src)); document.head.appendChild(el); }); }
+function renderAccount() {
+  const box = $('#accountBox'), top = $('#accountBtn');
+  if (!cloudEnabled) {
+    top.hidden = true;
+    box.innerHTML = `<div class="setting-row"><div><b>Cuenta de Google</b><small>No configurada. Tus datos se guardan solo en este dispositivo. Quien administra la app debe completar <code>firebase-config.js</code>.</small></div><span class="pill">Desactivada</span></div>`;
+    return;
+  }
+  if (fbUser) {
+    top.hidden = false; top.innerHTML = fbUser.photoURL ? `<img src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : '👤'; top.title = 'Cuenta';
+    box.innerHTML = `<div class="setting-row account-row">${fbUser.photoURL ? `<img class="avatar" src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : '<span class="avatar">👤</span>'}<div><b>${esc(fbUser.displayName || 'Cuenta de Google')}</b><small>${esc(fbUser.email || '')}<br>${esc(syncStatus)}</small></div></div><button class="setting-row action-row" id="signOutBtn"><span>Cerrar sesión</span><span>⏻</span></button>`;
+    $('#signOutBtn').onclick = signOut;
+  } else {
+    top.hidden = false; top.textContent = 'Iniciar sesión'; top.title = 'Iniciar sesión con Google';
+    box.innerHTML = `<div class="setting-row"><div><b>Guarda todo en tu cuenta</b><small>${esc(syncStatus) || 'Inicia sesión con Google para conservar tu seguimiento, indicadores y dibujos en cualquier dispositivo.'}</small></div></div><button class="google-btn" id="signInBtn"><span class="g">G</span> Iniciar sesión con Google</button>`;
+    $('#signInBtn').onclick = signIn;
+  }
+}
+$('#accountBtn').onclick = () => { if (fbUser) switchView('settingsView'); else signIn(); };
+async function signIn() {
+  if (!auth) { toast('El servicio de cuentas no está disponible'); return; }
+  const provider = new firebase.auth.GoogleAuthProvider(); provider.setCustomParameters({prompt: 'select_account'});
+  try { await auth.signInWithPopup(provider); }
+  catch (e) {
+    if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'].includes(e.code)) { auth.signInWithRedirect(provider); return; }
+    if (!['auth/popup-closed-by-user', 'auth/cancelled-popup-request'].includes(e.code)) toast('No se pudo iniciar sesión: ' + (e.code || e.message));
+  }
+}
+function signOut() { if (auth) auth.signOut(); }
+async function onUser(user) {
+  if (unsubCloud) { unsubCloud(); unsubCloud = null; }
+  clearTimeout(pushTimer); fbUser = user;
+  if (!user) {
+    try { localStorage.removeItem(LASTUID); } catch {}
+    if (uid) { uid = null; lastRemote = ''; applyState(readLocal(STORE)); } // vuelve al estado local sin sesión; los datos de la cuenta no se quedan visibles
+    syncStatus = ''; renderAccount(); return;
+  }
+  uid = user.uid; try { localStorage.setItem(LASTUID, uid); } catch {}
+  syncStatus = 'Sincronizando…'; renderAccount();
+  const ref = db.doc(CLOUD_DOC(uid));
+  try {
+    const snap = await ref.get();
+    if (snap.exists && snap.data().state) { lastRemote = snap.data().state; applyState(JSON.parse(lastRemote)); save(); }
+    else { // primera vez en esta cuenta: se sube lo que ya había en este dispositivo
+      const mine = JSON.stringify(state); lastRemote = mine; save();
+      await ref.set({state: mine, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+    }
+    unsubCloud = ref.onSnapshot(sn => { // cambios hechos desde otro dispositivo
+      if (sn.metadata.hasPendingWrites || !sn.exists) return;
+      const str = sn.data().state; if (!str || str === lastRemote) return;
+      lastRemote = str; try { applyState(JSON.parse(str), true); save(); } catch {}
+    }, () => {});
+    syncStatus = 'Guardado en tu cuenta';
+  } catch (e) { syncStatus = 'No se pudo sincronizar (' + (e.code || 'error') + '). Tus datos siguen guardados en este dispositivo.'; }
+  renderAccount();
+}
+function cloudPush() {
+  if (!uid || !db || !fbUser) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(async () => {
+    const str = JSON.stringify(state); if (str === lastRemote) return;
+    lastRemote = str;
+    try { await db.doc(CLOUD_DOC(uid)).set({state: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); syncStatus = 'Guardado en tu cuenta'; }
+    catch { syncStatus = 'No se pudo guardar en la nube. Se reintentará al próximo cambio.'; lastRemote = ''; }
+    renderAccount();
+  }, 1200);
+}
+async function initCloud() {
+  renderAccount();
+  if (!cloudEnabled) return;
+  try {
+    const B = 'https://www.gstatic.com/firebasejs/10.12.2/';
+    await loadScript(B + 'firebase-app-compat.js');
+    await Promise.all([loadScript(B + 'firebase-auth-compat.js'), loadScript(B + 'firebase-firestore-compat.js')]);
+    firebase.initializeApp(CFG); auth = firebase.auth(); db = firebase.firestore();
+    auth.getRedirectResult().catch(e => toast('No se pudo iniciar sesión: ' + (e.code || e.message)));
+    auth.onAuthStateChanged(onUser);
+  } catch { syncStatus = 'No se pudo contactar con el servicio de cuentas.'; renderAccount(); }
+}
+
 /* ───────── Arranque ───────── */
 renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); updateDrawUI(); theme(); syncFullscreenLabel();
-fetchTicker(); loadCandles();
+fetchTicker(); loadCandles(); initCloud();
 setInterval(fetchTicker, 30000);
 setInterval(() => { if (currentView === 'chartView' && !wsOpen && candles.length && !document.hidden) loadCandles(true); }, 20000);
 })();
