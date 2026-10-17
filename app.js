@@ -57,7 +57,17 @@ let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0;
 const lastShown = {};
 
 /* ───────── Navegación ───────── */
+const deskMQ = window.matchMedia ? window.matchMedia('(min-width: 1024px)') : {matches: false};
+const isDesktop = () => deskMQ.matches;
+function setSide(id) {
+  document.body.dataset.side = id;
+  $$('.side-tabs button').forEach(b => b.classList.toggle('active', b.dataset.side === id));
+}
 function switchView(id) {
+  if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
+    if (id === 'indicatorView' || id === 'settingsView') { setSide(id); return; }
+    id = 'chartView';
+  }
   currentView = id;
   $$('.view').forEach(x => x.classList.toggle('active', x.id === id));
   $$('.bottom-nav button').forEach(x => x.classList.toggle('active', x.dataset.view === id));
@@ -65,9 +75,17 @@ function switchView(id) {
   if (id !== 'chartView') document.body.classList.remove('expanded');
   if (id === 'chartView') requestAnimationFrame(() => { if (!candles.length) loadCandles(); render(); });
   if (id === 'watchView') renderWatch();
+  if (isDesktop()) renderWatch();
   syncFullscreenLabel();
 }
 $$('.bottom-nav button').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+$$('.side-tabs button').forEach(b => b.addEventListener('click', () => setSide(b.dataset.side)));
+function onLayoutChange() {
+  if (isDesktop()) { setSide(document.body.dataset.side || 'indicatorView'); switchView('chartView'); }
+  else { delete document.body.dataset.side; document.body.classList.remove('expanded'); switchView('watchView'); }
+  requestAnimationFrame(() => { if (candles.length) { visible = defaultVisible(); pan = 0; } render(); });
+}
+if (deskMQ.addEventListener) deskMQ.addEventListener('change', onLayoutChange);
 
 /* ───────── 1 · Seguimiento ───────── */
 function coinBadge(s) {
@@ -115,7 +133,7 @@ async function fetchTicker() {
 
 /* ───────── Velas y datos en vivo ───────── */
 function setFeedback(t) { $('#chartFeedback').textContent = t; }
-function defaultVisible() { const w = $('#chartArea').clientWidth || 360; return clamp(Math.round((w - 70) / 5.5), 40, 120); }
+function defaultVisible() { const w = $('#chartArea').clientWidth || 360; return clamp(Math.round((w - 70) / (isDesktop() ? 7 : 5.5)), 40, 260); }
 function renderFrames() {
   $('#timeframes').innerHTML = INTERVALS.map(t => `<button class="${t === state.interval ? 'active' : ''}" data-tf="${t}">${t}</button>`).join('');
 }
@@ -706,6 +724,12 @@ function doPinch() {
   const step = geo.plotW / visible, start = pinch.idx + .5 - (cx - geo.left) / step;
   pan = candles.length - (start + visible); scheduleRender();
 }
+area.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'mouse' || !geo) return;
+  if (ptrs.has(e.pointerId)) { if (cross && gest && gest.mode !== 'cross') { cross = null; scheduleRender(); } return; }
+  cross = local(e); scheduleRender();
+});
+area.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !ptrs.size && cross) { cross = null; scheduleRender(); } });
 area.addEventListener('wheel', e => { e.preventDefault(); visible = clamp(visible * (e.deltaY > 0 ? 1.12 : .89), 15, 400); scheduleRender(); }, {passive: false});
 function fit() { visible = defaultVisible(); pan = 0; render(); }
 $('#zoomIn').onclick = () => { visible = clamp(visible / 1.3, 15, 400); render(); };
@@ -877,6 +901,7 @@ async function initCloud() {
 
 /* ───────── Arranque ───────── */
 renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); updateDrawUI(); theme(); syncFullscreenLabel(); renderScripts();
+if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud();
 setInterval(fetchTicker, 30000);
 setInterval(() => { if (currentView === 'chartView' && !wsOpen && candles.length && !document.hidden) loadCandles(true); }, 20000);

@@ -3,7 +3,9 @@
 ## Inicio
 Abre `index.html` desde un servidor estático HTTPS (por ejemplo, GitHub Pages). No hay compilación ni dependencias: solo `index.html`, `style.css` y `app.js`.
 
-## Pestañas
+En computadora (ventana de 1024 px o más) se muestran tres columnas a la vez: seguimiento a la izquierda, gráfico grande al centro e Indicadores/Ajustes a la derecha (pestañas arriba). En celular y ventanas estrechas se mantiene la versión móvil con pestañas abajo.
+
+## Pestañas (celular)
 1. **Seguimiento**: tu lista de criptomonedas (precio y variación 24 h de Binance Spot), con búsqueda, añadir, editar (subir/quitar) y destello al cambiar el precio.
 2. **Gráfico**: velas a pantalla casi completa, temporalidades 1m–1M, datos en vivo por WebSocket, pellizco para zoom, arrastre para desplazar, mantener pulsado para retícula con OHLC, doble toque para ajustar y modo expandido.
 3. **Indicadores**: EMA 20/50, SMA 200, Bollinger, RSI 14 y Volumen (también desde el botón del gráfico).
