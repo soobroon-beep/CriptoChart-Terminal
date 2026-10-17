@@ -16,7 +16,7 @@ const ONEPT = ['horizontal', 'vertical', 'text', 'marker'], THREEPT = ['channel'
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false},
+  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false},
   light: false, drawings: {}
 };
 function merge(s) {
@@ -231,6 +231,7 @@ const indicatorMeta = [
   ['nnOb','Nova Nexus · Order Blocks','Order Blocks volumétricos con actividad compra/venta (últimos 5)','#f23645'],
   ['nnTrail','Nova Nexus · Smooth Trail','Trailing stop EMA 30 ± 2 ATR(20), suavizado 2 · verde alcista, morado bajista','#119c7e'],
   ['nnRev','Nova Nexus · Reversal Bands','SMA 70 ± 6/7/8 ATR(70): zonas de posible reversión','#f23645'],
+  ['nnPiv','Nova Nexus · Pivots','Zigzag de pivotes (50), pivotes perdidos y niveles fantasma','#26a69a'],
   ['nnSR','Nova Nexus · Soporte y Resistencia','Cajas de soporte/resistencia con Break y Retest (pivotes de 20 velas)','#ff5252'],
   ['nnRules','Nova Nexus · Reglas','Panel de reglas de trading sobre el gráfico','#4361cf']
 ];
@@ -280,6 +281,7 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.trail = I.nnTrail ? T.smoothTrail(candles) : null;
   ind.rev = I.nnRev ? T.reversalBands(candles) : null;
   ind.sr = I.nnSR ? T.supportResistance(candles) : null;
+  ind.piv = I.nnPiv ? T.pivots(candles, 50) : null;
 }
 function calcNova() {
   const I = state.indicators;
@@ -587,6 +589,7 @@ function render() {
   if (nn && nn.smc && state.indicators.nnOb) drawNovaOB(nn.smc);
   if (state.indicators.nnRev && ind.rev) drawNovaRev(ind.rev, lo, hi);
   if (state.indicators.nnSR && ind.sr) drawNovaSRBoxes(ind.sr, lo, hi);
+  if (state.indicators.nnPiv && ind.piv) drawNovaPivots(ind.piv, lo, hi);
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailFill(ind.trail, lo, hi);
   // velas
   const barW = clamp(step * .66, 1.5, 16);
@@ -784,6 +787,17 @@ function drawNovaTrailLine(t, lo, hi) { // cada tramo toma el color de la tenden
     g.strokeStyle = t.trend[i] === 1 ? TRAIL_COL.bull : TRAIL_COL.bear;
     g.beginPath(); g.moveTo(X(i - 1), Y(t.trail[i - 1])); g.lineTo(X(i), Y(t.trail[i])); g.stroke();
   }
+}
+
+/* ───────── Nova Nexus: Pivots ───────── */
+const PIV_COL = {miss_pl: 'rgba(38,166,153,.46)', miss_ph: 'rgba(239,83,80,.47)', ghost_pl: 'rgba(38,166,153,.5)', ghost_ph: 'rgba(239,83,80,.5)', proj_h: 'rgba(239,83,80,.5)', proj_l: 'rgba(38,166,153,.5)'};
+function drawNovaPivots(pv, lo, hi) {
+  for (const l of pv.lines) {
+    if (Math.max(l.x1, l.x2) < lo - 1 || Math.min(l.x1, l.x2) > hi + 1) continue;
+    g.strokeStyle = PIV_COL[l.col]; g.lineWidth = l.width; g.setLineDash(l.dash ? [5, 4] : []);
+    g.beginPath(); g.moveTo(X(l.x1), Y(l.y1)); g.lineTo(X(l.x2), Y(l.y2)); g.stroke();
+  }
+  g.setLineDash([]);
 }
 
 /* ───────── Nova Nexus: Soporte y Resistencia ───────── */

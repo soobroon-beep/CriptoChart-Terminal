@@ -104,3 +104,22 @@ test('Soporte/Resistencia: caja, ruptura, retest y recorte de caja (escenario re
   assert.deepEqual(L, ['brk/sup@25:16', 're/sup@28:16', 'brk/res@32:16']);
   assert.ok(!L.some(x => x.startsWith('pot')), 'las etiquetas "Potential Retest" resueltas se eliminan');
 });
+test('Pivots (len 2): zigzag sólido entre pivotes alternos y proyección de la última barra', () => {
+  const cl = [10, 12, 14, 16, 18, 16, 14, 12, 10, 8, 10, 12, 14, 16, 18, 17, 16.5, 17.5, 16, 18.5, 17, 15, 13, 11, 9, 11, 13, 15, 17, 19, 17, 15];
+  const c = cl.map((x, i) => ({t: i, o: x, c: x, h: x + 1, l: x - 1, v: 1}));
+  const r = I.pivots(c, 2), L = r.lines.map(l => `${l.col}:${l.x1},${l.y1}>${l.x2},${l.y2}:${l.dash ? 'd' : 's'}`);
+  assert.deepEqual(L.slice(0, 3), ['miss_pl:0,10>4,19:s', 'miss_ph:4,19>9,7:s', 'miss_pl:9,7>14,19:s']);
+  assert.equal(L[L.length - 2], 'miss_ph:29,20>31,14:d'); assert.equal(L[L.length - 1], 'proj_h:31,14>31,14:s');
+});
+test('Pivots: dos máximos seguidos generan el mínimo "perdido", su nivel fantasma y el tramo discontinuo (revisado a mano)', () => {
+  const cl = [10, 12, 14, 16, 18, 17, 17.8, 18.5, 17, 15, 13, 11, 9, 11, 13, 15, 17, 19, 17, 15];
+  const c = cl.map((x, i) => ({t: i, o: x, c: x, h: x + 1, l: x - 1, v: 1}));
+  const L = I.pivots(c, 2).lines.map(l => `${l.col}:${l.x1},${l.y1}>${l.x2},${l.y2}:${l.dash ? 'd' : 's'}:w${l.width}`);
+  assert.deepEqual(L, [
+    'miss_pl:0,10>4,19:s:w1',
+    'miss_ph:4,19>5,16:d:w1',      // mínimo perdido entre los dos máximos
+    'ghost_pl:5,16>19,16:s:w2',    // nivel fantasma que se alarga hasta la última barra
+    'miss_pl:5,16>7,19.5:d:w1',    // pivote real tras un "perdido" → discontinuo
+    'miss_ph:7,19.5>12,8:s:w1', 'miss_pl:12,8>17,20:s:w1',
+    'miss_ph:17,20>19,14:d:w1', 'proj_h:19,14>19,14:s:w2']);
+});

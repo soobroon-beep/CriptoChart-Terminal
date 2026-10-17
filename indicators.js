@@ -209,6 +209,60 @@
     return {boxes: boxes.filter(b => !b.deleted), labels: labels.filter(l => !l.deleted)};
   }
 
-  root.CCTIndicators = {pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
+  /* Nova Nexus · Pivots (High/Low & Missed, estilo LuxAlgo) — port de las líneas 2009-2262 del Pine, longitud 50.
+     Solo se portan los elementos que el Pine dibuja: zigzag entre pivotes (sólido o discontinuo), pivotes "perdidos"
+     (discontinuo), niveles fantasma (ancho 2) y la proyección de la última barra. Las etiquetas del Pine están
+     anuladas (`na`) en el script, así que no existen. Todo en índices de vela.
+     col: 'miss_pl' | 'miss_ph' (zigzag, nombres tal cual el Pine) · 'ghost_pl' | 'ghost_ph' (niveles) · 'proj_h' | 'proj_l'. */
+  function pivots(c, len = 50) {
+    const n = c.length, lines = [];
+    let max = null, min = null, fMax = null, fMin = null, maxX1 = null, minX1 = null, fMaxX1 = null, fMinX1 = null, os = 0, py1 = null, px1 = null, ghost = null;
+    let pMax = null, pMin = null, pFMax = null, pFMin = null, pGhost = null;
+    const L = (x1, y1, x2, y2, col, dash, width = 1) => { const l = {x1, y1, x2, y2, col, dash, width}; lines.push(l); return l; };
+    const newGhost = (col) => { ghost = L(px1, py1, px1, py1, col, false, 2); };
+    for (let i = 0; i < n; i++) {
+      const ph = pivotAt(c, i, len, true), pl = pivotAt(c, i, len, false), prevOs = os, hb = i - len >= 0 ? c[i - len].h : null, lb = i - len >= 0 ? c[i - len].l : null;
+      if (i === len) { max = c[0].h; min = c[0].l; fMax = c[0].h; fMin = c[0].l; px1 = 0; py1 = c[0].c; }
+      if (hb != null) { max = max == null ? hb : Math.max(hb, max); min = min == null ? lb : Math.min(lb, min); fMax = fMax == null ? hb : Math.max(hb, fMax); fMin = fMin == null ? lb : Math.min(lb, fMin); }
+      if (max != null && pMax != null && max > pMax) { maxX1 = i - len; fMin = lb; }
+      if (min != null && pMin != null && min < pMin) { minX1 = i - len; fMax = hb; }
+      if (fMin != null && pFMin != null && fMin < pFMin) fMinX1 = i - len;
+      if (fMax != null && pFMax != null && fMax > pFMax) fMaxX1 = i - len;
+      if (pGhost) pGhost.x2 = i; // el nivel fantasma vigente se alarga hasta la barra actual
+      const missJump = (toX, toY, col, ghostCol) => { // línea discontinua al extremo "perdido" + nuevo nivel fantasma
+        L(px1, py1, toX, toY, col, true); px1 = toX; py1 = toY;
+        if (pGhost) pGhost.x2 = px1; newGhost(ghostCol);
+      };
+      if (ph != null) {
+        if (prevOs === 1) { if (minX1 != null && min != null) missJump(minX1, min, 'miss_ph', 'ghost_pl'); }
+        else if (ph < max) {
+          if (maxX1 != null && max != null) missJump(maxX1, max, 'miss_pl', 'ghost_ph');
+          if (fMinX1 != null && fMin != null) { L(px1, py1, fMinX1, fMin, 'miss_ph', true); px1 = fMinX1; py1 = fMin; if (ghost) ghost.x2 = px1; newGhost('ghost_pl'); }
+        }
+        L(px1, py1, i - len, ph, 'miss_pl', ph < max || prevOs === 1);
+        py1 = ph; px1 = i - len; os = 1; max = ph; min = ph;
+      }
+      if (pl != null) {
+        if (prevOs === 0) { if (maxX1 != null && max != null) missJump(maxX1, max, 'miss_pl', 'ghost_ph'); }
+        else if (pl > min) {
+          if (minX1 != null && min != null) missJump(minX1, min, 'miss_ph', 'ghost_pl');
+          if (fMaxX1 != null && fMax != null) { L(px1, py1, fMaxX1, fMax, 'miss_pl', true); px1 = fMaxX1; py1 = fMax; if (ghost) ghost.x2 = px1; newGhost('ghost_ph'); }
+        }
+        L(px1, py1, i - len, pl, 'miss_ph', pl > min || prevOs === 0);
+        py1 = pl; px1 = i - len; os = 0; max = pl; min = pl;
+      }
+      pMax = max; pMin = min; pFMax = fMax; pFMin = fMin; pGhost = ghost;
+    }
+    // última barra: candidato "perdido" (extremo desde el último pivote) y su proyección
+    if (px1 != null && py1 != null && n > 0) {
+      const last = n - 1, count = Math.max(0, Math.min(last - px1 - 1, 500));
+      let y = null, x = null;
+      for (let k = 0; k <= count; k++) { const v = os === 1 ? c[last - k].l : c[last - k].h; if (y == null || (os === 1 ? v < y : v > y)) { y = v; x = last - k; } }
+      if (x != null) { L(px1, py1, x, y, os === 1 ? 'miss_ph' : 'miss_pl', true); L(x, y, last, y, os === 1 ? 'proj_h' : 'proj_l', false, 2); }
+    }
+    return {lines};
+  }
+
+  root.CCTIndicators = {pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTIndicators;
 })(typeof window !== 'undefined' ? window : globalThis);
