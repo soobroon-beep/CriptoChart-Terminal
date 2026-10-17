@@ -2,18 +2,6 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<script>
-/* Computadora → app original (sin cambios). Celular/tablet táctil → esta versión móvil.
-   Forzar: ?movil (ver la versión móvil en computadora) · ?escritorio (ir a la app original en celular). */
-(function(){
-  var DESKTOP_APP='https://cripto-chart-terminal.greenbream32.chatgpt.site/';
-  var q=location.search;
-  var mobile=/Android|iPhone|iPad|iPod|Mobile|Silk/i.test(navigator.userAgent)||(window.matchMedia&&matchMedia('(pointer: coarse)').matches&&Math.min(screen.width,screen.height)<900);
-  if(/(^|[?&])movil(=|&|$)/.test(q))mobile=true;
-  if(/(^|[?&])escritorio(=|&|$)/.test(q))mobile=false;
-  if(!mobile){document.documentElement.style.visibility='hidden';location.replace(DESKTOP_APP);}
-})();
-</script>
 
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#090e19">
