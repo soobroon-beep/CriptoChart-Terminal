@@ -14,7 +14,7 @@ const FIB = [0, .236, .382, .5, .618, .786, 1];
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, bollinger:false, rsi:true, volume:true},
+  indicators: {ema20:true, ema50:false, sma200:false, bollinger:false, rsi:true, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false},
   light: false, drawings: {}
 };
 function merge(s) {
@@ -194,7 +194,11 @@ const indicatorMeta = [
   ['sma200','SMA 200','Media móvil simple de 200 períodos','#b58dff'],
   ['bollinger','Bandas de Bollinger','20 períodos · 2 desviaciones','#a3b0c3'],
   ['rsi','RSI 14','Índice de fuerza relativa en panel inferior','#bb9cff'],
-  ['volume','Volumen','Barras de volumen por vela','#8294a8']
+  ['volume','Volumen','Barras de volumen por vela','#8294a8'],
+  ['nnIa','Nova Nexus · Señales IA','BUY/SELL con score ⭐, cooldown y divergencias (v2.7)','#11cf77'],
+  ['nnEma','Nova Nexus · EMA Cloud','Nube EMA 55 ± 0.6 ATR','#8a97b3'],
+  ['nnTp','Nova Nexus · TP / SL','Niveles de la última señal (SL 1 · TP 1.5 / 2.5 / 4 ATR)','#ff9900'],
+  ['nnRules','Nova Nexus · Reglas','Panel de reglas de trading sobre el gráfico','#4361cf']
 ];
 function ema(xs, n) {
   const out = Array(xs.length).fill(null); if (xs.length < n) return out;
@@ -224,6 +228,12 @@ function recalc() {
   const up = Array(n).fill(null), lo = Array(n).fill(null);
   for (let i = 19; i < n; i++) { let s = 0; for (let j = i - 19; j <= i; j++) { const d = c[j] - m[i]; s += d * d; } const sd = Math.sqrt(s / 20); up[i] = m[i] + 2 * sd; lo[i] = m[i] - 2 * sd; }
   ind = {ema20: ema(c, 20), ema50: ema(c, 50), sma200: sma(c, 200), bbU: up, bbL: lo, rsi: rsi(c, 14)};
+  ind.nn = null; calcNova();
+}
+function calcNova() {
+  const I = state.indicators;
+  if (!window.NovaNexus || !candles.length || !(I.nnIa || I.nnEma || I.nnTp || I.nnRules)) { ind.nn = null; return; }
+  try { ind.nn = NovaNexus.compute(candles, {}); } catch (e) { ind.nn = null; console.warn('Nova Nexus:', e); }
 }
 const indicatorRows = () => indicatorMeta.map(([key, title, desc]) =>
   `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div>`).join('');
@@ -232,7 +242,7 @@ function countIndicators() { const n = Object.values(state.indicators).filter(Bo
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-ind]'); if (!b) return;
   state.indicators[b.dataset.ind] = !state.indicators[b.dataset.ind];
-  save(); renderIndicators(); countIndicators();
+  save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); }
   if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows();
   scheduleRender();
 });
@@ -422,6 +432,8 @@ function render() {
   if (state.indicators.sma200) overlays.push(['SMA 200', ind.sma200, '#b58dff']);
   if (state.indicators.bollinger) overlays.push(['BB sup', ind.bbU, '#748bab', true], ['BB inf', ind.bbL, '#748bab', true]);
   for (const [, arr] of overlays) for (let i = lo; i < hi; i++) if (arr[i] != null) { if (arr[i] < min) min = arr[i]; if (arr[i] > max) max = arr[i]; }
+  const nn = ind.nn;
+  if (nn && state.indicators.nnEma) for (let i = lo; i < hi; i++) { const a = nn.emaTop[i], b = nn.emaBot[i]; if (Number.isFinite(a) && a > max) max = a; if (Number.isFinite(b) && b < min) min = b; }
   const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * .08; min -= pad; max += pad;
   geo = {w, h, left, right, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH};
 
@@ -443,6 +455,8 @@ function render() {
   g.textAlign = 'left';
 
   g.save(); g.beginPath(); g.rect(left, plotTop, plotW + 2, plotH); g.clip();
+  // Nova Nexus · EMA Cloud (detrás de las velas)
+  if (nn && state.indicators.nnEma) drawNovaCloud(nn, lo, hi, css);
   // velas
   const barW = clamp(step * .66, 1.5, 16);
   for (let i = lo; i < hi; i++) {
@@ -458,6 +472,8 @@ function render() {
     for (let i = lo; i < hi; i++) { if (arr[i] == null) { on = false; continue; } const xx = X(i), yy = Y(arr[i]); if (!on) { g.moveTo(xx, yy); on = true; } else g.lineTo(xx, yy); }
     g.stroke(); g.setLineDash([]);
   }
+  // Nova Nexus · señales y niveles TP/SL
+  if (nn && (state.indicators.nnIa || state.indicators.nnTp)) drawNovaSignals(nn, lo, hi, n);
   // dibujos del usuario
   for (const d of getDrawings()) drawShape(d, d.id === selectedId, drawCol, text);
   if (preview) drawShape({id: '_', type: drawTool, a: preview.a, b: preview.b}, false, drawCol, text);
@@ -496,6 +512,8 @@ function render() {
     for (let i = lo; i < hi; i++) { const v = ind.rsi[i]; if (v == null) { on = false; continue; } const yy = top + (100 - v) / 100 * height; if (!on) { g.moveTo(X(i), yy); on = true; } else g.lineTo(X(i), yy); }
     g.stroke();
   }
+  if (nn && state.indicators.nnRules) drawNovaRules();
+  if (nn && state.indicators.nnIa && nn.last) drawNovaScore(nn.last);
   // retícula (mantener pulsado)
   let shown = candles[hi - 1];
   if (cross) {
@@ -510,9 +528,82 @@ function render() {
   }
   if (shown) {
     const chg = (shown.c - shown.o) / shown.o * 100;
-    $('#ohlcText').textContent = `O ${fmt(shown.o)}  H ${fmt(shown.h)}  L ${fmt(shown.l)}  C ${fmt(shown.c)}  ${pct(chg)}`;
+    const sgAt = cross && nn && state.indicators.nnIa ? nn.bySignal[clamp(Math.round(IDX(cross.x)), 0, n - 1)] : null;
+    $('#ohlcText').textContent = `O ${fmt(shown.o)}  H ${fmt(shown.h)}  L ${fmt(shown.l)}  C ${fmt(shown.c)}  ${pct(chg)}` + (sgAt ? `\n${NovaNexus.tooltip(sgAt)}` : '');
     $('#ohlcText').style.color = shown.c >= shown.o ? up : down;
   }
+}
+/* ───────── Nova Nexus: dibujo ───────── */
+const NN_COL = {buy: '#11cf77', sell: '#d11645', range: '#9b59b6', sl: '#ff4444', tp1: '#11cf77', tp2: '#00aaff', tp3: '#ff9900'};
+function drawNovaCloud(nn, lo, hi, css) {
+  const light = document.body.classList.contains('light');
+  const bullFill = light ? 'rgba(70,95,150,.16)' : 'rgba(140,155,185,.20)', bearFill = light ? 'rgba(110,110,125,.16)' : 'rgba(120,125,140,.20)';
+  const edge = light ? 'rgba(30,40,60,.35)' : 'rgba(200,210,230,.30)';
+  // relleno por tramos del mismo color (alcista/bajista)
+  let i = lo;
+  while (i < hi) {
+    if (!Number.isFinite(nn.emaTop[i])) { i++; continue; }
+    const bull = nn.bull[i]; let j = i;
+    while (j + 1 < hi && Number.isFinite(nn.emaTop[j + 1]) && nn.bull[j + 1] === bull) j++;
+    const a = Math.max(lo, i - 1 >= lo && Number.isFinite(nn.emaTop[i - 1]) ? i - 1 : i);
+    g.beginPath(); g.moveTo(X(a), Y(nn.emaTop[a]));
+    for (let k = a + 1; k <= j; k++) g.lineTo(X(k), Y(nn.emaTop[k]));
+    for (let k = j; k >= a; k--) g.lineTo(X(k), Y(nn.emaBot[k]));
+    g.closePath(); g.fillStyle = bull ? bullFill : bearFill; g.fill();
+    i = j + 1;
+  }
+  g.strokeStyle = edge; g.lineWidth = 1; g.setLineDash([]);
+  for (const arr of [nn.emaTop, nn.emaBot]) {
+    g.beginPath(); let on = false;
+    for (let k = lo; k < hi; k++) { const v = arr[k]; if (!Number.isFinite(v)) { on = false; continue; } if (!on) { g.moveTo(X(k), Y(v)); on = true; } else g.lineTo(X(k), Y(v)); }
+    g.stroke();
+  }
+}
+function roundRect(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function drawNovaSignals(nn, lo, hi, n) {
+  const I = state.indicators, small = geo.step < 5;
+  if (I.nnIa) {
+    g.font = `bold ${small ? 8 : 9}px system-ui`; g.textAlign = 'center';
+    for (const sg of nn.signals) {
+      if (sg.i < lo || sg.i >= hi) continue;
+      const c = candles[sg.i], x = X(sg.i), buy = sg.side === 'buy';
+      const col = sg.div ? NN_COL[sg.side] : sg.range ? NN_COL.range : NN_COL[sg.side];
+      const tw = Math.max(18, g.measureText(sg.label).width + 10), th = 15, ar = 5;
+      let y = buy ? Y(c.l) + 6 : Y(c.h) - 6 - th; // etiqueta: debajo del mínimo (BUY) o encima del máximo (SELL)
+      g.fillStyle = col; roundRect(x - tw / 2, buy ? y + ar : y, tw, th, 4); g.fill();
+      g.beginPath(); // flecha
+      if (buy) { g.moveTo(x - 4, y + ar); g.lineTo(x + 4, y + ar); g.lineTo(x, y); } else { g.moveTo(x - 4, y + th); g.lineTo(x + 4, y + th); g.lineTo(x, y + th + ar); }
+      g.fill();
+      g.fillStyle = '#fff'; g.textBaseline = 'middle'; g.fillText(sg.label, x, (buy ? y + ar : y) + th / 2 + .5); g.textBaseline = 'alphabetic';
+    }
+    g.textAlign = 'left';
+  }
+  const sg = nn.last;
+  if (I.nnTp && sg) { // solo la última señal conserva sus niveles (igual que el script original)
+    const x1 = X(sg.i), x2 = Math.min(X(sg.i + 40), geo.w - geo.right), lv = [['entry', sg.price, 'rgba(150,150,150,.6)', [4, 3], ''], ['sl', sg.sl, NN_COL.sl, [], 'SL'], ['tp1', sg.tp1, NN_COL.tp1, [4, 3], 'TP1'], ['tp2', sg.tp2, NN_COL.tp2, [4, 3], 'TP2'], ['tp3', sg.tp3, NN_COL.tp3, [4, 3], 'TP3']];
+    g.font = 'bold 8px system-ui';
+    for (const [, price, col, dash, name] of lv) {
+      const y = Y(price); g.strokeStyle = col; g.lineWidth = 1; g.setLineDash(dash);
+      g.beginPath(); g.moveTo(Math.max(geo.left, x1), y); g.lineTo(x2, y); g.stroke(); g.setLineDash([]);
+      if (name) { const tw = 26, lx = x2 - tw - 2; g.fillStyle = col; roundRect(lx, y - 7, tw, 14, 3); g.fill(); g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText(name, lx + tw / 2, y + 3); g.textAlign = 'left'; }
+    }
+  }
+}
+function drawNovaRules() {
+  const txt = NovaNexus.defaults.rulesText.split('\n'), x2 = geo.w - geo.right - 4, small = geo.w < 480, y0 = geo.plotTop + (small ? 58 : 44);
+  g.font = `${small ? 8 : 10}px system-ui`; const lh = small ? 11 : 14, wText = Math.max(...txt.map(t => g.measureText(t).width)) + 14, w = Math.max(wText, 70), x = x2 - w;
+  g.save(); g.globalAlpha = .92;
+  g.fillStyle = '#4361cf'; g.fillRect(x, y0, w, small ? 16 : 20);
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(x, y0 + (small ? 16 : 20), w, txt.length * lh + 8);
+  g.globalAlpha = 1; g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = `bold ${small ? 9 : 12}px system-ui`; g.fillText('REGLAS', x + w / 2, y0 + (small ? 12 : 14));
+  g.textAlign = 'left'; g.font = `${small ? 8 : 10}px system-ui`;
+  txt.forEach((t, i) => g.fillText(t, x + 6, y0 + (small ? 16 : 20) + 12 + i * lh));
+  g.restore();
+}
+function drawNovaScore(sg) {
+  const buy = sg.side === 'buy', col = NN_COL[buy ? 'buy' : 'sell'], txt = `${buy ? '▲ BUY' : '▼ SELL'}  ${sg.score} ${'★'.repeat(sg.score)}`;
+  g.font = 'bold 10px system-ui'; const w = g.measureText(txt).width + 14, x = geo.w - geo.right - w - 4, y = geo.plotTop + geo.plotH - 20;
+  g.fillStyle = 'rgba(0,0,0,.6)'; roundRect(x, y, w, 17, 4); g.fill(); g.fillStyle = col; g.textAlign = 'left'; g.fillText(txt, x + 7, y + 12);
 }
 function drawShape(d, selected, col, textCol) {
   const a = d.type === 'horizontal' ? {x: 0, y: Y(d.a.p)} : px(d.a), b = d.b ? px(d.b) : null;

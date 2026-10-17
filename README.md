@@ -3,8 +3,6 @@
 ## Inicio
 Abre `index.html` desde un servidor estático HTTPS (por ejemplo, GitHub Pages). No hay compilación ni dependencias: solo `index.html`, `style.css` y `app.js`.
 
-En computadora, `index.html` abre la versión de escritorio; en celular se queda en esta versión móvil. Para forzar una u otra: `?movil` o `?escritorio` al final de la dirección.
-
 ## Pestañas
 1. **Seguimiento**: tu lista de criptomonedas (precio y variación 24 h de Binance Spot), con búsqueda, añadir, editar (subir/quitar) y destello al cambiar el precio.
 2. **Gráfico**: velas a pantalla casi completa, temporalidades 1m–1M, datos en vivo por WebSocket, pellizco para zoom, arrastre para desplazar, mantener pulsado para retícula con OHLC, doble toque para ajustar y modo expandido.
