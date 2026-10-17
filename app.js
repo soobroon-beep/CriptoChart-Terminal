@@ -1,58 +1,638 @@
-(()=>{'use strict';
-const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-const defaults={symbols:['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],symbol:'BTCUSDT',interval:'1h',indicators:{ema20:true,ema50:false,sma200:false,bollinger:false,rsi:true,volume:true},light:false};
-let state;try{state={...defaults,...JSON.parse(localStorage.getItem('cct_mobile_v1')||'{}')};state.indicators={...defaults.indicators,...state.indicators};}catch{state=structuredClone(defaults)}
-const save=()=>localStorage.setItem('cct_mobile_v1',JSON.stringify(state));
-const catalog={BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','⚛'],UNI:['Uniswap','🦄'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
-const base=s=>s.replace(/USDT$/,'');const meta=s=>catalog[base(s)]||[base(s),base(s).slice(0,1)];const fmt=(n)=>!Number.isFinite(n)?'—':n>=1000?n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):n>=1?n.toFixed(2):n.toFixed(n<.01?8:4);const pct=n=>!Number.isFinite(n)?'—':`${n>=0?'+':''}${n.toFixed(2)}%`;
-let tickers={},candles=[],visible=90,pan=0,fetchController=null,sheetMode='select',chartPointer=null,drawStart=null,lines=[],currentView='watchView';let toastTimeout;
-function toast(v){const el=$('#toast');el.textContent=v;el.style.display='block';clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>el.style.display='none',2600)}
-function updateStatus(ok,msg){$('#connection').textContent=(ok?'● ':'● ')+msg;$('#connection').className='connection '+(ok?'online':'offline')}
-function coinBadge(s){let b=base(s);return `<span class="coin-icon ${b==='ETH'?'eth':b==='SOL'?'sol':b==='BNB'?'bnb':b==='XRP'?'xrp':b==='BTC'?'':'other'}">${meta(s)[1]}</span>`}
-function switchView(id){currentView=id;$$('.view').forEach(x=>x.classList.toggle('active',x.id===id));$$('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===id));if(id==='chartView')requestAnimationFrame(render);if(id==='watchView')renderWatch();}
-$$('.bottom-nav button').forEach(b=>b.addEventListener('click',()=>{document.body.classList.remove('expanded');switchView(b.dataset.view)}));
-function renderWatch(){const q=$('#searchCoins').value.trim().toUpperCase();const list=state.symbols.filter(s=>s.includes(q)||meta(s)[0].toUpperCase().includes(q));$('#watchRows').innerHTML=list.map(s=>{let t=tickers[s],change=t?.priceChangePercent,price=Number(t?.lastPrice);return `<button class="watch-row" data-symbol="${s}">${coinBadge(s)}<span class="row-main"><strong>${base(s)}</strong><small>${meta(s)[0]}</small></span><span class="row-prices"><strong>${fmt(price)}</strong><small class="${change>=0?'positive':'negative'}">${pct(Number(change))}</small></span></button>`}).join('')||'<p class="small-note">No hay activos con ese nombre.</p>';$$('.watch-row').forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol));$('#totalAssets').textContent=state.symbols.length;$('#winners').textContent=state.symbols.filter(s=>Number(tickers[s]?.priceChangePercent)>0).length;$('#losers').textContent=state.symbols.filter(s=>Number(tickers[s]?.priceChangePercent)<0).length;}
-async function getJSON(url,signal){const r=await fetch(url,{signal});if(!r.ok)throw Error(`Binance HTTP ${r.status}`);return r.json()}
-async function fetchTicker(){try{const d=await getJSON('https://api.binance.com/api/v3/ticker/24hr');tickers=Object.fromEntries(d.map(t=>[t.symbol,t]));updateStatus(true,'Binance en línea');renderWatch();updateChartHeader()}catch(e){updateStatus(false,'Sin conexión');renderWatch();if(!candles.length)$('#chartFeedback').textContent='No hay datos. Revisa conexión o restricciones de Binance en tu país.'}}
-const intervals=['1m','5m','15m','30m','1h','4h','1d','1w','1M'];function renderFrames(){$('#timeframes').innerHTML=intervals.map(t=>`<button class="${t===state.interval?'active':''}" data-tf="${t}">${t}</button>`).join('');$$('[data-tf]').forEach(b=>b.onclick=()=>{state.interval=b.dataset.tf;save();renderFrames();loadCandles()})}
-function updateChartHeader(){const b=base(state.symbol),t=tickers[state.symbol];$('#coinIcon').textContent=meta(state.symbol)[1];$('#coinTitle').textContent=`${b} / USDT`;$('#chartLabel').textContent=state.symbol;$('#intervalLabel').textContent=state.interval;$('#lastPrice').textContent=fmt(Number(t?.lastPrice));$('#dayChange').textContent=pct(Number(t?.priceChangePercent));$('#dayChange').className=Number(t?.priceChangePercent)>=0?'positive':'negative'}
-async function loadCandles(){if(fetchController)fetchController.abort();fetchController=new AbortController();const sym=state.symbol,tf=state.interval;$('#chartFeedback').textContent='Cargando velas reales de Binance…';candles=[];render();try{const data=await getJSON(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${tf}&limit=500`,fetchController.signal);if(sym!==state.symbol||tf!==state.interval)return;candles=data.map(d=>({t:d[0],o:+d[1],h:+d[2],l:+d[3],c:+d[4],v:+d[5]}));visible=90;pan=0;$('#chartFeedback').textContent='';$('#candleCount').textContent=candles.length+' velas';$('#dataStatus').textContent='Velas reales · Binance';render()}catch(e){if(e.name==='AbortError')return;$('#chartFeedback').textContent='No se pudieron cargar las velas de Binance. No se mostrarán datos simulados.';$('#dataStatus').textContent='Conexión no disponible';$('#candleCount').textContent='0 velas';render()}}
-function selectSymbol(s){state.symbol=s;save();closeSheet();updateChartHeader();switchView('chartView');loadCandles()}
-function openSheet(mode='select'){sheetMode=mode;$('#sheetTitle').textContent=mode==='add'?'Añadir a seguimiento':mode==='tools'?'Herramientas de dibujo':'Seleccionar criptomoneda';$('#sheetSearch').style.display=mode==='tools'?'none':'block';$('#sheetSearch').value='';$('#sheetBackdrop').classList.add('open');$('#sheet').classList.add('open');renderSheet()}
-function closeSheet(){$('#sheetBackdrop').classList.remove('open');$('#sheet').classList.remove('open')}
-function renderSheet(){const list=$('#sheetList');if(sheetMode==='tools'){list.innerHTML=`<button class="sheet-item" data-tool="line">↗ Línea de tendencia <small>Toca dos puntos sobre el gráfico</small></button><button class="sheet-item" data-tool="horizontal">— Línea horizontal <small>Toca un precio sobre el gráfico</small></button><button class="sheet-item" data-tool="clear">✕ Borrar dibujos <small>Solo dibujos de esta sesión</small></button>`;$$('[data-tool]').forEach(b=>b.onclick=()=>{const tool=b.dataset.tool;if(tool==='clear'){lines=[];drawStart=null;drawMode='';render();toast('Dibujos borrados')}else{drawMode=tool;drawStart=null;toast('Toca el gráfico para dibujar')}closeSheet()});return}
-const search=$('#sheetSearch').value.trim().toUpperCase();const syms=(sheetMode==='add'?Object.keys(catalog).map(s=>s+'USDT'):state.symbols).filter(s=>s.includes(search)||meta(s)[0].toUpperCase().includes(search));if(sheetMode==='add'&&search&&!syms.length&&/^[A-Z0-9]{2,15}$/.test(search))syms.push(search.endsWith('USDT')?search:search+'USDT');list.innerHTML=syms.map(s=>`<button class="sheet-item" data-pick="${s}"><span>${base(s)} <small>${meta(s)[0]}</small></span><span>${state.symbols.includes(s)?sheetMode==='add'?'✓':'→':'＋'}</span></button>`).join('')||'<p class="small-note">No se encontraron monedas.</p>';$$('[data-pick]').forEach(b=>b.onclick=()=>{const s=b.dataset.pick;if(sheetMode==='add'){if(!state.symbols.includes(s))state.symbols.push(s);save();renderWatch();fetchTicker();toast(`${s} añadido`);closeSheet()}else selectSymbol(s)})}
-const indicatorMeta=[['ema20','EMA 20','Media móvil exponencial de 20 períodos','#f5c568'],['ema50','EMA 50','Media móvil exponencial de 50 períodos','#6ca5f9'],['sma200','SMA 200','Media móvil simple de 200 períodos','#b58dff'],['bollinger','Bandas de Bollinger','20 períodos · 2 desviaciones','#a3b0c3'],['rsi','RSI 14','Índice de fuerza relativa en panel inferior','#bb9cff'],['volume','Volumen','Barras de volumen por vela','#8294a8']];
-function renderIndicators(){$('#indicatorList').innerHTML=indicatorMeta.map(([key,title,desc])=>`<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><button class="toggle ${state.indicators[key]?'on':''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div>`).join('');$$('[data-ind]').forEach(b=>b.onclick=()=>{state.indicators[b.dataset.ind]=!state.indicators[b.dataset.ind];save();renderIndicators();render();countIndicators()})}
-function countIndicators(){const n=Object.values(state.indicators).filter(Boolean).length;$('#indicatorCount').textContent=n?`Indicadores (${n})`:'Indicadores'}
-function ema(xs,n){const out=Array(xs.length).fill(null);if(xs.length<n)return out;let e=xs.slice(0,n).reduce((a,b)=>a+b,0)/n;out[n-1]=e;for(let i=n;i<xs.length;i++){e=xs[i]*2/(n+1)+e*(1-2/(n+1));out[i]=e}return out}
-function sma(xs,n){return xs.map((_,i)=>i>=n-1?xs.slice(i-n+1,i+1).reduce((a,b)=>a+b,0)/n:null)}
-function rsi(xs,n=14){let out=Array(xs.length).fill(null);if(xs.length<=n)return out;let gain=0,loss=0;for(let i=1;i<=n;i++){const d=xs[i]-xs[i-1];gain+=Math.max(0,d);loss+=Math.max(0,-d)}gain/=n;loss/=n;out[n]=loss===0?100:100-100/(1+gain/loss);for(let i=n+1;i<xs.length;i++){const d=xs[i]-xs[i-1];gain=(gain*(n-1)+Math.max(0,d))/n;loss=(loss*(n-1)+Math.max(0,-d))/n;out[i]=loss===0?100:100-100/(1+gain/loss)}return out}
-function setupCanvas(c){const rect=c.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,3),w=rect.width,h=rect.height;c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);const g=c.getContext('2d');g.scale(dpr,dpr);return {g,w,h}}
-let chartScale=null,drawMode='';
-function render(){if(currentView!=='chartView')return;const el=$('#priceCanvas');if(!el.getBoundingClientRect().width)return;const {g,w,h}=setupCanvas(el),colors=getComputedStyle(document.body),text=colors.getPropertyValue('--muted').trim(),line=colors.getPropertyValue('--line').trim(),up='#20bf9f',down='#f06b79';g.clearRect(0,0,w,h);if(!candles.length)return;
-const extraRsi=state.indicators.rsi,extraVol=state.indicators.volume;const rsiH=extraRsi?Math.max(75,h*.19):0,volH=extraVol?Math.max(44,h*.13):0,plotH=Math.max(100,h-rsiH-volH-30),left=9,right=62,plotW=w-left-right;const count=Math.min(candles.length,Math.max(20,Math.floor(visible))),end=Math.max(count,candles.length-Math.floor(pan)),start=Math.max(0,end-count),data=candles.slice(start,end),step=plotW/data.length,barW=Math.max(2,Math.min(14,step*.64));const prices=candles.map(x=>x.c),emas={ema20:ema(prices,20),ema50:ema(prices,50),sma200:sma(prices,200)};
-let min=Math.min(...data.map(x=>x.l)),max=Math.max(...data.map(x=>x.h));for(const key of ['ema20','ema50','sma200'])if(state.indicators[key])for(let i=start;i<end;i++)if(emas[key][i]!=null){min=Math.min(min,emas[key][i]);max=Math.max(max,emas[key][i])}
-let band=sma(prices,20),upper=band.slice(),lower=band.slice();if(state.indicators.bollinger)for(let i=19;i<prices.length;i++){const avg=band[i],sd=Math.sqrt(prices.slice(i-19,i+1).reduce((s,p)=>s+(p-avg)**2,0)/20);upper[i]=avg+sd*2;lower[i]=avg-sd*2;if(i>=start&&i<end){min=Math.min(min,lower[i]);max=Math.max(max,upper[i])}}
-const range=Math.max(max-min,Math.abs(max)*.00001),pad=range*.09;min-=pad;max+=pad;const y=p=>8+(max-p)/(max-min)*(plotH-16),x=i=>left+(i-start+.5)*step;chartScale={start,end,plotH,x,y,min,max,w,h};
-g.strokeStyle=line;g.lineWidth=.65;g.fillStyle=text;g.font='10px system-ui';g.textAlign='left';for(let i=0;i<5;i++){const yy=8+i*(plotH-16)/4;g.beginPath();g.moveTo(left,yy);g.lineTo(w-right+2,yy);g.stroke();g.fillText(fmt(max-(max-min)*i/4),w-right+6,yy+3)}
-for(let i=0;i<data.length;i++){const d=data[i],xx=x(start+i),high=y(d.h),low=y(d.l),open=y(d.o),close=y(d.c);g.strokeStyle=d.c>=d.o?up:down;g.fillStyle=g.strokeStyle;g.lineWidth=1;g.beginPath();g.moveTo(xx,high);g.lineTo(xx,low);g.stroke();g.fillRect(xx-barW/2,Math.min(open,close),barW,Math.max(1,Math.abs(open-close)))}
-function plotSeries(arr,color,dashed=false){g.strokeStyle=color;g.lineWidth=1.35;g.setLineDash(dashed?[4,3]:[]);g.beginPath();let drawing=false;for(let i=start;i<end;i++){const p=arr[i];if(p==null){drawing=false;continue}const xx=x(i),yy=y(p);if(!drawing){g.moveTo(xx,yy);drawing=true}else g.lineTo(xx,yy)}g.stroke();g.setLineDash([])}
-for(const [key,, ,color] of indicatorMeta.slice(0,3))if(state.indicators[key])plotSeries(emas[key],color);
-if(state.indicators.bollinger){plotSeries(upper,'#748bab',true);plotSeries(lower,'#748bab',true)}
-const last=data[data.length-1];if(last){const py=y(last.c);g.strokeStyle=last.c>=last.o?up:down;g.setLineDash([3,3]);g.beginPath();g.moveTo(left,py);g.lineTo(w-right+2,py);g.stroke();g.setLineDash([]);g.fillStyle=g.strokeStyle;g.fillRect(w-right+2,py-10,right-4,20);g.fillStyle='#fff';g.fillText(fmt(last.c),w-right+4,py+3);$('#ohlcText').textContent=`O ${fmt(last.o)}  H ${fmt(last.h)}  L ${fmt(last.l)}  C ${fmt(last.c)}`}
-if(extraVol){const maxVol=Math.max(1,...data.map(d=>d.v)),top=plotH+4,height=volH-12;g.fillStyle=text;g.fillText('VOL',left+3,top+11);data.forEach((d,i)=>{g.fillStyle=d.c>=d.o?'#1b8c78aa':'#d45a6aaa';g.fillRect(x(start+i)-barW/2,top+height*(1-d.v/maxVol),barW,Math.max(1,d.v/maxVol*height))})}
-if(extraRsi){const top=plotH+volH+5,height=rsiH-14,values=rsi(prices);g.strokeStyle=line;g.fillStyle=text;g.fillText('RSI 14',left+3,top+10);for(const r of [30,70]){const yy=top+(100-r)/100*height;g.beginPath();g.moveTo(left,yy);g.lineTo(w-right,yy);g.stroke();g.fillText(''+r,w-right+6,yy+3)}g.strokeStyle='#bb9cff';g.lineWidth=1.5;g.beginPath();let started=false;for(let i=start;i<end;i++)if(values[i]!=null){const yy=top+(100-values[i])/100*height;if(!started){g.moveTo(x(i),yy);started=true}else g.lineTo(x(i),yy)}g.stroke()}
-g.fillStyle=text;g.font='10px system-ui';const stride=Math.max(1,Math.ceil(data.length/4));for(let i=0;i<data.length;i+=stride){const t=new Date(data[i].t);g.fillText(state.interval==='1d'||state.interval==='1w'?`${t.getUTCDate()}/${t.getUTCMonth()+1}`:`${String(t.getUTCHours()).padStart(2,'0')}:${String(t.getUTCMinutes()).padStart(2,'0')}`,x(start+i)-12,h-9)}
-for(const d of lines){g.strokeStyle='#e9c36e';g.lineWidth=1.4;g.beginPath();g.moveTo(x(d.a.i),y(d.a.p));if(d.type==='horizontal')g.lineTo(w-right,y(d.a.p));else if(d.b)g.lineTo(x(d.b.i),y(d.b.p));g.stroke()}
+(() => {
+'use strict';
+/* CryptoChart Terminal · Mobile — JS vanilla, sin dependencias.
+   Pestañas: Seguimiento · Gráfico · Indicadores · Ajustes. Datos reales de Binance Spot (REST + WebSocket). */
+
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const API = 'https://api.binance.com/api/v3';
+const IV_MS = {'1m':6e4,'5m':3e5,'15m':9e5,'30m':18e5,'1h':36e5,'4h':144e5,'1d':864e5,'1w':6048e5,'1M':2592e6};
+const INTERVALS = Object.keys(IV_MS);
+const STORE = 'cct_mobile_v1';
+const FIB = [0, .236, .382, .5, .618, .786, 1];
+
+/* ───────── Estado persistente ───────── */
+const defaults = {
+  symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
+  symbol: 'BTCUSDT', interval: '1h',
+  indicators: {ema20:true, ema50:false, sma200:false, bollinger:false, rsi:true, volume:true},
+  light: false, drawings: {}
+};
+function merge(s) {
+  const o = {...structuredClone(defaults), ...s};
+  o.indicators = {...defaults.indicators, ...(s.indicators || {})};
+  if (!o.drawings || typeof o.drawings !== 'object' || Array.isArray(o.drawings)) o.drawings = {};
+  if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
+  if (!INTERVALS.includes(o.interval)) o.interval = '1h';
+  if (typeof o.symbol !== 'string') o.symbol = o.symbols[0];
+  return o;
 }
-function eventPoint(ev){const r=$('#priceCanvas').getBoundingClientRect(),xx=ev.clientX-r.left,yy=ev.clientY-r.top;if(!chartScale)return null;return {i:Math.round(chartScale.start+(xx-9)/((r.width-9-62)/(chartScale.end-chartScale.start))-.5),p:chartScale.max-(yy-8)/(chartScale.plotH-16)*(chartScale.max-chartScale.min)}}
-const area=$('#chartArea');area.addEventListener('pointerdown',e=>{chartPointer={x:e.clientX,y:e.clientY,pan};area.setPointerCapture(e.pointerId)});area.addEventListener('pointermove',e=>{if(!chartPointer||drawMode)return;const n=chartScale?chartScale.end-chartScale.start:90;pan=Math.max(0,Math.min(Math.max(0,candles.length-n),chartPointer.pan+(chartPointer.x-e.clientX)*n/Math.max(150,area.clientWidth-70)));render()});area.addEventListener('pointerup',e=>{if(!chartPointer)return;const moved=Math.abs(chartPointer.x-e.clientX);chartPointer=null;if(moved>7||!drawMode||!chartScale)return;const p=eventPoint(e);if(!p)return;if(drawMode==='horizontal'){lines.push({type:'horizontal',a:p});drawMode='';toast('Línea horizontal creada')}else if(!drawStart){drawStart=p;toast('Toca el segundo punto')}else{lines.push({type:'line',a:drawStart,b:p});drawMode='';drawStart=null;toast('Línea creada')}render()});area.addEventListener('wheel',e=>{e.preventDefault();visible=Math.min(400,Math.max(22,visible+(e.deltaY>0?12:-12)));pan=0;render()},{passive:false});
-$('#zoomIn').onclick=()=>{visible=Math.max(20,visible-20);render()};$('#zoomOut').onclick=()=>{visible=Math.min(400,visible+20);render()};$('#fitChart').onclick=()=>{visible=90;pan=0;render()};$('#fullscreen').onclick=()=>{document.body.classList.toggle('expanded');requestAnimationFrame(render)};
-$('#symbolButton').onclick=()=>openSheet();$('#addAsset').onclick=()=>openSheet('add');$('#closeSheet').onclick=closeSheet;$('#sheetBackdrop').onclick=closeSheet;$('#sheetSearch').oninput=renderSheet;$('#searchCoins').oninput=renderWatch;$$('[data-panel]').forEach(b=>b.onclick=()=>{if(b.dataset.panel==='tools')openSheet('tools');else switchView('indicatorView')});$('#goChart').onclick=()=>switchView('chartView');
-function theme(){document.body.classList.toggle('light',!!state.light);document.documentElement.style.colorScheme=state.light?'light':'dark';render()};$('#themeBtn').onclick=$('#themeSetting').onclick=()=>{state.light=!state.light;save();theme()};
-$('#exportData').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='cryptochart-mobile-config.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),500)};
-$('#importFile').onchange=async e=>{try{const data=JSON.parse(await e.target.files[0].text());if(!Array.isArray(data.symbols)||typeof data.symbol!=='string')throw Error();state={...defaults,...data,indicators:{...defaults.indicators,...data.indicators}};save();theme();renderIndicators();renderFrames();renderWatch();updateChartHeader();loadCandles();toast('Configuración importada')}catch{toast('Archivo de configuración inválido')}e.target.value=''};
-window.addEventListener('resize',render);document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSheet();document.body.classList.remove('expanded');requestAnimationFrame(render)}});
-renderFrames();renderIndicators();countIndicators();renderWatch();updateChartHeader();theme();fetchTicker();loadCandles();setInterval(fetchTicker,30000);setInterval(()=>{if(currentView==='chartView')loadCandles()},60000);
+let state;
+try { state = merge(JSON.parse(localStorage.getItem(STORE) || '{}')); } catch { state = merge({}); }
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch {} };
+
+/* ───────── Utilidades ───────── */
+const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','⚛'],UNI:['Uniswap','🦄'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
+const base = s => s.replace(/USDT$/, '');
+const meta = s => catalog[base(s)] || [base(s), base(s).slice(0, 1)];
+const fmt = n => !Number.isFinite(n) ? '—' : n >= 1000 ? n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : n >= 1 ? n.toFixed(2) : n.toFixed(n < .01 ? 8 : 4);
+const pct = n => !Number.isFinite(n) ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let toastTimer;
+function toast(msg) { const el = $('#toast'); el.textContent = msg; el.style.display = 'block'; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.style.display = 'none', 2400); }
+function updateStatus(ok, msg) { $('#connection').textContent = '● ' + msg; $('#connection').className = 'connection ' + (ok ? 'online' : 'offline'); }
+async function getJSON(url, signal) { const r = await fetch(url, {signal}); if (!r.ok) throw Error('Binance HTTP ' + r.status); return r.json(); }
+
+/* ───────── Variables de ejecución ───────── */
+let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null;
+let currentView = 'watchView', sheetMode = 'select', editMode = false;
+let drawTool = '', pending = null, preview = null, selectedId = null, cross = null, geo = null;
+let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0;
+const lastShown = {};
+
+/* ───────── Navegación ───────── */
+function switchView(id) {
+  currentView = id;
+  $$('.view').forEach(x => x.classList.toggle('active', x.id === id));
+  $$('.bottom-nav button').forEach(x => x.classList.toggle('active', x.dataset.view === id));
+  document.body.classList.toggle('chart-mode', id === 'chartView');
+  if (id !== 'chartView') document.body.classList.remove('expanded');
+  if (id === 'chartView') requestAnimationFrame(() => { if (!candles.length) loadCandles(); render(); });
+  if (id === 'watchView') renderWatch();
+  syncFullscreenLabel();
+}
+$$('.bottom-nav button').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+
+/* ───────── 1 · Seguimiento ───────── */
+function coinBadge(s) {
+  const b = base(s);
+  return `<span class="coin-icon ${b === 'ETH' ? 'eth' : b === 'SOL' ? 'sol' : b === 'BNB' ? 'bnb' : b === 'XRP' ? 'xrp' : b === 'BTC' ? '' : 'other'}">${esc(meta(s)[1])}</span>`;
+}
+function renderWatch() {
+  const q = $('#searchCoins').value.trim().toUpperCase();
+  const list = state.symbols.filter(s => s.includes(q) || meta(s)[0].toUpperCase().includes(q));
+  $('#watchRows').innerHTML = list.map(s => {
+    const t = tickers[s], change = Number(t?.priceChangePercent), price = Number(t?.lastPrice);
+    let flash = '';
+    if (Number.isFinite(price) && lastShown[s] != null && price !== lastShown[s]) flash = price > lastShown[s] ? ' flash-up' : ' flash-down';
+    if (Number.isFinite(price)) lastShown[s] = price;
+    const main = `${coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small>${esc(meta(s)[0])}</small></span>`;
+    if (editMode) return `<div class="watch-row editing" data-symbol="${s}">${main}<span class="row-edit"><button data-move="${s}" aria-label="Subir ${esc(base(s))}">▲</button><button data-remove="${s}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
+    return `<button class="watch-row" data-symbol="${s}">${main}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
+  }).join('') || '<p class="small-note">No hay activos con ese nombre.</p>';
+  $('#totalAssets').textContent = state.symbols.length;
+  $('#winners').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) > 0).length;
+  $('#losers').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) < 0).length;
+  $('#editWatch').textContent = editMode ? 'Listo' : 'Editar';
+}
+$('#watchRows').addEventListener('click', e => {
+  const rm = e.target.closest('[data-remove]'), mv = e.target.closest('[data-move]'), row = e.target.closest('.watch-row');
+  if (rm) { state.symbols = state.symbols.filter(s => s !== rm.dataset.remove); if (!state.symbols.length) editMode = false; save(); renderWatch(); return; }
+  if (mv) { const i = state.symbols.indexOf(mv.dataset.move); if (i > 0) { [state.symbols[i - 1], state.symbols[i]] = [state.symbols[i], state.symbols[i - 1]]; save(); renderWatch(); } return; }
+  if (row && !editMode) selectSymbol(row.dataset.symbol);
+});
+$('#editWatch').onclick = () => { editMode = !editMode; renderWatch(); };
+
+async function fetchTicker() {
+  try {
+    let data;
+    try { data = await getJSON(`${API}/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(state.symbols))}`); }
+    catch { data = await getJSON(`${API}/ticker/24hr`); } // por si algún símbolo añadido a mano no existe
+    for (const t of data) tickers[t.symbol] = t;
+    updateStatus(true, 'Binance en línea');
+    renderWatch(); updateChartHeader();
+  } catch {
+    updateStatus(false, 'Sin conexión'); renderWatch();
+    if (!candles.length) setFeedback('No hay datos. Revisa tu conexión o posibles restricciones de Binance en tu país.');
+  }
+}
+
+/* ───────── Velas y datos en vivo ───────── */
+function setFeedback(t) { $('#chartFeedback').textContent = t; }
+function defaultVisible() { const w = $('#chartArea').clientWidth || 360; return clamp(Math.round((w - 70) / 5.5), 40, 120); }
+function renderFrames() {
+  $('#timeframes').innerHTML = INTERVALS.map(t => `<button class="${t === state.interval ? 'active' : ''}" data-tf="${t}">${t}</button>`).join('');
+}
+$('#timeframes').addEventListener('click', e => {
+  const b = e.target.closest('[data-tf]'); if (!b) return;
+  state.interval = b.dataset.tf; save(); renderFrames(); clearTransient(); loadCandles();
+});
+function updateChartHeader() {
+  const b = base(state.symbol), t = tickers[state.symbol];
+  const last = candles.length ? candles[candles.length - 1].c : Number(t?.lastPrice);
+  const ch = Number(t?.priceChangePercent);
+  $('#coinIcon').textContent = meta(state.symbol)[1];
+  $('#coinTitle').textContent = `${b} / USDT`;
+  $('#chartLabel').textContent = state.symbol;
+  $('#intervalLabel').textContent = state.interval;
+  $('#lastPrice').textContent = fmt(last);
+  $('#dayChange').textContent = pct(ch);
+  $('#dayChange').className = ch >= 0 ? 'positive' : 'negative';
+}
+async function loadCandles(silent = false) {
+  if (fetchCtl) fetchCtl.abort();
+  fetchCtl = new AbortController();
+  const sym = state.symbol, tf = state.interval;
+  if (!silent) { candles = []; ind = {}; setFeedback('Cargando velas reales de Binance…'); render(); }
+  try {
+    const data = await getJSON(`${API}/klines?symbol=${sym}&interval=${tf}&limit=1000`, fetchCtl.signal);
+    if (sym !== state.symbol || tf !== state.interval) return;
+    candles = data.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}));
+    recalc();
+    if (!silent) { visible = defaultVisible(); pan = 0; }
+    setFeedback(''); updateChartHeader(); render(); connectWS();
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    if (!silent) { setFeedback('No se pudieron cargar las velas de Binance. No se muestran datos simulados.'); render(); }
+  }
+}
+function setLive(on) { $('#liveDot').classList.toggle('on', !!on); }
+function closeWS() { wsGen++; wsOpen = false; if (ws) { ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null; try { ws.close(); } catch {} } ws = null; setLive(false); }
+function connectWS() {
+  closeWS();
+  if (typeof WebSocket === 'undefined') return;
+  const gen = wsGen, sym = state.symbol, tf = state.interval;
+  try { ws = new WebSocket(`wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_${tf}`); } catch { return; }
+  ws.onopen = () => { if (gen === wsGen) { wsOpen = true; wsRetry = 0; setLive(true); } };
+  ws.onmessage = e => {
+    if (gen !== wsGen) return;
+    let k; try { k = JSON.parse(e.data).k; } catch { return; }
+    if (k) applyKline({t: k.t, o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.v});
+  };
+  ws.onerror = () => { try { ws.close(); } catch {} };
+  ws.onclose = () => {
+    if (gen !== wsGen) return;
+    wsOpen = false; setLive(false);
+    setTimeout(() => { if (gen === wsGen && !document.hidden) connectWS(); }, Math.min(30000, 4000 * ++wsRetry));
+  };
+}
+function applyKline(k) {
+  const n = candles.length; if (!n) return;
+  const last = candles[n - 1];
+  if (k.t === last.t) candles[n - 1] = k;
+  else if (k.t > last.t) { candles.push(k); if (pan > 0) pan += 1; }
+  else return;
+  recalc(); updateChartHeader();
+  if (currentView === 'chartView') scheduleRender();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  fetchTicker();
+  if (currentView === 'chartView' && candles.length) { loadCandles(true); }
+});
+
+/* ───────── Indicadores ───────── */
+const indicatorMeta = [
+  ['ema20','EMA 20','Media móvil exponencial de 20 períodos','#f5c568'],
+  ['ema50','EMA 50','Media móvil exponencial de 50 períodos','#6ca5f9'],
+  ['sma200','SMA 200','Media móvil simple de 200 períodos','#b58dff'],
+  ['bollinger','Bandas de Bollinger','20 períodos · 2 desviaciones','#a3b0c3'],
+  ['rsi','RSI 14','Índice de fuerza relativa en panel inferior','#bb9cff'],
+  ['volume','Volumen','Barras de volumen por vela','#8294a8']
+];
+function ema(xs, n) {
+  const out = Array(xs.length).fill(null); if (xs.length < n) return out;
+  const k = 2 / (n + 1); let e = xs.slice(0, n).reduce((a, b) => a + b, 0) / n; out[n - 1] = e;
+  for (let i = n; i < xs.length; i++) { e = xs[i] * k + e * (1 - k); out[i] = e; }
+  return out;
+}
+function sma(xs, n) {
+  const out = Array(xs.length).fill(null); let s = 0;
+  for (let i = 0; i < xs.length; i++) { s += xs[i]; if (i >= n) s -= xs[i - n]; if (i >= n - 1) out[i] = s / n; }
+  return out;
+}
+function rsi(xs, n = 14) {
+  const out = Array(xs.length).fill(null); if (xs.length <= n) return out;
+  let gain = 0, loss = 0;
+  for (let i = 1; i <= n; i++) { const d = xs[i] - xs[i - 1]; gain += Math.max(0, d); loss += Math.max(0, -d); }
+  gain /= n; loss /= n; out[n] = loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+  for (let i = n + 1; i < xs.length; i++) {
+    const d = xs[i] - xs[i - 1];
+    gain = (gain * (n - 1) + Math.max(0, d)) / n; loss = (loss * (n - 1) + Math.max(0, -d)) / n;
+    out[i] = loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+  }
+  return out;
+}
+function recalc() {
+  const c = candles.map(x => x.c), n = c.length, m = sma(c, 20);
+  const up = Array(n).fill(null), lo = Array(n).fill(null);
+  for (let i = 19; i < n; i++) { let s = 0; for (let j = i - 19; j <= i; j++) { const d = c[j] - m[i]; s += d * d; } const sd = Math.sqrt(s / 20); up[i] = m[i] + 2 * sd; lo[i] = m[i] - 2 * sd; }
+  ind = {ema20: ema(c, 20), ema50: ema(c, 50), sma200: sma(c, 200), bbU: up, bbL: lo, rsi: rsi(c, 14)};
+}
+const indicatorRows = () => indicatorMeta.map(([key, title, desc]) =>
+  `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div>`).join('');
+function renderIndicators() { $('#indicatorList').innerHTML = indicatorRows(); }
+function countIndicators() { const n = Object.values(state.indicators).filter(Boolean).length; $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-ind]'); if (!b) return;
+  state.indicators[b.dataset.ind] = !state.indicators[b.dataset.ind];
+  save(); renderIndicators(); countIndicators();
+  if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows();
+  scheduleRender();
+});
+
+/* ───────── Hojas inferiores (activo / añadir / dibujar / indicadores) ───────── */
+function openSheet(mode = 'select') {
+  sheetMode = mode;
+  $('#sheetTitle').textContent = {add: 'Añadir a seguimiento', tools: 'Herramientas de dibujo', indicators: 'Indicadores', select: 'Seleccionar criptomoneda'}[mode];
+  $('#sheetSearch').style.display = (mode === 'tools' || mode === 'indicators') ? 'none' : 'block';
+  $('#sheetSearch').value = '';
+  $('#sheetBackdrop').classList.add('open'); $('#sheet').classList.add('open');
+  renderSheet();
+}
+function closeSheet() { $('#sheetBackdrop').classList.remove('open'); $('#sheet').classList.remove('open'); }
+const TOOLS = [
+  ['trend', '↗ Línea de tendencia', 'Arrastra o toca dos puntos'],
+  ['horizontal', '— Línea horizontal', 'Toca un precio'],
+  ['rect', '▭ Rectángulo', 'Arrastra o toca dos esquinas'],
+  ['fib', '≋ Fibonacci', 'Arrastra o toca inicio y fin del movimiento'],
+  ['clear', '✕ Borrar todos los dibujos', 'Solo de este activo']
+];
+function renderSheet() {
+  const list = $('#sheetList');
+  if (sheetMode === 'indicators') { list.innerHTML = indicatorRows(); return; }
+  if (sheetMode === 'tools') {
+    list.innerHTML = TOOLS.map(([k, t, d]) => `<button class="sheet-item" data-tool="${k}"><span>${t}</span><small>${d}</small></button>`).join('');
+    $$('[data-tool]').forEach(b => b.onclick = () => {
+      const k = b.dataset.tool; closeSheet();
+      if (k === 'clear') { setDrawings([]); selectedId = null; updateDrawUI(); render(); toast('Dibujos borrados'); }
+      else startTool(k);
+    });
+    return;
+  }
+  const search = $('#sheetSearch').value.trim().toUpperCase();
+  const pool = sheetMode === 'add' ? Object.keys(catalog).map(s => s + 'USDT') : state.symbols;
+  const syms = pool.filter(s => s.includes(search) || meta(s)[0].toUpperCase().includes(search));
+  if (sheetMode === 'add' && search && !syms.length && /^[A-Z0-9]{2,15}$/.test(search)) syms.push(search.endsWith('USDT') ? search : search + 'USDT');
+  list.innerHTML = syms.map(s => `<button class="sheet-item" data-pick="${s}"><span>${esc(base(s))} <small>${esc(meta(s)[0])}</small></span><span>${state.symbols.includes(s) ? (sheetMode === 'add' ? '✓' : '→') : '＋'}</span></button>`).join('') || '<p class="small-note">No se encontraron monedas.</p>';
+  $$('[data-pick]').forEach(b => b.onclick = async () => {
+    const s = b.dataset.pick;
+    if (sheetMode !== 'add') { selectSymbol(s); return; }
+    if (state.symbols.includes(s)) { closeSheet(); return; }
+    if (!catalog[base(s)]) { // símbolo escrito a mano: comprobar que existe en Binance
+      try { await getJSON(`${API}/ticker/price?symbol=${s}`); } catch { toast(`${s} no existe en Binance Spot`); return; }
+    }
+    state.symbols.push(s); save(); renderWatch(); fetchTicker(); toast(`${base(s)} añadido`); closeSheet();
+  });
+}
+$('#closeSheet').onclick = closeSheet; $('#sheetBackdrop').onclick = closeSheet; $('#sheetSearch').oninput = renderSheet;
+$('#symbolButton').onclick = () => openSheet(); $('#addAsset').onclick = () => openSheet('add'); $('#searchCoins').oninput = renderWatch;
+$$('[data-panel]').forEach(b => b.onclick = () => openSheet(b.dataset.panel === 'tools' ? 'tools' : 'indicators'));
+$('#goChart').onclick = () => switchView('chartView');
+function selectSymbol(s) {
+  state.symbol = s; save(); closeSheet(); clearTransient(); closeWS(); candles = []; ind = {};
+  updateChartHeader(); switchView('chartView'); loadCandles();
+}
+
+/* ───────── Dibujos (anclados a tiempo y precio, guardados por activo) ───────── */
+const getDrawings = () => state.drawings[state.symbol] || [];
+const setDrawings = arr => { if (arr.length) state.drawings[state.symbol] = arr; else delete state.drawings[state.symbol]; save(); };
+function clearTransient() { drawTool = ''; pending = null; preview = null; selectedId = null; cross = null; updateDrawUI(); }
+const HINTS = {
+  trend: p => p ? 'Toca el segundo punto' : 'Arrastra o toca el primer punto',
+  horizontal: () => 'Toca el precio donde quieres la línea',
+  rect: p => p ? 'Toca la esquina opuesta' : 'Arrastra o toca la primera esquina',
+  fib: p => p ? 'Toca el final del movimiento' : 'Arrastra o toca el inicio del movimiento'
+};
+function startTool(k) { drawTool = k; pending = null; preview = null; selectedId = null; updateDrawUI(); scheduleRender(); }
+function updateDrawUI() {
+  $('#drawHint').hidden = !drawTool;
+  if (drawTool) $('#drawHintText').textContent = HINTS[drawTool](pending);
+  $('#deleteDraw').hidden = !selectedId;
+  $('#undoDraw').disabled = !getDrawings().length;
+  $('#chartArea').classList.toggle('drawing', !!drawTool);
+}
+$('#cancelDraw').onclick = () => { drawTool = ''; pending = null; preview = null; updateDrawUI(); scheduleRender(); };
+$('#undoDraw').onclick = () => { const a = getDrawings().slice(); if (!a.length) return; a.pop(); setDrawings(a); selectedId = null; updateDrawUI(); render(); };
+$('#deleteDraw').onclick = () => { setDrawings(getDrawings().filter(d => d.id !== selectedId)); selectedId = null; updateDrawUI(); render(); };
+
+function idxOfTime(t) {
+  const n = candles.length; if (!n) return 0; const iv = IV_MS[state.interval];
+  if (t <= candles[0].t) return (t - candles[0].t) / iv;
+  if (t >= candles[n - 1].t) return n - 1 + (t - candles[n - 1].t) / iv;
+  let lo = 0, hi = n - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (candles[m].t <= t) lo = m; else hi = m; }
+  return lo + (t - candles[lo].t) / (candles[lo + 1].t - candles[lo].t);
+}
+function timeOfIdx(i) {
+  const n = candles.length, iv = IV_MS[state.interval];
+  if (i <= 0) return candles[0].t + i * iv;
+  if (i >= n - 1) return candles[n - 1].t + (i - (n - 1)) * iv;
+  const lo = Math.floor(i); return candles[lo].t + (i - lo) * (candles[lo + 1].t - candles[lo].t);
+}
+const X = i => geo.left + (i - geo.start + .5) * geo.step;
+const IDX = x => (x - geo.left) / geo.step + geo.start - .5;
+const Y = p => geo.plotTop + (geo.max - p) / (geo.max - geo.min) * geo.plotH;
+const PRICE = y => geo.max - (y - geo.plotTop) / geo.plotH * (geo.max - geo.min);
+function snapPoint(pt) {
+  const i = Math.round(IDX(pt.x)); let p = PRICE(pt.y);
+  const c = candles[i];
+  if (c) { let best = null, bd = 14; for (const v of [c.o, c.h, c.l, c.c]) { const dd = Math.abs(Y(v) - pt.y); if (dd < bd) { bd = dd; best = v; } } if (best != null) p = best; }
+  return {t: timeOfIdx(i), p};
+}
+const px = a => ({x: X(idxOfTime(a.t)), y: Y(a.p)});
+function handlesOf(d) {
+  if (d.type === 'horizontal') return [{key: 'a', x: geo.left + geo.plotW / 2, y: Y(d.a.p)}];
+  return [{key: 'a', ...px(d.a)}, {key: 'b', ...px(d.b)}];
+}
+function segDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+  const t = l2 ? clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0, 1) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+function distToDrawing(d, pt) {
+  if (d.type === 'horizontal') return Math.abs(pt.y - Y(d.a.p));
+  const a = px(d.a), b = px(d.b);
+  if (d.type === 'trend') return segDist(pt, a, b);
+  if (d.type === 'rect') {
+    const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
+    if (pt.x >= x1 && pt.x <= x2 && pt.y >= y1 && pt.y <= y2) return 0;
+    return Math.min(segDist(pt, {x: x1, y: y1}, {x: x2, y: y1}), segDist(pt, {x: x2, y: y1}, {x: x2, y: y2}), segDist(pt, {x: x2, y: y2}, {x: x1, y: y2}), segDist(pt, {x: x1, y: y2}, {x: x1, y: y1}));
+  }
+  const xs = Math.min(a.x, b.x); if (pt.x < xs - 10) return 1e9;
+  return Math.min(...FIB.map(lv => Math.abs(pt.y - Y(b_price(d, lv)))));
+}
+const b_price = (d, lv) => d.b.p - (d.b.p - d.a.p) * lv;
+function hitTest(pt) { const arr = getDrawings(); for (let i = arr.length - 1; i >= 0; i--) if (distToDrawing(arr[i], pt) < 13) return arr[i]; return null; }
+function commitDrawing(a, b) {
+  if (drawTool !== 'horizontal') { const A = px(a), B = px(b); if (Math.hypot(A.x - B.x, A.y - B.y) < 8) { toast('Los puntos están muy cerca'); return; } }
+  const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: drawTool, a, ...(drawTool === 'horizontal' ? {} : {b})};
+  setDrawings([...getDrawings(), d]);
+  selectedId = d.id; drawTool = ''; pending = null; preview = null; updateDrawUI(); render();
+}
+
+/* ───────── Render del gráfico ───────── */
+let raf = 0;
+function scheduleRender() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
+let g = null;
+function setupCanvas() {
+  const el = $('#priceCanvas'), r = el.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 3);
+  const W = Math.round(r.width * d), H = Math.round(r.height * d);
+  if (el.width !== W || el.height !== H) { el.width = W; el.height = H; }
+  g = el.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0);
+  return {w: r.width, h: r.height};
+}
+function timeLabel(t, prev) {
+  const d = new Date(t), p2 = n => String(n).padStart(2, '0'), iv = state.interval;
+  if (iv === '1M') return d.toLocaleString('es', {month: 'short', year: '2-digit'});
+  if (iv === '1d' || iv === '1w') return `${d.getDate()}/${d.getMonth() + 1}`;
+  if (prev != null && new Date(prev).getDate() !== d.getDate()) return `${d.getDate()}/${d.getMonth() + 1}`;
+  return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+function render() {
+  if (currentView !== 'chartView') return;
+  const el = $('#priceCanvas'); if (!el.getBoundingClientRect().width) return;
+  const {w, h} = setupCanvas();
+  const css = getComputedStyle(document.body);
+  const text = css.getPropertyValue('--muted').trim(), line = css.getPropertyValue('--line').trim(), bg = css.getPropertyValue('--bg').trim(), drawCol = css.getPropertyValue('--draw').trim() || '#e9c36e', fg = css.getPropertyValue('--text').trim();
+  const up = '#20bf9f', down = '#f06b79';
+  g.clearRect(0, 0, w, h);
+  const n = candles.length; if (!n) { geo = null; return; }
+
+  const left = 6, right = 64, axisH = 22, plotTop = 6;
+  const rsiH = state.indicators.rsi ? Math.round(Math.max(70, h * .18)) : 0, volH = state.indicators.volume ? Math.round(Math.max(40, h * .12)) : 0;
+  const plotH = Math.max(80, h - axisH - rsiH - volH - plotTop), plotW = w - left - right;
+  const count = clamp(visible, 15, 400);
+  pan = clamp(pan, -Math.floor(count * .4), Math.max(0, n - Math.ceil(count * .3)));
+  const end = n - pan, start = end - count, step = plotW / count;
+  const lo = Math.max(0, Math.floor(start)), hi = Math.min(n, Math.ceil(end));
+  if (hi <= lo) return;
+
+  let min = Infinity, max = -Infinity;
+  for (let i = lo; i < hi; i++) { if (candles[i].l < min) min = candles[i].l; if (candles[i].h > max) max = candles[i].h; }
+  const overlays = [];
+  if (state.indicators.ema20) overlays.push(['EMA 20', ind.ema20, '#f5c568']);
+  if (state.indicators.ema50) overlays.push(['EMA 50', ind.ema50, '#6ca5f9']);
+  if (state.indicators.sma200) overlays.push(['SMA 200', ind.sma200, '#b58dff']);
+  if (state.indicators.bollinger) overlays.push(['BB sup', ind.bbU, '#748bab', true], ['BB inf', ind.bbL, '#748bab', true]);
+  for (const [, arr] of overlays) for (let i = lo; i < hi; i++) if (arr[i] != null) { if (arr[i] < min) min = arr[i]; if (arr[i] > max) max = arr[i]; }
+  const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * .08; min -= pad; max += pad;
+  geo = {w, h, left, right, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH};
+
+  // cuadrícula y escala de precios
+  g.font = '10px system-ui'; g.textAlign = 'left'; g.lineWidth = .6;
+  for (let i = 0; i <= 4; i++) {
+    const yy = plotTop + i * plotH / 4, pr = max - (max - min) * i / 4;
+    g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right + 2, yy); g.stroke();
+    g.fillStyle = text; g.fillText(fmt(pr), w - right + 6, yy + 3);
+  }
+  // eje de tiempo
+  const stride = Math.max(1, Math.ceil(70 / step));
+  g.fillStyle = text; g.textAlign = 'center';
+  for (let i = Math.ceil(lo / stride) * stride; i < hi; i += stride) {
+    const xx = X(i); if (xx < left + 14 || xx > w - right - 14) continue;
+    g.strokeStyle = line; g.beginPath(); g.moveTo(xx, plotTop); g.lineTo(xx, plotTop + plotH + volH + rsiH); g.stroke();
+    g.fillText(timeLabel(candles[i].t, i > 0 ? candles[i - 1].t : null), xx, h - 7);
+  }
+  g.textAlign = 'left';
+
+  g.save(); g.beginPath(); g.rect(left, plotTop, plotW + 2, plotH); g.clip();
+  // velas
+  const barW = clamp(step * .66, 1.5, 16);
+  for (let i = lo; i < hi; i++) {
+    const d = candles[i], xx = X(i), col = d.c >= d.o ? up : down, yo = Y(d.o), yc = Y(d.c);
+    g.strokeStyle = g.fillStyle = col; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(xx, Y(d.h)); g.lineTo(xx, Y(d.l)); g.stroke();
+    g.fillRect(xx - barW / 2, Math.min(yo, yc), barW, Math.max(1, Math.abs(yo - yc)));
+  }
+  // medias y bandas
+  for (const [, arr, col, dashed] of overlays) {
+    g.strokeStyle = col; g.lineWidth = 1.4; g.setLineDash(dashed ? [4, 3] : []); g.beginPath();
+    let on = false;
+    for (let i = lo; i < hi; i++) { if (arr[i] == null) { on = false; continue; } const xx = X(i), yy = Y(arr[i]); if (!on) { g.moveTo(xx, yy); on = true; } else g.lineTo(xx, yy); }
+    g.stroke(); g.setLineDash([]);
+  }
+  // dibujos del usuario
+  for (const d of getDrawings()) drawShape(d, d.id === selectedId, drawCol, text);
+  if (preview) drawShape({id: '_', type: drawTool, a: preview.a, b: preview.b}, false, drawCol, text);
+  if (pending) { const P = px(pending); g.fillStyle = drawCol; g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
+  g.restore();
+
+  // etiqueta de último precio
+  const lastC = candles[n - 1], ly = Y(lastC.c);
+  if (ly > plotTop && ly < plotTop + plotH) {
+    const col = lastC.c >= lastC.o ? up : down;
+    g.strokeStyle = col; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(left, ly); g.lineTo(w - right + 2, ly); g.stroke(); g.setLineDash([]);
+    g.fillStyle = col; g.fillRect(w - right + 2, ly - 9, right - 3, 18); g.fillStyle = '#fff'; g.fillText(fmt(lastC.c), w - right + 5, ly + 3.5);
+  }
+  // leyenda de indicadores
+  let ly2 = plotTop + 48; g.font = '10px system-ui';
+  for (const [name, arr, col] of overlays) { if (/^BB inf/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); g.fillStyle = col; g.fillText(`${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`, left + 8, ly2); ly2 += 13; }
+
+  // volumen
+  if (volH) {
+    const top = geo.volTop + 4, height = volH - 8; let maxV = 1;
+    for (let i = lo; i < hi; i++) maxV = Math.max(maxV, candles[i].v);
+    g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.volTop); g.lineTo(w - right + 2, geo.volTop); g.stroke();
+    g.fillStyle = text; g.fillText('VOL', left + 4, top + 9);
+    for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = d.c >= d.o ? '#1b8c78aa' : '#d45a6aaa'; const bh = Math.max(1, d.v / maxV * height); g.fillRect(X(i) - barW / 2, top + height - bh, barW, bh); }
+  }
+  // RSI
+  if (rsiH) {
+    const top = geo.rsiTop + 4, height = rsiH - 12;
+    g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.rsiTop); g.lineTo(w - right + 2, geo.rsiTop); g.stroke();
+    const lastR = [...ind.rsi].reverse().find(x => x != null);
+    g.fillStyle = text; g.fillText(`RSI 14  ${lastR != null ? lastR.toFixed(1) : '—'}`, left + 4, top + 9);
+    g.setLineDash([2, 3]);
+    for (const r of [30, 70]) { const yy = top + (100 - r) / 100 * height; g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
+    g.setLineDash([]);
+    g.strokeStyle = '#bb9cff'; g.lineWidth = 1.5; g.beginPath(); let on = false;
+    for (let i = lo; i < hi; i++) { const v = ind.rsi[i]; if (v == null) { on = false; continue; } const yy = top + (100 - v) / 100 * height; if (!on) { g.moveTo(X(i), yy); on = true; } else g.lineTo(X(i), yy); }
+    g.stroke();
+  }
+  // retícula (mantener pulsado)
+  let shown = candles[hi - 1];
+  if (cross) {
+    const i = clamp(Math.round(IDX(cross.x)), 0, n - 1), c = candles[i]; shown = c;
+    const cx = X(i), cy = clamp(cross.y, plotTop, plotTop + plotH);
+    g.strokeStyle = fg; g.globalAlpha = .55; g.lineWidth = 1; g.setLineDash([4, 4]);
+    g.beginPath(); g.moveTo(cx, plotTop); g.lineTo(cx, h - axisH); g.moveTo(left, cy); g.lineTo(w - right + 2, cy); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+    g.fillStyle = fg; g.fillRect(w - right + 2, cy - 9, right - 3, 18); g.fillStyle = bg; g.fillText(fmt(PRICE(cy)), w - right + 5, cy + 3.5);
+    const tl = new Date(c.t).toLocaleString('es', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+    const tw = g.measureText(tl).width + 12, tx = clamp(cx - tw / 2, left, w - right - tw);
+    g.fillStyle = fg; g.fillRect(tx, h - axisH + 1, tw, 18); g.fillStyle = bg; g.fillText(tl, tx + 6, h - 8);
+  }
+  if (shown) {
+    const chg = (shown.c - shown.o) / shown.o * 100;
+    $('#ohlcText').textContent = `O ${fmt(shown.o)}  H ${fmt(shown.h)}  L ${fmt(shown.l)}  C ${fmt(shown.c)}  ${pct(chg)}`;
+    $('#ohlcText').style.color = shown.c >= shown.o ? up : down;
+  }
+}
+function drawShape(d, selected, col, textCol) {
+  const a = d.type === 'horizontal' ? {x: 0, y: Y(d.a.p)} : px(d.a), b = d.b ? px(d.b) : null;
+  g.strokeStyle = col; g.fillStyle = col; g.lineWidth = selected ? 2.2 : 1.5; g.setLineDash([]);
+  const rightX = geo.w - geo.right;
+  if (d.type === 'horizontal') {
+    g.beginPath(); g.moveTo(geo.left, a.y); g.lineTo(rightX, a.y); g.stroke();
+    g.font = '10px system-ui'; g.fillRect(rightX + 2, a.y - 9, geo.right - 3, 18); g.fillStyle = '#10151f'; g.fillText(fmt(d.a.p), rightX + 5, a.y + 3.5);
+  } else if (d.type === 'trend') {
+    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+  } else if (d.type === 'rect') {
+    g.globalAlpha = .13; g.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y)); g.globalAlpha = 1;
+    g.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+  } else if (d.type === 'fib') {
+    const x1 = Math.min(a.x, b.x); g.font = '10px system-ui';
+    FIB.forEach((lv, k) => {
+      const pr = b_price(d, lv), yy = Y(pr);
+      g.globalAlpha = lv === 0 || lv === 1 ? 1 : .75; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x1, yy); g.lineTo(rightX, yy); g.stroke(); g.globalAlpha = 1;
+      g.fillStyle = col; g.fillText(`${lv} (${fmt(pr)})`, Math.min(x1 + 4, rightX - 90), yy - 3);
+      if (k < FIB.length - 1) { g.globalAlpha = .06; g.fillRect(x1, Math.min(yy, Y(b_price(d, FIB[k + 1]))), rightX - x1, Math.abs(Y(b_price(d, FIB[k + 1])) - yy)); g.globalAlpha = 1; }
+    });
+    g.setLineDash([4, 4]); g.lineWidth = 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); g.setLineDash([]);
+  }
+  if (selected) for (const hnd of handlesOf(d)) { g.fillStyle = '#fff'; g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(hnd.x, hnd.y, 7, 0, 7); g.fill(); g.stroke(); }
+}
+
+/* ───────── Gestos: pan, pellizco, retícula, dibujo ───────── */
+const area = $('#chartArea'), ptrs = new Map();
+let gest = null, pinch = null, lastTap = null;
+const local = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
+area.addEventListener('pointerdown', e => {
+  if (e.target.closest('.chart-controls,.draw-hint')) return;
+  try { area.setPointerCapture(e.pointerId); } catch {} ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+  if (!geo) return;
+  if (ptrs.size === 2) { startPinch(); return; }
+  if (ptrs.size > 2) return;
+  const pt = local(e);
+  gest = {id: e.pointerId, x0: e.clientX, y0: e.clientY, pan0: pan, moved: false, mode: 'pending', start: null, handle: null, timer: 0};
+  if (drawTool) gest.start = snapPoint(pt);
+  else if (selectedId) {
+    const d = getDrawings().find(x => x.id === selectedId);
+    const hnd = d && handlesOf(d).find(hh => Math.hypot(hh.x - pt.x, hh.y - pt.y) < 24);
+    if (hnd) { gest.mode = 'handle'; gest.handle = hnd.key; }
+  }
+  if (gest.mode === 'pending' && !drawTool)
+    gest.timer = setTimeout(() => { if (gest && !gest.moved && gest.mode === 'pending') { gest.mode = 'cross'; cross = pt; navigator.vibrate?.(8); scheduleRender(); } }, 380);
+});
+area.addEventListener('pointermove', e => {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+  if (pinch && ptrs.size >= 2) { doPinch(); return; }
+  if (!gest || e.pointerId !== gest.id || !geo) return;
+  const pt = local(e);
+  if (!gest.moved && Math.hypot(e.clientX - gest.x0, e.clientY - gest.y0) > 8) { gest.moved = true; clearTimeout(gest.timer); if (gest.mode === 'pending' && !drawTool) gest.mode = 'pan'; }
+  if (gest.mode === 'cross') { cross = pt; scheduleRender(); }
+  else if (gest.mode === 'handle') {
+    const arr = getDrawings(), d = arr.find(x => x.id === selectedId); if (!d) return;
+    const s = snapPoint(pt);
+    if (d.type === 'horizontal') d.a = {t: d.a.t, p: s.p}; else d[gest.handle] = s;
+    scheduleRender();
+  }
+  else if (gest.mode === 'pan') { pan = gest.pan0 + (e.clientX - gest.x0) / geo.step; scheduleRender(); }
+  else if (drawTool && gest.moved && drawTool !== 'horizontal') { preview = {a: gest.start, b: snapPoint(pt)}; scheduleRender(); }
+});
+function endPointer(e, cancelled) {
+  const had = ptrs.delete(e.pointerId);
+  if (pinch) { if (ptrs.size < 2) pinch = null; if (!ptrs.size) gest = null; return; }
+  if (!had || !gest || e.pointerId !== gest.id) return;
+  const gs = gest; gest = null; clearTimeout(gs.timer);
+  if (cancelled) { cross = null; preview = null; scheduleRender(); return; }
+  if (gs.mode === 'cross') { cross = null; scheduleRender(); return; }
+  if (gs.mode === 'handle') { save(); render(); return; }
+  if (gs.mode === 'pan') return;
+  if (!geo) return;
+  const pt = local(e);
+  if (drawTool) {
+    if (drawTool === 'horizontal') { commitDrawing(snapPoint(pt)); return; }
+    if (gs.moved && !pending) { preview = null; commitDrawing(gs.start, snapPoint(pt)); return; }
+    if (!pending) { pending = gs.start; updateDrawUI(); scheduleRender(); return; }
+    const a = pending; pending = null; commitDrawing(a, snapPoint(pt)); return;
+  }
+  // toque simple: doble toque ajusta; un toque selecciona/deselecciona un dibujo
+  const now = Date.now();
+  if (lastTap && now - lastTap.t < 300 && Math.hypot(pt.x - lastTap.x, pt.y - lastTap.y) < 24) { lastTap = null; fit(); return; }
+  lastTap = {t: now, x: pt.x, y: pt.y};
+  const hit = hitTest(pt); selectedId = hit ? hit.id : null; updateDrawUI(); render();
+}
+area.addEventListener('pointerup', e => endPointer(e, false));
+area.addEventListener('pointercancel', e => endPointer(e, true));
+function startPinch() {
+  if (gest) clearTimeout(gest.timer); gest = null; cross = null; preview = null;
+  const [a, b] = [...ptrs.values()], r = $('#priceCanvas').getBoundingClientRect(), cx = (a.x + b.x) / 2 - r.left;
+  pinch = {d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, v0: visible, idx: IDX(cx)};
+}
+function doPinch() {
+  const [a, b] = [...ptrs.values()], r = $('#priceCanvas').getBoundingClientRect(), cx = (a.x + b.x) / 2 - r.left;
+  const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+  visible = clamp(pinch.v0 * pinch.d0 / d, 15, 400);
+  const step = geo.plotW / visible, start = pinch.idx + .5 - (cx - geo.left) / step;
+  pan = candles.length - (start + visible); scheduleRender();
+}
+area.addEventListener('wheel', e => { e.preventDefault(); visible = clamp(visible * (e.deltaY > 0 ? 1.12 : .89), 15, 400); scheduleRender(); }, {passive: false});
+function fit() { visible = defaultVisible(); pan = 0; render(); }
+$('#zoomIn').onclick = () => { visible = clamp(visible / 1.3, 15, 400); render(); };
+$('#zoomOut').onclick = () => { visible = clamp(visible * 1.3, 15, 400); render(); };
+$('#fitChart').onclick = fit;
+function syncFullscreenLabel() { $('#fullscreen').textContent = document.body.classList.contains('expanded') ? '⤓ Reducir' : '⛶ Expandir'; }
+$('#fullscreen').onclick = () => { document.body.classList.toggle('expanded'); syncFullscreenLabel(); requestAnimationFrame(render); };
+if (window.ResizeObserver) new ResizeObserver(() => scheduleRender()).observe(area);
+window.addEventListener('resize', scheduleRender);
+
+/* ───────── Tema, exportar e importar ───────── */
+function theme() { document.body.classList.toggle('light', !!state.light); document.documentElement.style.colorScheme = state.light ? 'light' : 'dark'; render(); }
+$('#themeBtn').onclick = $('#themeSetting').onclick = () => { state.light = !state.light; save(); theme(); };
+$('#exportData').onclick = () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'}), url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = 'cryptochart-mobile-config.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 500);
+};
+$('#importFile').onchange = async e => {
+  try {
+    const data = JSON.parse(await e.target.files[0].text());
+    if (!Array.isArray(data.symbols) || typeof data.symbol !== 'string') throw Error();
+    state = merge(data); save(); clearTransient(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); closeWS(); candles = []; updateChartHeader(); loadCandles(); toast('Configuración importada');
+  } catch { toast('Archivo de configuración inválido'); }
+  e.target.value = '';
+};
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  closeSheet(); if (drawTool) { drawTool = ''; pending = null; preview = null; updateDrawUI(); }
+  document.body.classList.remove('expanded'); syncFullscreenLabel(); requestAnimationFrame(render);
+});
+
+/* ───────── Arranque ───────── */
+renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); updateDrawUI(); theme(); syncFullscreenLabel();
+fetchTicker(); loadCandles();
+setInterval(fetchTicker, 30000);
+setInterval(() => { if (currentView === 'chartView' && !wsOpen && candles.length && !document.hidden) loadCandles(true); }, 20000);
 })();

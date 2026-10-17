@@ -1,17 +1,17 @@
-# CryptoChart Terminal — versión móvil independiente
+# CryptoChart Terminal — versión móvil
 
 ## Inicio
-Abre `index.html` desde un servidor estático HTTPS (por ejemplo, GitHub Pages). No hay compilación ni dependencias. Sube los tres archivos `index.html`, `style.css` y `app.js` a la raíz del repositorio.
+Abre `index.html` desde un servidor estático HTTPS (por ejemplo, GitHub Pages). No hay compilación ni dependencias: solo `index.html`, `style.css` y `app.js`.
+`app-original.html` conserva el acceso directo a la app publicada que antes era `index.html`.
 
-## Incluye
-- Cuatro pestañas para móvil: Seguimiento, Gráfico, Indicadores y Ajustes.
-- Watchlist editable, búsqueda, BTC, ETH, SOL y más símbolos, datos de precios Binance Spot cada 30 s.
-- Gráfico de velas Canvas de altura flexible, navegación táctil horizontal, zoom, temporalidades de 1m a 1M y modo expandido.
-- Indicadores EMA 20/50, SMA 200, Bandas de Bollinger, RSI 14 y Volumen; valores calculados sobre las velas recibidas.
-- Dibujos sencillos: línea y horizontal (de sesión). Persistencia local para watchlist, tema, temporalidad y selección de indicadores.
-- Importación/exportación JSON de configuración.
+## Pestañas
+1. **Seguimiento**: tu lista de criptomonedas (precio y variación 24 h de Binance Spot), con búsqueda, añadir, editar (subir/quitar) y destello al cambiar el precio.
+2. **Gráfico**: velas a pantalla casi completa, temporalidades 1m–1M, datos en vivo por WebSocket, pellizco para zoom, arrastre para desplazar, mantener pulsado para retícula con OHLC, doble toque para ajustar y modo expandido.
+3. **Indicadores**: EMA 20/50, SMA 200, Bollinger, RSI 14 y Volumen (también desde el botón del gráfico).
+4. **Ajustes**: tema, exportar/importar configuración JSON.
+
+## Dibujos
+Línea de tendencia, horizontal, rectángulo y Fibonacci. Arrastra o toca dos puntos; toca un dibujo para seleccionarlo, mueve sus puntos o bórralo; deshacer. Se guardan por activo en este dispositivo y siguen en su sitio al cambiar de temporalidad.
 
 ## Limitaciones
-Esta versión NO ha modificado el código fuente original React/TypeScript de la aplicación publicada: el `index.html` antiguo encontrado en Biblioteca solo redirige al sitio, y el repositorio completo no estaba disponible. Para integrar este diseño preservando el editor/intérprete Pine, dibujos, alertas, plantillas y demás capacidades previas, se requiere ese código base. Los dibujos de este prototipo no se guardan tras recargar; no hay ejecución automática de órdenes. Las APIs de Binance pueden estar restringidas por región/red; cuando fallan se muestra un error, nunca datos simulados.
-
-No se incluye ni se afirma compatibilidad completa con TradingView; es una interfaz original inspirada en su organización móvil.
+No incluye el código React/TypeScript original, ni el intérprete Pine ni las alertas. Las APIs de Binance pueden estar restringidas por región; si fallan se muestra un aviso, nunca datos simulados. No ejecuta órdenes.
