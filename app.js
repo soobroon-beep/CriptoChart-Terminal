@@ -16,7 +16,7 @@ const ONEPT = ['horizontal', 'vertical', 'text', 'marker'], THREEPT = ['channel'
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false},
+  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false},
   light: false, drawings: {}
 };
 function merge(s) {
@@ -231,6 +231,7 @@ const indicatorMeta = [
   ['nnOb','Nova Nexus · Order Blocks','Order Blocks volumétricos con actividad compra/venta (últimos 5)','#f23645'],
   ['nnTrail','Nova Nexus · Smooth Trail','Trailing stop EMA 30 ± 2 ATR(20), suavizado 2 · verde alcista, morado bajista','#119c7e'],
   ['nnRev','Nova Nexus · Reversal Bands','SMA 70 ± 6/7/8 ATR(70): zonas de posible reversión','#f23645'],
+  ['nnSR','Nova Nexus · Soporte y Resistencia','Cajas de soporte/resistencia con Break y Retest (pivotes de 20 velas)','#ff5252'],
   ['nnRules','Nova Nexus · Reglas','Panel de reglas de trading sobre el gráfico','#4361cf']
 ];
 function ema(xs, n) {
@@ -278,6 +279,7 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.obv = I.obv ? T.obv(candles) : null;
   ind.trail = I.nnTrail ? T.smoothTrail(candles) : null;
   ind.rev = I.nnRev ? T.reversalBands(candles) : null;
+  ind.sr = I.nnSR ? T.supportResistance(candles) : null;
 }
 function calcNova() {
   const I = state.indicators;
@@ -584,6 +586,7 @@ function render() {
   if (nn && state.indicators.nnEma) drawNovaCloud(nn, lo, hi, css);
   if (nn && nn.smc && state.indicators.nnOb) drawNovaOB(nn.smc);
   if (state.indicators.nnRev && ind.rev) drawNovaRev(ind.rev, lo, hi);
+  if (state.indicators.nnSR && ind.sr) drawNovaSRBoxes(ind.sr, lo, hi);
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailFill(ind.trail, lo, hi);
   // velas
   const barW = clamp(step * .66, 1.5, 16);
@@ -601,6 +604,7 @@ function render() {
     g.stroke(); g.setLineDash([]);
   }
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailLine(ind.trail, lo, hi);
+  if (state.indicators.nnSR && ind.sr) drawNovaSRLabels(ind.sr, lo, hi);
   // cruces EMA 20 / EMA 50
   if (state.indicators.cross && ind.cross) {
     g.font = 'bold 11px system-ui'; g.textAlign = 'center';
@@ -779,6 +783,30 @@ function drawNovaTrailLine(t, lo, hi) { // cada tramo toma el color de la tenden
     if (t.trail[i] == null || t.trail[i - 1] == null) continue;
     g.strokeStyle = t.trend[i] === 1 ? TRAIL_COL.bull : TRAIL_COL.bear;
     g.beginPath(); g.moveTo(X(i - 1), Y(t.trail[i - 1])); g.lineTo(X(i), Y(t.trail[i])); g.stroke();
+  }
+}
+
+/* ───────── Nova Nexus: Soporte y Resistencia ───────── */
+const SR_COL = {sup: '#ff5252', res: '#089981'};
+function drawNovaSRBoxes(sr, lo, hi) {
+  g.lineWidth = 1;
+  for (const b of sr.boxes) {
+    if (b.right < lo - 1 || b.left > hi + 1) continue;
+    const x1 = X(b.left), x2 = X(b.right), yT = Y(b.top), yB = Y(b.bot), h = Math.max(1, yB - yT);
+    g.fillStyle = SR_COL[b.kind]; g.globalAlpha = .1; g.fillRect(x1, yT, x2 - x1, h); g.globalAlpha = 1;
+    g.strokeStyle = SR_COL[b.kind]; g.setLineDash([1, 3]); g.strokeRect(x1, yT, x2 - x1, h); g.setLineDash([]);
+  }
+}
+function drawNovaSRLabels(sr, lo, hi) { // Break / Potential Retest / Retest, con el ancla como en los estilos de label del Pine
+  g.font = '9px system-ui'; g.textAlign = 'left';
+  for (const l of sr.labels) {
+    if (l.i < lo || l.i >= hi) continue;
+    const col = SR_COL[l.side], x = X(l.i), y = Y(l.price), w = g.measureText(l.text).width + 8, hh = 14;
+    // Break: a la izquierda del punto (soporte abajo, resistencia arriba) · Retest: a la derecha (resistencia abajo, soporte arriba)
+    const left = l.kind === 'brk', below = l.kind === 'brk' ? l.side === 'sup' : l.side === 'res';
+    const bx = left ? x - w : x, by = below ? y : y - hh;
+    g.fillStyle = col; g.globalAlpha = .5; roundRect(bx, by, w, hh, 3); g.fill(); g.globalAlpha = 1;
+    g.fillStyle = col; g.fillText(l.text, bx + 4, by + 10);
   }
 }
 

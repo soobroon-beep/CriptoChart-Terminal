@@ -85,3 +85,22 @@ test('Reversal Bands: SMA(70) ± 6/7/8 ATR(70) contra una implementación ingenu
   [6, 7, 8].forEach((k, idx) => { near(r.up[idx][i], sm + k * rm, 1e-7); near(r.dn[idx][i], sm - k * rm, 1e-7); });
   assert.equal(r.up[0][68], null); assert.notEqual(r.up[0][69], null);
 });
+test('Pivotes: valor del centro confirmado len barras después; el primero de un empate también cuenta', () => {
+  const c = [5, 4, 3, 4, 5, 6, 7].map(x => ({h: x + 1, l: x - 1, c: x}));
+  assert.equal(I.pivotAt(c, 4, 2, false), 2);       // mínimo en el índice 2, confirmado en el 4
+  assert.equal(I.pivotAt(c, 3, 2, false), null);    // aún no hay len barras a la derecha
+  assert.equal(I.pivotAt(c, 5, 2, false), null);    // el índice 3 no es pivote
+  assert.equal(I.pivotAt([1, 3, 5, 3, 1].map(x => ({h: x, l: x, c: x})), 4, 2, true), 5);
+});
+test('Soporte/Resistencia: caja, ruptura, retest y recorte de caja (escenario revisado a mano, lookback 3)', () => {
+  const cl = [24, 23, 22, 21, 20, 21, 23, 26, 29, 31, 30, 27, 24, 21, 18.5, 17, 18.5, 21, 24, 27, 29, 28, 26, 23, 19, 14, 13, 12, 15, 14, 13, 15, 17, 19, 21, 22, 21, 20, 19, 18];
+  const c = cl.map((x, i) => ({t: i * 36e5, o: i ? cl[i - 1] : x, c: x, h: x + 1, l: x - 1, v: 1}));
+  const r = I.supportResistance(c, {lookback: 3}), L = r.labels.map(l => `${l.kind}/${l.side}@${l.i}:${l.price}`);
+  // el primer pivote de cada lado no crea caja (ta.change de fixnan es na); el segundo sí
+  const sup = r.boxes.filter(b => b.kind === 'sup'), res = r.boxes.filter(b => b.kind === 'res');
+  assert.deepEqual(sup.map(b => [b.left, b.right, b.top, b.bot]), [[15, 28, 17.5, 16], [27, 44, 12, 11]]);
+  // la caja de resistencia sin romper (L=20) se borra al llegar un nivel nuevo; la rota (L=28) se conserva hasta el siguiente
+  assert.deepEqual(res.map(b => [b.left, b.right, b.top, b.bot]), [[28, 35, 16, 15], [35, 44, 23, 22]]);
+  assert.deepEqual(L, ['brk/sup@25:16', 're/sup@28:16', 'brk/res@32:16']);
+  assert.ok(!L.some(x => x.startsWith('pot')), 'las etiquetas "Potential Retest" resueltas se eliminan');
+});

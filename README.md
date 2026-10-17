@@ -31,8 +31,9 @@ Hasta que se configure Firebase, la app funciona igual y guarda todo solo en el 
 En **Indicadores** hay interruptores para cada módulo, que se dibujan directamente en el gráfico (móvil y escritorio):
 
 - **Señales IA** (BUY/SELL con score ⭐, cooldown y divergencias), **EMA Cloud**, **TP / SL** y panel de **Reglas**.
+- **Soporte y Resistencia** (port de *Breaks and Retests [HG]* © HoanGhetti, MPL 2.0): cajas por pivote de 20 velas, etiquetas Break / Potential Retest / Retest. Usa el modo «Repainting: On» del Pine; sin alertas.
 - **Smooth Trail** (EMA 30 ± 2 ATR(20), suavizado 2) y **Reversal Bands** (SMA 70 ± 6/7/8 ATR(70)): cálculos en `indicators.js`, con pruebas.
 - **Estructura SMC**: BOS / CHoCH con barridos (`x`), swing de longitud 5, ventana de las últimas 500 velas.
 - **Order Blocks**: volumétricos, con actividad de compra/venta y % de volumen (últimos 5).
 
-Los módulos SMC están apagados por defecto. Pendientes de portar: Pivots, Volume Profile, Soporte/Resistencia y Liquidaciones. Los perfiles Mobile/Cloud/SMC del Pine todavía no existen aquí. Los parámetros de cada módulo están fijos en los valores por defecto del Pine y se usa el tema Default.
+Los módulos SMC están apagados por defecto. Pendientes de portar: Pivots, Volume Profile y Liquidaciones. Los perfiles Mobile/Cloud/SMC del Pine todavía no existen aquí. Los parámetros de cada módulo están fijos en los valores por defecto del Pine y se usa el tema Default.
