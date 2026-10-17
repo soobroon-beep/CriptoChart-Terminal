@@ -16,7 +16,7 @@ const ONEPT = ['horizontal', 'vertical', 'text', 'marker'], THREEPT = ['channel'
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false},
+  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false},
   light: false, drawings: {}
 };
 function merge(s) {
@@ -229,6 +229,8 @@ const indicatorMeta = [
   ['nnTp','Nova Nexus · TP / SL','Niveles de la última señal (SL 1 · TP 1.5 / 2.5 / 4 ATR)','#ff9900'],
   ['nnSmc','Nova Nexus · Estructura SMC','BOS / CHoCH con barridos (swing, longitud 5)','#089981'],
   ['nnOb','Nova Nexus · Order Blocks','Order Blocks volumétricos con actividad compra/venta (últimos 5)','#f23645'],
+  ['nnTrail','Nova Nexus · Smooth Trail','Trailing stop EMA 30 ± 2 ATR(20), suavizado 2 · verde alcista, morado bajista','#119c7e'],
+  ['nnRev','Nova Nexus · Reversal Bands','SMA 70 ± 6/7/8 ATR(70): zonas de posible reversión','#f23645'],
   ['nnRules','Nova Nexus · Reglas','Panel de reglas de trading sobre el gráfico','#4361cf']
 ];
 function ema(xs, n) {
@@ -274,6 +276,8 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.stoch = I.stoch ? T.stoch(candles) : null;
   ind.atr = I.atr ? T.atr(candles, 14) : null;
   ind.obv = I.obv ? T.obv(candles) : null;
+  ind.trail = I.nnTrail ? T.smoothTrail(candles) : null;
+  ind.rev = I.nnRev ? T.reversalBands(candles) : null;
 }
 function calcNova() {
   const I = state.indicators;
@@ -551,6 +555,7 @@ function render() {
   if (state.indicators.supertrend && ind.stUp) overlays.push(['Supertrend ↑', ind.stUp, '#20bf9f'], ['Supertrend ↓', ind.stDn, '#f06b79']);
   if (state.indicators.bollinger) overlays.push(['BB sup', ind.bbU, '#748bab', true], ['BB inf', ind.bbL, '#748bab', true]);
   for (const [, arr] of overlays) for (let i = lo; i < hi; i++) if (arr[i] != null) { if (arr[i] < min) min = arr[i]; if (arr[i] > max) max = arr[i]; }
+  if (state.indicators.nnTrail && ind.trail) for (let i = lo; i < hi; i++) { const v = ind.trail.trail[i]; if (v != null) { if (v < min) min = v; if (v > max) max = v; } }
   const nn = ind.nn;
   if (nn && state.indicators.nnEma) for (let i = lo; i < hi; i++) { const a = nn.emaTop[i], b = nn.emaBot[i]; if (Number.isFinite(a) && a > max) max = a; if (Number.isFinite(b) && b < min) min = b; }
   const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * .08; min -= pad; max += pad;
@@ -578,6 +583,8 @@ function render() {
   // Nova Nexus · EMA Cloud (detrás de las velas)
   if (nn && state.indicators.nnEma) drawNovaCloud(nn, lo, hi, css);
   if (nn && nn.smc && state.indicators.nnOb) drawNovaOB(nn.smc);
+  if (state.indicators.nnRev && ind.rev) drawNovaRev(ind.rev, lo, hi);
+  if (state.indicators.nnTrail && ind.trail) drawNovaTrailFill(ind.trail, lo, hi);
   // velas
   const barW = clamp(step * .66, 1.5, 16);
   for (let i = lo; i < hi; i++) {
@@ -593,6 +600,7 @@ function render() {
     for (let i = lo; i < hi; i++) { if (arr[i] == null) { on = false; continue; } const xx = X(i), yy = Y(arr[i]); if (!on) { g.moveTo(xx, yy); on = true; } else g.lineTo(xx, yy); }
     g.stroke(); g.setLineDash([]);
   }
+  if (state.indicators.nnTrail && ind.trail) drawNovaTrailLine(ind.trail, lo, hi);
   // cruces EMA 20 / EMA 50
   if (state.indicators.cross && ind.cross) {
     g.font = 'bold 11px system-ui'; g.textAlign = 'center';
@@ -734,6 +742,43 @@ function drawNovaCloud(nn, lo, hi, css) {
     g.beginPath(); let on = false;
     for (let k = lo; k < hi; k++) { const v = arr[k]; if (!Number.isFinite(v)) { on = false; continue; } if (!on) { g.moveTo(X(k), Y(v)); on = true; } else g.lineTo(X(k), Y(v)); }
     g.stroke();
+  }
+}
+
+/* ───────── Nova Nexus: Smooth Trail y Reversal Bands ───────── */
+const TRAIL_COL = {bull: '#119c7e', bear: '#7c3cf3'}, REV_COL = {up: '#f23645', dn: '#089981'};
+function fillBetween(top, bot, lo, hi, color, alpha) { // relleno entre dos series por tramos continuos
+  g.fillStyle = color; g.globalAlpha = alpha;
+  let i = lo;
+  while (i < hi) {
+    if (top[i] == null || bot[i] == null) { i++; continue; }
+    let j = i; while (j + 1 < hi && top[j + 1] != null && bot[j + 1] != null) j++;
+    g.beginPath(); g.moveTo(X(i), Y(top[i])); for (let k = i + 1; k <= j; k++) g.lineTo(X(k), Y(top[k])); for (let k = j; k >= i; k--) g.lineTo(X(k), Y(bot[k])); g.closePath(); g.fill();
+    i = j + 1;
+  }
+  g.globalAlpha = 1;
+}
+function drawNovaRev(r, lo, hi) { // bandas 6-7 (suave) y 7-8 (fuerte), como los fill del Pine
+  fillBetween(r.up[0], r.up[1], lo, hi, REV_COL.up, .2); fillBetween(r.up[1], r.up[2], lo, hi, REV_COL.up, .5);
+  fillBetween(r.dn[2], r.dn[1], lo, hi, REV_COL.dn, .5); fillBetween(r.dn[1], r.dn[0], lo, hi, REV_COL.dn, .2);
+}
+function drawNovaTrailFill(t, lo, hi) {
+  let i = lo;
+  while (i < hi) {
+    if (t.trail[i] == null || t.basis[i] == null) { i++; continue; }
+    const bull = t.trend[i] === 1; let j = i; while (j + 1 < hi && t.trail[j + 1] != null && t.basis[j + 1] != null && (t.trend[j + 1] === 1) === bull) j++;
+    const a = i > lo && t.trail[i - 1] != null ? i - 1 : i; // une con la barra anterior para no dejar huecos
+    g.fillStyle = bull ? TRAIL_COL.bull : TRAIL_COL.bear; g.globalAlpha = .1;
+    g.beginPath(); g.moveTo(X(a), Y(t.trail[a])); for (let k = a + 1; k <= j; k++) g.lineTo(X(k), Y(t.trail[k])); for (let k = j; k >= a; k--) g.lineTo(X(k), Y(t.basis[k])); g.closePath(); g.fill();
+    g.globalAlpha = 1; i = j + 1;
+  }
+}
+function drawNovaTrailLine(t, lo, hi) { // cada tramo toma el color de la tendencia de su barra final
+  g.lineWidth = 1.4; g.setLineDash([]);
+  for (let i = Math.max(lo, 1); i < hi; i++) {
+    if (t.trail[i] == null || t.trail[i - 1] == null) continue;
+    g.strokeStyle = t.trend[i] === 1 ? TRAIL_COL.bull : TRAIL_COL.bear;
+    g.beginPath(); g.moveTo(X(i - 1), Y(t.trail[i - 1])); g.lineTo(X(i), Y(t.trail[i])); g.stroke();
   }
 }
 

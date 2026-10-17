@@ -112,6 +112,29 @@
     return out;
   }
 
-  root.CCTIndicators = {wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
+  /* Nova Nexus · Smooth Trail: trailing stop suave (EMA ± ATR) con tendencia tipo supertrend y suavizado extra.
+     Port de las líneas 1964-2008 del Pine: la tendencia solo cambia al romper la banda contraria. */
+  function smoothTrail(c, len = 30, atrLen = 20, mult = 2, smooth = 2) {
+    const n = c.length, basis = ema(c.map(x => x.c), len), a = atr(c, atrLen), trend = new Array(n).fill(0), raw = blank(n);
+    let tr = 0;
+    for (let i = 0; i < n; i++) {
+      if (basis[i] != null && a[i] != null) {
+        const up = basis[i] + a[i] * mult, lo = basis[i] - a[i] * mult;
+        tr = c[i].c > up ? 1 : c[i].c < lo ? -1 : tr;
+        raw[i] = tr === 1 ? lo : up;
+      }
+      trend[i] = tr;
+    }
+    return {trail: ema(raw, smooth), basis, trend};
+  }
+
+  /* Nova Nexus · Reversal Bands: SMA(len) ± k·ATR(len) con k = 6, 7 y 8 (la 9 está comentada en el Pine). */
+  function reversalBands(c, len = 70, sens = [6, 7, 8]) {
+    const basis = sma(c.map(x => x.c), len), a = atr(c, len);
+    const mk = sg => basis.map((b, i) => b != null && a[i] != null ? b + sg * a[i] : null);
+    return {basis, up: sens.map(k => mk(k)), dn: sens.map(k => mk(-k))};
+  }
+
+  root.CCTIndicators = {smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTIndicators;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -60,3 +60,28 @@ test('Cruces: +1 al cruzar hacia arriba, −1 hacia abajo, ignora nulls', () => 
   assert.deepEqual(I.crosses([1, 2, 3, 2, 1], [2, 2, 2, 2, 2]), [0, 0, 1, 0, -1]);
   assert.deepEqual(I.crosses([null, 1, 3], [1, 2, 2]), [0, 0, 1]);
 });
+
+test('Smooth Trail: la tendencia solo cambia al romper la banda contraria y el trail sigue a la banda correcta', () => {
+  const rows = []; for (let i = 0; i < 80; i++) { const p = 100 + i; rows.push([p, p + 1, p - 1, p + .5]); }
+  for (let i = 0; i < 80; i++) { const p = 180 - i * 2; rows.push([p, p + 1, p - 1, p - .5]); }
+  const c = mk(rows), r = I.smoothTrail(c), a = I.atr(c, 20), b = I.ema(c.map(x => x.c), 30);
+  assert.equal(r.trend[10], 0); assert.equal(r.trail[28], null);
+  assert.equal(r.trend[79], 1); assert.equal(r.trend[159], -1);
+  for (let i = 31; i < 160; i++) { // dentro de las bandas la tendencia se mantiene
+    const up = b[i] + 2 * a[i], lo = b[i] - 2 * a[i];
+    if (c[i].c <= up && c[i].c >= lo) assert.equal(r.trend[i], r.trend[i - 1]);
+  }
+  assert.ok(r.trail[79] < c[79].c && r.trail[159] > c[159].c); // alcista bajo el precio, bajista sobre el precio
+  // suavizado: EMA(2) del trail crudo (semilla = SMA de los dos primeros valores)
+  const raw = c.map((x, i) => b[i] == null || a[i] == null ? null : (r.trend[i] === 1 ? b[i] - 2 * a[i] : b[i] + 2 * a[i]));
+  const e = I.ema(raw, 2); for (let i = 0; i < 160; i++) { if (e[i] == null) assert.equal(r.trail[i], null); else near(r.trail[i], e[i]); }
+});
+test('Reversal Bands: SMA(70) ± 6/7/8 ATR(70) contra una implementación ingenua independiente', () => {
+  const rows = Array.from({length: 200}, (_, i) => { const p = 50 + Math.sin(i / 7) * 8 + i * .1; return [p, p + 1.5 + (i % 5) * .2, p - 1.2, p + Math.cos(i / 3)]; });
+  const c = mk(rows), r = I.reversalBands(c), i = 150;
+  let sm = 0; for (let k = 0; k < 70; k++) sm += c[i - k].c; sm /= 70;
+  const tr = j => j === 0 ? c[0].h - c[0].l : Math.max(c[j].h - c[j].l, Math.abs(c[j].h - c[j - 1].c), Math.abs(c[j].l - c[j - 1].c));
+  let rm = 0; for (let j = 0; j < 70; j++) rm += tr(j); rm /= 70; for (let j = 70; j <= i; j++) rm = (rm * 69 + tr(j)) / 70;
+  [6, 7, 8].forEach((k, idx) => { near(r.up[idx][i], sm + k * rm, 1e-7); near(r.dn[idx][i], sm - k * rm, 1e-7); });
+  assert.equal(r.up[0][68], null); assert.notEqual(r.up[0][69], null);
+});
