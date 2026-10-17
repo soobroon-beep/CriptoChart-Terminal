@@ -83,10 +83,10 @@
       <p class="intro">Activa indicadores y aparecerán directamente en el gráfico. Los cambios se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.</p>
       <div id="indicatorList" class="settings-list"></div>
       <div class="section-label">MIS SCRIPTS</div>
-      <div class="setting-row">
-        <div><b>Indicadores Pine importados</b><small>Para ejecutar tus scripts existentes se requiere conectar el intérprete Pine del proyecto original.</small></div>
-        <span class="pill">Pendiente</span>
-      </div>
+      <div id="scriptList" class="settings-list"></div>
+      <div class="script-actions"><label class="small-button" for="scriptFile">＋ Importar archivo</label><button class="small-button" id="pasteScript">Pegar código</button></div>
+      <input type="file" id="scriptFile" accept=".pine,.txt,text/plain" hidden>
+      <p class="small-note">Los scripts de Pine se guardan en este dispositivo y en tu cuenta de Google (nunca en el repositorio público). Por ahora solo se guardan y se pueden consultar: dibujarlos en el gráfico móvil requiere portar su lógica.</p>
       <button class="primary" id="goChart">Ver gráfico →</button>
     </section>
 

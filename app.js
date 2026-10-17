@@ -240,8 +240,8 @@ document.addEventListener('click', e => {
 /* ───────── Hojas inferiores (activo / añadir / dibujar / indicadores) ───────── */
 function openSheet(mode = 'select') {
   sheetMode = mode;
-  $('#sheetTitle').textContent = {add: 'Añadir a seguimiento', tools: 'Herramientas de dibujo', indicators: 'Indicadores', select: 'Seleccionar criptomoneda'}[mode];
-  $('#sheetSearch').style.display = (mode === 'tools' || mode === 'indicators') ? 'none' : 'block';
+  $('#sheetTitle').textContent = {add: 'Añadir a seguimiento', tools: 'Herramientas de dibujo', indicators: 'Indicadores', select: 'Seleccionar criptomoneda', script: 'Código del script', paste: 'Pegar script de Pine'}[mode];
+  $('#sheetSearch').style.display = ['tools', 'indicators', 'script', 'paste'].includes(mode) ? 'none' : 'block';
   $('#sheetSearch').value = '';
   $('#sheetBackdrop').classList.add('open'); $('#sheet').classList.add('open');
   renderSheet();
@@ -257,6 +257,16 @@ const TOOLS = [
 function renderSheet() {
   const list = $('#sheetList');
   if (sheetMode === 'indicators') { list.innerHTML = indicatorRows(); return; }
+  if (sheetMode === 'script') {
+    const sc = scripts.find(x => x.id === viewScriptId); if (!sc) { list.innerHTML = ''; return; }
+    const MAXV = 30000, shown = sc.code.length > MAXV ? sc.code.slice(0, MAXV) : sc.code;
+    list.innerHTML = `<p class="small-note">${esc(sc.name)} · ${sc.lines} líneas${sc.code.length > MAXV ? ' · se muestran los primeros 30,000 caracteres (el script completo está guardado)' : ''}</p><pre class="code">${esc(shown)}</pre>`; return;
+  }
+  if (sheetMode === 'paste') {
+    list.innerHTML = `<input id="pasteName" class="paste-name" placeholder="Nombre (opcional)" autocomplete="off"><textarea id="pasteCode" placeholder="Pega aquí tu código Pine…" spellcheck="false"></textarea><button class="primary" id="pasteSave">Guardar script</button>`;
+    $('#pasteSave').onclick = () => { const code = $('#pasteCode').value; if (addScript(code, $('#pasteName').value.trim() || 'Script pegado')) closeSheet(); };
+    return;
+  }
   if (sheetMode === 'tools') {
     list.innerHTML = TOOLS.map(([k, t, d]) => `<button class="sheet-item" data-tool="${k}"><span>${t}</span><small>${d}</small></button>`).join('');
     $$('[data-tool]').forEach(b => b.onclick = () => {
@@ -637,6 +647,51 @@ document.addEventListener('keydown', e => {
 });
 
 
+
+/* ───────── Mis scripts (Pine): guardado local + cuenta ───────── */
+const SCRIPTS_KEY = 'cct_scripts_v1', SCRIPTS_MAX = 600 * 1024;
+const scriptsKey = () => uid ? `${SCRIPTS_KEY}_${uid}` : SCRIPTS_KEY;
+const readScripts = () => { const o = readLocal(scriptsKey()); return Array.isArray(o.items) ? o.items : []; };
+let scripts = readScripts(), viewScriptId = null, scriptsRemote = '', scriptsTimer = 0;
+const scriptsBytes = arr => arr.reduce((a, x) => a + (x.size || 0), 0);
+function saveScripts() {
+  try { localStorage.setItem(scriptsKey(), JSON.stringify({items: scripts})); } catch { toast('No se pudo guardar en este dispositivo (almacenamiento lleno)'); }
+  pushScripts();
+}
+function pushScripts() {
+  if (!uid || !db || !fbUser) return;
+  clearTimeout(scriptsTimer);
+  scriptsTimer = setTimeout(async () => {
+    const str = JSON.stringify(scripts); if (str === scriptsRemote) return; scriptsRemote = str;
+    try { await db.doc(`users/${uid}/data/scripts`).set({items: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); }
+    catch { scriptsRemote = ''; toast('No se pudieron guardar los scripts en tu cuenta'); }
+  }, 1200);
+}
+function addScript(code, fallbackName) {
+  code = String(code || '').replace(/\r\n?/g, '\n');
+  if (!code.trim()) { toast('El script está vacío'); return false; }
+  const size = new Blob([code]).size;
+  if (scriptsBytes(scripts) + size > SCRIPTS_MAX) { toast('Se pasa del límite de 600 KB de scripts por cuenta'); return false; }
+  const m = code.match(/indicator\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/) || code.match(/strategy\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/);
+  scripts.push({id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: (m ? m[1] : fallbackName || 'Script').slice(0, 80), code, size, lines: code.split('\n').length, addedAt: Date.now()});
+  saveScripts(); renderScripts(); toast('Script guardado'); return true;
+}
+function renderScripts() {
+  $('#scriptList').innerHTML = scripts.length ? scripts.map(x => `<div class="setting-row script-row"><div><b>${esc(x.name)}</b><small>${x.lines} líneas · ${Math.max(1, Math.round(x.size / 1024))} KB · guardado</small></div><div class="script-btns"><button class="small-button" data-view-script="${x.id}">Ver</button><button class="small-button danger" data-del-script="${x.id}" aria-label="Eliminar">✕</button></div></div>`).join('')
+    : '<div class="setting-row"><div><b>Sin scripts guardados</b><small>Importa un archivo .pine o pega el código.</small></div></div>';
+}
+$('#scriptList').addEventListener('click', e => {
+  const v = e.target.closest('[data-view-script]'), d = e.target.closest('[data-del-script]');
+  if (v) { viewScriptId = v.dataset.viewScript; openSheet('script'); }
+  if (d) { const x = scripts.find(y => y.id === d.dataset.delScript); if (x && confirm(`¿Eliminar "${x.name}"?`)) { scripts = scripts.filter(y => y.id !== x.id); saveScripts(); renderScripts(); } }
+});
+$('#pasteScript').onclick = () => openSheet('paste');
+$('#scriptFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  if (f.size > SCRIPTS_MAX) { toast('El archivo es demasiado grande (máx. 600 KB)'); return; }
+  addScript(await f.text(), f.name.replace(/\.[^.]+$/, ''));
+};
+
 /* ───────── Aplicar estado completo (importar / nube) ───────── */
 function applyState(data, soft = false) {
   const sameChart = soft && data.symbol === state.symbol && data.interval === state.interval;
@@ -679,10 +734,11 @@ async function onUser(user) {
   clearTimeout(pushTimer); fbUser = user;
   if (!user) {
     try { localStorage.removeItem(LASTUID); } catch {}
-    if (uid) { uid = null; lastRemote = ''; applyState(readLocal(STORE)); } // vuelve al estado local sin sesión; los datos de la cuenta no se quedan visibles
+    if (uid) { uid = null; lastRemote = ''; scriptsRemote = ''; applyState(readLocal(STORE)); scripts = readScripts(); renderScripts(); } // vuelve al estado local sin sesión; los datos de la cuenta no se quedan visibles
     syncStatus = ''; renderAccount(); return;
   }
   uid = user.uid; try { localStorage.setItem(LASTUID, uid); } catch {}
+  scripts = readScripts(); scriptsRemote = ''; renderScripts();
   syncStatus = 'Sincronizando…'; renderAccount();
   const ref = db.doc(CLOUD_DOC(uid));
   try {
@@ -697,6 +753,9 @@ async function onUser(user) {
       const str = sn.data().state; if (!str || str === lastRemote) return;
       lastRemote = str; try { applyState(JSON.parse(str), true); save(); } catch {}
     }, () => {});
+    const sref = db.doc(`users/${uid}/data/scripts`), ssnap = await sref.get();
+    if (ssnap.exists && ssnap.data().items) { scriptsRemote = ssnap.data().items; try { scripts = JSON.parse(scriptsRemote); localStorage.setItem(scriptsKey(), JSON.stringify({items: scripts})); renderScripts(); } catch {} }
+    else if (scripts.length) { scriptsRemote = JSON.stringify(scripts); await sref.set({items: scriptsRemote, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); }
     syncStatus = 'Guardado en tu cuenta';
   } catch (e) { syncStatus = 'No se pudo sincronizar (' + (e.code || 'error') + '). Tus datos siguen guardados en este dispositivo.'; }
   renderAccount();
@@ -726,7 +785,7 @@ async function initCloud() {
 }
 
 /* ───────── Arranque ───────── */
-renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); updateDrawUI(); theme(); syncFullscreenLabel();
+renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); updateDrawUI(); theme(); syncFullscreenLabel(); renderScripts();
 fetchTicker(); loadCandles(); initCloud();
 setInterval(fetchTicker, 30000);
 setInterval(() => { if (currentView === 'chartView' && !wsOpen && candles.length && !document.hidden) loadCandles(true); }, 20000);

@@ -38,3 +38,15 @@
 .google-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px;padding:14px;border-radius:12px;border:1px solid var(--line);background:#fff;color:#1f1f1f;font-weight:700;font-size:14px}
 .google-btn .g{font-weight:900;color:#4285f4;font-size:18px}
 code{background:var(--raised);padding:1px 5px;border-radius:5px;font-size:10px}
+
+/* ── Mis scripts ── */
+.script-actions{display:flex;gap:10px;margin-top:12px}
+.script-actions .small-button{cursor:pointer;display:inline-block;text-align:center}
+.script-row{align-items:center}
+.script-row>div:first-child{min-width:0}
+.script-row b{overflow-wrap:anywhere}
+.script-btns{display:flex;gap:8px;flex-shrink:0}
+.small-button.danger{color:var(--red);border-color:var(--red)}
+pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line);border-radius:10px;font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--text);overflow:auto;white-space:pre;max-height:55dvh}
+.paste-name{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--text);width:100%;margin-bottom:10px;font-size:14px}
+#pasteCode{width:100%;height:38dvh;background:var(--bg);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:10px;font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;resize:none}
