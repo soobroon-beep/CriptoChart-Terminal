@@ -25,3 +25,13 @@ Hasta que se configure Firebase, la app funciona igual y guarda todo solo en el 
 2. **Authentication → Método de acceso:** activa **Google**. En **Configuración → Dominios autorizados** añade `soobroon-beep.github.io`.
 3. **Firestore Database:** crea la base y pega las reglas de `firestore.rules`.
 4. Copia el objeto `firebaseConfig` de la app web dentro de `firebase-config.js` (son claves públicas, no secretos) y sube el cambio.
+
+## Indicador Nova Nexus (port del script de Pine)
+
+En **Indicadores** hay interruptores para cada módulo, que se dibujan directamente en el gráfico (móvil y escritorio):
+
+- **Señales IA** (BUY/SELL con score ⭐, cooldown y divergencias), **EMA Cloud**, **TP / SL** y panel de **Reglas**.
+- **Estructura SMC**: BOS / CHoCH con barridos (`x`), swing de longitud 5, ventana de las últimas 500 velas.
+- **Order Blocks**: volumétricos, con actividad de compra/venta y % de volumen (últimos 5).
+
+Los módulos SMC están apagados por defecto. Pendientes de portar: Pivots, Smooth Trail, Reversal Bands, Volume Profile, Soporte/Resistencia y Liquidaciones.

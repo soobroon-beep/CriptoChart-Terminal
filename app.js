@@ -14,7 +14,7 @@ const FIB = [0, .236, .382, .5, .618, .786, 1];
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, bollinger:false, rsi:true, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false},
+  indicators: {ema20:true, ema50:false, sma200:false, bollinger:false, rsi:true, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false},
   light: false, drawings: {}
 };
 function merge(s) {
@@ -217,6 +217,8 @@ const indicatorMeta = [
   ['nnIa','Nova Nexus · Señales IA','BUY/SELL con score ⭐, cooldown y divergencias (v2.7)','#11cf77'],
   ['nnEma','Nova Nexus · EMA Cloud','Nube EMA 55 ± 0.6 ATR','#8a97b3'],
   ['nnTp','Nova Nexus · TP / SL','Niveles de la última señal (SL 1 · TP 1.5 / 2.5 / 4 ATR)','#ff9900'],
+  ['nnSmc','Nova Nexus · Estructura SMC','BOS / CHoCH con barridos (swing, longitud 5)','#089981'],
+  ['nnOb','Nova Nexus · Order Blocks','Order Blocks volumétricos con actividad compra/venta (últimos 5)','#f23645'],
   ['nnRules','Nova Nexus · Reglas','Panel de reglas de trading sobre el gráfico','#4361cf']
 ];
 function ema(xs, n) {
@@ -251,8 +253,8 @@ function recalc() {
 }
 function calcNova() {
   const I = state.indicators;
-  if (!window.NovaNexus || !candles.length || !(I.nnIa || I.nnEma || I.nnTp || I.nnRules)) { ind.nn = null; return; }
-  try { ind.nn = NovaNexus.compute(candles, {}); } catch (e) { ind.nn = null; console.warn('Nova Nexus:', e); }
+  if (!window.NovaNexus || !candles.length || !(I.nnIa || I.nnEma || I.nnTp || I.nnRules || I.nnSmc || I.nnOb)) { ind.nn = null; return; }
+  try { ind.nn = NovaNexus.compute(candles, {smc: !!(I.nnSmc || I.nnOb)}); } catch (e) { ind.nn = null; console.warn('Nova Nexus:', e); }
 }
 const indicatorRows = () => indicatorMeta.map(([key, title, desc]) =>
   `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div>`).join('');
@@ -477,6 +479,7 @@ function render() {
   g.save(); g.beginPath(); g.rect(left, plotTop, plotW + 2, plotH); g.clip();
   // Nova Nexus · EMA Cloud (detrás de las velas)
   if (nn && state.indicators.nnEma) drawNovaCloud(nn, lo, hi, css);
+  if (nn && nn.smc && state.indicators.nnOb) drawNovaOB(nn.smc);
   // velas
   const barW = clamp(step * .66, 1.5, 16);
   for (let i = lo; i < hi; i++) {
@@ -494,6 +497,7 @@ function render() {
   }
   // Nova Nexus · señales y niveles TP/SL
   if (nn && (state.indicators.nnIa || state.indicators.nnTp)) drawNovaSignals(nn, lo, hi, n);
+  if (nn && nn.smc && state.indicators.nnSmc) drawNovaStruct(nn.smc);
   // dibujos del usuario
   for (const d of getDrawings()) drawShape(d, d.id === selectedId, drawCol, text);
   if (preview) drawShape({id: '_', type: drawTool, a: preview.a, b: preview.b}, false, drawCol, text);
@@ -582,6 +586,49 @@ function drawNovaCloud(nn, lo, hi, css) {
     for (let k = lo; k < hi; k++) { const v = arr[k]; if (!Number.isFinite(v)) { on = false; continue; } if (!on) { g.moveTo(X(k), Y(v)); on = true; } else g.lineTo(X(k), Y(v)); }
     g.stroke();
   }
+}
+
+/* ───────── Nova Nexus: SMC (estructura + Order Blocks) ───────── */
+const SMC_COL = {up: '#089981', dn: '#f23645'};
+function tIdx(t) { // tiempo (ms) → índice fraccionario de vela (extrapola con el paso de la última vela)
+  const n = candles.length; if (!n || !Number.isFinite(t)) return NaN;
+  if (t >= candles[n - 1].t) { const st = n > 1 ? candles[n - 1].t - candles[n - 2].t : 1; return n - 1 + (t - candles[n - 1].t) / st; }
+  let a = 0, b = n - 1; while (a < b) { const m = (a + b) >> 1; if (candles[m].t < t) a = m + 1; else b = m; }
+  return a;
+}
+function drawNovaOB(sm) {
+  const xr = geo.w - geo.right, light = document.body.classList.contains('light');
+  g.font = '9px system-ui';
+  for (const side of ['bull', 'bear']) {
+    const col = SMC_COL[side === 'bull' ? 'up' : 'dn'], arr = sm.obs[side], mt = sm.metrics[side];
+    arr.forEach((ob, k) => {
+      const x1 = Math.max(geo.left, X(tIdx(ob.loc))), yT = Y(ob.top), yB = Y(ob.btm), h = yB - yT, mid = (yT + yB) / 2;
+      if (x1 >= xr || !Number.isFinite(x1)) return;
+      g.globalAlpha = .10; g.fillStyle = col; g.fillRect(x1, yT, xr - x1, h);
+      g.globalAlpha = .5; // actividad: compras (arriba) y ventas (abajo) proporcionales a las barras acumuladas
+      const xb = Math.min(xr, Math.max(x1, X(tIdx(ob.xlocbl)))), xs = Math.min(xr, Math.max(x1, X(Number.isFinite(ob.xlocbr) ? tIdx(ob.xlocbr) : tIdx(ob.loc))));
+      g.fillStyle = SMC_COL.up; g.fillRect(x1, yT, xb - x1, h / 2);
+      g.fillStyle = SMC_COL.dn; g.fillRect(x1, mid, xs - x1, h / 2);
+      g.globalAlpha = 1; g.strokeStyle = col; g.lineWidth = 1; g.setLineDash([]); g.strokeRect(x1, yT, xr - x1, h);
+      g.setLineDash([2, 3]); g.beginPath(); g.moveTo(x1, mid); g.lineTo(xr, mid); g.stroke(); g.setLineDash([]);
+      const txt = mt[k] + '%'; g.fillStyle = light ? '#222' : '#e8edf5'; g.textAlign = 'right'; g.fillText(txt, xr - 4, Math.max(yT + 10, mid - 3)); g.textAlign = 'left';
+    });
+  }
+  g.globalAlpha = 1;
+}
+function drawNovaStruct(sm) {
+  const xr = geo.w - geo.right; g.font = 'bold 9px system-ui'; g.textAlign = 'center';
+  for (const side of ['bull', 'bear']) for (const l of sm[side]) {
+    if (!l || !Number.isFinite(l.x1)) continue;
+    const i1 = tIdx(l.x1), i2 = tIdx(l.x2); if (i2 < geo.start - 1 || i1 > geo.end + 1 || i2 - i1 < 0.01) continue;
+    const xa = X(i1), xb = X(i2), y = Y(l.y), col = SMC_COL[l.col];
+    g.strokeStyle = col; g.lineWidth = 1; g.setLineDash(l.style === 'solid' ? [] : l.style === 'dotted' ? [1, 3] : [5, 4]);
+    g.beginPath(); g.moveTo(Math.max(geo.left, xa), y); g.lineTo(Math.min(xr, xb), y); g.stroke(); g.setLineDash([]);
+    if (l.style === 'dashed') continue; // los niveles aún no rotos no llevan etiqueta
+    const xm = Math.min(xr - 14, Math.max(geo.left + 14, (xa + xb) / 2)), up = l.col === 'up';
+    g.fillStyle = col; g.textBaseline = 'alphabetic'; g.fillText(l.txt, xm, up ? y - 3 : y + 10);
+  }
+  g.textAlign = 'left';
 }
 function roundRect(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
 function drawNovaSignals(nn, lo, hi, n) {
