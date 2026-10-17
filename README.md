@@ -8,14 +8,14 @@ En computadora (ventana de 1024 px o más) se muestran tres columnas a la vez: s
 ## Pestañas (celular)
 1. **Seguimiento**: tu lista de criptomonedas (precio y variación 24 h de Binance Spot), con búsqueda, añadir, editar (subir/quitar) y destello al cambiar el precio.
 2. **Gráfico**: velas a pantalla casi completa, **arrastra la barra derecha** para agrandar o achicar el gráfico en vertical (arriba = más grande; botón **A** o doble toque = escala automática) y **la barra inferior** para hacer zoom en el tiempo, temporalidades 1m–1M, datos en vivo por WebSocket, pellizco para zoom, arrastre para desplazar, mantener pulsado para retícula con OHLC, doble toque para ajustar y modo expandido.
-3. **Indicadores**: EMA 20/50, SMA 200, Bollinger, RSI 14 y Volumen (también desde el botón del gráfico).
+3. **Indicadores**: EMA 20/50, SMA 200, WMA 20, VWAP, Bandas de Bollinger, Supertrend (10, 3), cruces EMA 20/50, Volumen y, en paneles inferiores, RSI 14, MACD (12, 26, 9), Estocástico (14, 3, 3), ATR 14 y OBV (también desde el botón del gráfico). Los cálculos viven en `indicators.js` y se verifican con `node --test tests/indicators.test.js`.
 4. **Ajustes**: tema, exportar/importar configuración JSON.
 
 ## Dibujos
-Línea de tendencia, horizontal, rectángulo y Fibonacci. Arrastra o toca dos puntos; toca un dibujo para seleccionarlo, mueve sus puntos o bórralo; deshacer. Se guardan por activo en este dispositivo y siguen en su sitio al cambiar de temporalidad.
+Línea de tendencia, rayo, horizontal, vertical, rectángulo, canal paralelo, flecha, texto, medición, retroceso y extensión de Fibonacci, marcador de máximo/mínimo y posiciones Long/Short. Arrastra o toca dos puntos (tres en canal y extensión de Fibonacci); toca un dibujo para seleccionarlo, mueve sus puntos o bórralo; deshacer. Se guardan por activo en este dispositivo y siguen en su sitio al cambiar de temporalidad.
 
 ## Limitaciones
-Todavía no incluye el intérprete Pine ni las alertas. Las APIs de Binance pueden estar restringidas por región; si fallan se muestra un aviso, nunca datos simulados. No ejecuta órdenes.
+Los parámetros de los indicadores (periodos, colores) son fijos por ahora; solo se activan o desactivan. El VWAP reinicia cada día UTC y por eso no se muestra en 1d, 1w ni 1M. Long/Short usan stop espejo a 2:1 (no editable todavía). Todavía no incluye el intérprete Pine ni las alertas. Las APIs de Binance pueden estar restringidas por región; si fallan se muestra un aviso, nunca datos simulados. No ejecuta órdenes.
 
 ## Inicio de sesión con Google (guardado por persona)
 La versión móvil puede guardar el seguimiento, los indicadores, la temporalidad, el tema y los dibujos en la cuenta de Google de cada persona (Firebase Auth + Firestore), y sincronizarlos en tiempo real entre dispositivos. Cada persona solo ve sus propios datos. Al cerrar sesión, los datos de la cuenta dejan de verse en ese dispositivo.

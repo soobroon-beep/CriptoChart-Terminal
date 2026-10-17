@@ -9,12 +9,14 @@ const IV_MS = {'1m':6e4,'5m':3e5,'15m':9e5,'30m':18e5,'1h':36e5,'4h':144e5,'1d':
 const INTERVALS = Object.keys(IV_MS);
 const STORE = 'cct_mobile_v1';
 const FIB = [0, .236, .382, .5, .618, .786, 1];
+const FIBEXT = [0, .618, 1, 1.272, 1.618, 2.618];
+const ONEPT = ['horizontal', 'vertical', 'text', 'marker'], THREEPT = ['channel', 'fibext'];
 
 /* ───────── Estado persistente ───────── */
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, bollinger:false, rsi:true, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false},
+  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false},
   light: false, drawings: {}
 };
 function merge(s) {
@@ -52,7 +54,7 @@ async function getJSON(url, signal) { const r = await fetch(url, {signal}); if (
 /* ───────── Variables de ejecución ───────── */
 let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null;
 let currentView = 'watchView', sheetMode = 'select', editMode = false;
-let drawTool = '', pending = null, preview = null, selectedId = null, cross = null, geo = null;
+let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null;
 let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
 let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0;
 const lastShown = {};
@@ -213,6 +215,14 @@ const indicatorMeta = [
   ['sma200','SMA 200','Media móvil simple de 200 períodos','#b58dff'],
   ['bollinger','Bandas de Bollinger','20 períodos · 2 desviaciones','#a3b0c3'],
   ['rsi','RSI 14','Índice de fuerza relativa en panel inferior','#bb9cff'],
+  ['wma20','WMA 20','Media móvil ponderada de 20 períodos','#4dd0e1'],
+  ['vwap','VWAP','Precio medio ponderado por volumen, reinicia cada día UTC (solo intradía)','#ff8a65'],
+  ['supertrend','Supertrend','ATR 10 · factor 3 · verde = alcista, rojo = bajista','#20bf9f'],
+  ['cross','Cruces EMA 20/50','Marca los cruces de la EMA 20 con la EMA 50','#f5c568'],
+  ['macd','MACD 12 26 9','Línea, señal e histograma en panel inferior','#548fff'],
+  ['stoch','Estocástico 14 3 3','%K y %D en panel inferior (niveles 20/80)','#548fff'],
+  ['atr','ATR 14','Rango verdadero medio (Wilder) en panel inferior','#e07b53'],
+  ['obv','OBV','Volumen en balance en panel inferior','#2ec4b6'],
   ['volume','Volumen','Barras de volumen por vela','#8294a8'],
   ['nnIa','Nova Nexus · Señales IA','BUY/SELL con score ⭐, cooldown y divergencias (v2.7)','#11cf77'],
   ['nnEma','Nova Nexus · EMA Cloud','Nube EMA 55 ± 0.6 ATR','#8a97b3'],
@@ -249,7 +259,21 @@ function recalc() {
   const up = Array(n).fill(null), lo = Array(n).fill(null);
   for (let i = 19; i < n; i++) { let s = 0; for (let j = i - 19; j <= i; j++) { const d = c[j] - m[i]; s += d * d; } const sd = Math.sqrt(s / 20); up[i] = m[i] + 2 * sd; lo[i] = m[i] - 2 * sd; }
   ind = {ema20: ema(c, 20), ema50: ema(c, 50), sma200: sma(c, 200), bbU: up, bbL: lo, rsi: rsi(c, 14)};
-  ind.nn = null; calcNova();
+  ind.nn = null; calcNova(); calcExtra();
+}
+const PANELS = ['macd', 'stoch', 'atr', 'obv'];
+function calcExtra() { // indicadores de la fase 2: solo se calculan los activados
+  const I = state.indicators, T = window.CCTIndicators, n = candles.length;
+  if (!T || !n) return;
+  const c = candles.map(x => x.c), iv = IV_MS[state.interval];
+  ind.wma20 = I.wma20 ? T.wma(c, 20) : null;
+  ind.vwap = I.vwap ? T.vwap(candles, iv) : null;
+  const st = I.supertrend ? T.supertrend(candles, 10, 3) : null; ind.stUp = st && st.up; ind.stDn = st && st.dn; ind.stDir = st && st.dir;
+  ind.cross = I.cross ? T.crosses(ind.ema20, ind.ema50) : null;
+  ind.macd = I.macd ? T.macd(c) : null;
+  ind.stoch = I.stoch ? T.stoch(candles) : null;
+  ind.atr = I.atr ? T.atr(candles, 14) : null;
+  ind.obv = I.obv ? T.obv(candles) : null;
 }
 function calcNova() {
   const I = state.indicators;
@@ -263,7 +287,7 @@ function countIndicators() { const n = Object.values(state.indicators).filter(Bo
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-ind]'); if (!b) return;
   state.indicators[b.dataset.ind] = !state.indicators[b.dataset.ind];
-  save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); }
+  save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); }
   if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows();
   scheduleRender();
 });
@@ -280,9 +304,19 @@ function openSheet(mode = 'select') {
 function closeSheet() { $('#sheetBackdrop').classList.remove('open'); $('#sheet').classList.remove('open'); }
 const TOOLS = [
   ['trend', '↗ Línea de tendencia', 'Arrastra o toca dos puntos'],
+  ['ray', '⟶ Rayo', 'Dos puntos; la línea sigue hacia la derecha'],
   ['horizontal', '— Línea horizontal', 'Toca un precio'],
+  ['vertical', '| Línea vertical', 'Toca una vela'],
   ['rect', '▭ Rectángulo', 'Arrastra o toca dos esquinas'],
-  ['fib', '≋ Fibonacci', 'Arrastra o toca inicio y fin del movimiento'],
+  ['channel', '⫽ Canal paralelo', 'Dos puntos y un tercero para el ancho'],
+  ['arrow', '➚ Flecha', 'Arrastra o toca inicio y punta'],
+  ['text', 'T Texto', 'Toca dónde quieres escribir'],
+  ['measure', '↔ Medición', 'Precio, % y velas entre dos puntos'],
+  ['fib', '≋ Retroceso de Fibonacci', 'Arrastra o toca inicio y fin del movimiento'],
+  ['fibext', '≋ Extensión de Fibonacci', 'Tres puntos: inicio, fin y retroceso'],
+  ['marker', '◆ Marcador de máximo/mínimo', 'Toca un máximo o mínimo'],
+  ['long', '▲ Posición Long', 'Entrada y objetivo arriba (stop a 2:1)'],
+  ['short', '▼ Posición Short', 'Entrada y objetivo abajo (stop a 2:1)'],
   ['clear', '✕ Borrar todos los dibujos', 'Solo de este activo']
 ];
 function renderSheet() {
@@ -334,22 +368,33 @@ function selectSymbol(s) {
 /* ───────── Dibujos (anclados a tiempo y precio, guardados por activo) ───────── */
 const getDrawings = () => state.drawings[state.symbol] || [];
 const setDrawings = arr => { if (arr.length) state.drawings[state.symbol] = arr; else delete state.drawings[state.symbol]; save(); };
-function clearTransient() { drawTool = ''; pending = null; preview = null; selectedId = null; cross = null; priceMan = null; updateAutoBtn(); updateDrawUI(); }
+function clearTransient() { drawTool = ''; pending = null; pending2 = null; preview = null; selectedId = null; cross = null; priceMan = null; updateAutoBtn(); updateDrawUI(); }
+const two = (first, second) => p => p ? second : first;
 const HINTS = {
-  trend: p => p ? 'Toca el segundo punto' : 'Arrastra o toca el primer punto',
+  trend: two('Arrastra o toca el primer punto', 'Toca el segundo punto'),
+  ray: two('Arrastra o toca el primer punto', 'Toca el segundo punto'),
+  arrow: two('Arrastra o toca el inicio de la flecha', 'Toca la punta de la flecha'),
+  measure: two('Arrastra o toca el punto de partida', 'Toca el punto final'),
   horizontal: () => 'Toca el precio donde quieres la línea',
-  rect: p => p ? 'Toca la esquina opuesta' : 'Arrastra o toca la primera esquina',
-  fib: p => p ? 'Toca el final del movimiento' : 'Arrastra o toca el inicio del movimiento'
+  vertical: () => 'Toca la vela donde quieres la línea',
+  text: () => 'Toca dónde quieres el texto',
+  marker: () => 'Toca el máximo o mínimo a marcar',
+  rect: two('Arrastra o toca la primera esquina', 'Toca la esquina opuesta'),
+  fib: two('Arrastra o toca el inicio del movimiento', 'Toca el final del movimiento'),
+  long: two('Arrastra o toca la entrada', 'Toca el objetivo (arriba de la entrada)'),
+  short: two('Arrastra o toca la entrada', 'Toca el objetivo (abajo de la entrada)'),
+  channel: (p, p2) => p2 ? 'Toca el tercer punto (ancho del canal)' : p ? 'Toca el segundo punto' : 'Arrastra o toca el primer punto',
+  fibext: (p, p2) => p2 ? 'Toca el punto del retroceso' : p ? 'Toca el final del movimiento' : 'Arrastra o toca el inicio del movimiento'
 };
-function startTool(k) { drawTool = k; pending = null; preview = null; selectedId = null; updateDrawUI(); scheduleRender(); }
+function startTool(k) { drawTool = k; pending = null; pending2 = null; preview = null; selectedId = null; updateDrawUI(); scheduleRender(); }
 function updateDrawUI() {
   $('#drawHint').hidden = !drawTool;
-  if (drawTool) $('#drawHintText').textContent = HINTS[drawTool](pending);
+  if (drawTool) $('#drawHintText').textContent = HINTS[drawTool](pending, pending2);
   $('#deleteDraw').hidden = !selectedId;
   $('#undoDraw').disabled = !getDrawings().length;
   $('#chartArea').classList.toggle('drawing', !!drawTool);
 }
-$('#cancelDraw').onclick = () => { drawTool = ''; pending = null; preview = null; updateDrawUI(); scheduleRender(); };
+$('#cancelDraw').onclick = () => { drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); scheduleRender(); };
 $('#undoDraw').onclick = () => { const a = getDrawings().slice(); if (!a.length) return; a.pop(); setDrawings(a); selectedId = null; updateDrawUI(); render(); };
 $('#deleteDraw').onclick = () => { setDrawings(getDrawings().filter(d => d.id !== selectedId)); selectedId = null; updateDrawUI(); render(); };
 
@@ -380,8 +425,24 @@ function snapPoint(pt) {
 const px = a => ({x: X(idxOfTime(a.t)), y: Y(a.p)});
 function handlesOf(d) {
   if (d.type === 'horizontal') return [{key: 'a', x: geo.left + geo.plotW / 2, y: Y(d.a.p)}];
-  return [{key: 'a', ...px(d.a)}, {key: 'b', ...px(d.b)}];
+  if (d.type === 'vertical') return [{key: 'a', x: X(idxOfTime(d.a.t)), y: geo.plotTop + geo.plotH / 2}];
+  if (ONEPT.includes(d.type)) return [{key: 'a', ...px(d.a)}];
+  const hs = [{key: 'a', ...px(d.a)}, {key: 'b', ...px(d.b)}];
+  if (d.c) hs.push({key: 'c', ...px(d.c)});
+  return hs;
 }
+/* Geometría de herramientas compuestas */
+function channelOff(d) { // desplazamiento vertical (en precio) de la paralela que pasa por c
+  const ia = idxOfTime(d.a.t), ib = idxOfTime(d.b.t), ic = idxOfTime(d.c.t), slope = ib === ia ? 0 : (d.b.p - d.a.p) / (ib - ia);
+  return d.c.p - (d.a.p + slope * (ic - ia));
+}
+function posBox(d) { // Long/Short: entrada = a, objetivo = b, stop espejo a 2:1
+  const A = px(d.a), B = px(d.b), x1 = Math.min(A.x, B.x); let x2 = Math.max(A.x, B.x); if (x2 - x1 < 40) x2 = x1 + 40;
+  const risk = (d.b.p - d.a.p) / 2;
+  return {x1, x2, entry: d.a.p, target: d.b.p, stop: d.a.p - risk, yE: Y(d.a.p), yT: Y(d.b.p), yS: Y(d.a.p - risk)};
+}
+function fmtDur(ms) { const m = Math.round(Math.abs(ms) / 6e4), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60; return d ? `${d} d ${h} h` : h ? `${h} h ${mm} min` : `${mm} min`; }
+function markerKind(d) { const c = candles[clamp(Math.round(idxOfTime(d.a.t)), 0, candles.length - 1)]; return c && Math.abs(d.a.p - c.h) <= Math.abs(d.a.p - c.l) ? 'high' : 'low'; }
 function segDist(p, a, b) {
   const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
   const t = l2 ? clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0, 1) : 0;
@@ -389,9 +450,29 @@ function segDist(p, a, b) {
 }
 function distToDrawing(d, pt) {
   if (d.type === 'horizontal') return Math.abs(pt.y - Y(d.a.p));
+  if (d.type === 'vertical') return Math.abs(pt.x - X(idxOfTime(d.a.t)));
+  if (d.type === 'text' || d.type === 'marker') {
+    const A = px(d.a);
+    if (d.type === 'text' && pt.x >= A.x - 4 && pt.x <= A.x + (d.text || '').length * 7 + 10 && pt.y >= A.y - 16 && pt.y <= A.y + 4) return 0;
+    return Math.hypot(pt.x - A.x, pt.y - A.y);
+  }
   const a = px(d.a), b = px(d.b);
-  if (d.type === 'trend') return segDist(pt, a, b);
-  if (d.type === 'rect') {
+  if (d.type === 'trend' || d.type === 'arrow') return segDist(pt, a, b);
+  if (d.type === 'ray') { const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1; return segDist(pt, a, {x: a.x + dx / L * 5000, y: a.y + dy / L * 5000}); }
+  if (d.type === 'channel') {
+    if (!d.c) return segDist(pt, a, b);
+    const off = channelOff(d); return Math.min(segDist(pt, a, b), segDist(pt, px({t: d.a.t, p: d.a.p + off}), px({t: d.b.t, p: d.b.p + off})));
+  }
+  if (d.type === 'long' || d.type === 'short') {
+    const q = posBox(d), y1 = Math.min(q.yT, q.yS), y2 = Math.max(q.yT, q.yS);
+    return pt.x >= q.x1 && pt.x <= q.x2 && pt.y >= y1 && pt.y <= y2 ? 0 : Math.min(Math.abs(pt.y - q.yT), Math.abs(pt.y - q.yS), Math.abs(pt.y - q.yE)) + (pt.x < q.x1 ? q.x1 - pt.x : pt.x > q.x2 ? pt.x - q.x2 : 0);
+  }
+  if (d.type === 'fibext') {
+    if (!d.c) return segDist(pt, a, b);
+    const c = px(d.c); if (pt.x < Math.min(a.x, c.x) - 10) return 1e9;
+    return Math.min(...FIBEXT.map(lv => Math.abs(pt.y - Y(d.c.p + (d.b.p - d.a.p) * lv))));
+  }
+  if (d.type === 'rect' || d.type === 'measure') {
     const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
     if (pt.x >= x1 && pt.x <= x2 && pt.y >= y1 && pt.y <= y2) return 0;
     return Math.min(segDist(pt, {x: x1, y: y1}, {x: x2, y: y1}), segDist(pt, {x: x2, y: y1}, {x: x2, y: y2}), segDist(pt, {x: x2, y: y2}, {x: x1, y: y2}), segDist(pt, {x: x1, y: y2}, {x: x1, y: y1}));
@@ -401,11 +482,22 @@ function distToDrawing(d, pt) {
 }
 const b_price = (d, lv) => d.b.p - (d.b.p - d.a.p) * lv;
 function hitTest(pt) { const arr = getDrawings(); for (let i = arr.length - 1; i >= 0; i--) if (distToDrawing(arr[i], pt) < 13) return arr[i]; return null; }
-function commitDrawing(a, b) {
-  if (drawTool !== 'horizontal') { const A = px(a), B = px(b); if (Math.hypot(A.x - B.x, A.y - B.y) < 8) { toast('Los puntos están muy cerca'); return; } }
-  const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: drawTool, a, ...(drawTool === 'horizontal' ? {} : {b})};
+function commitDrawing(a, b, c) {
+  const one = ONEPT.includes(drawTool), three = THREEPT.includes(drawTool);
+  if (!one) {
+    const A = px(a), B = px(b); if (Math.hypot(A.x - B.x, A.y - B.y) < 8) { toast('Los puntos están muy cerca'); pending = null; preview = null; updateDrawUI(); scheduleRender(); return; }
+    if (drawTool === 'long' && b.p <= a.p) { toast('Para Long, el objetivo debe quedar arriba de la entrada'); pending = null; preview = null; updateDrawUI(); scheduleRender(); return; }
+    if (drawTool === 'short' && b.p >= a.p) { toast('Para Short, el objetivo debe quedar abajo de la entrada'); pending = null; preview = null; updateDrawUI(); scheduleRender(); return; }
+  }
+  if (three && !c) { pending2 = {a, b}; pending = null; preview = null; updateDrawUI(); scheduleRender(); return; }
+  const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: drawTool, a, ...(one ? {} : {b}), ...(three ? {c} : {})};
+  if (drawTool === 'text') {
+    const txt = (prompt('Texto del dibujo:') || '').trim().slice(0, 80);
+    if (!txt) { drawTool = ''; pending = null; preview = null; updateDrawUI(); render(); return; }
+    d.text = txt;
+  }
   setDrawings([...getDrawings(), d]);
-  selectedId = d.id; drawTool = ''; pending = null; preview = null; updateDrawUI(); render();
+  selectedId = d.id; drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); render();
 }
 
 /* ───────── Render del gráfico ───────── */
@@ -438,7 +530,10 @@ function render() {
 
   const left = 6, right = 64, axisH = 22, plotTop = 6;
   const rsiH = state.indicators.rsi ? Math.round(Math.max(70, h * .18)) : 0, volH = state.indicators.volume ? Math.round(Math.max(40, h * .12)) : 0;
-  const plotH = Math.max(80, h - axisH - rsiH - volH - plotTop), plotW = w - left - right;
+  const panelKeys = PANELS.filter(k => state.indicators[k] && ind[k]);
+  const panelBudget = Math.max(0, h * .58 - rsiH - volH);
+  const panelH = panelKeys.length ? Math.round(Math.max(40, Math.min(clamp(h * .16, 52, 110), panelBudget / panelKeys.length))) : 0, extraH = panelH * panelKeys.length;
+  const plotH = Math.max(80, h - axisH - rsiH - volH - extraH - plotTop), plotW = w - left - right;
   const count = clamp(visible, 15, 400);
   pan = clamp(pan, -Math.floor(count * .4), Math.max(0, n - Math.ceil(count * .3)));
   const end = n - pan, start = end - count, step = plotW / count;
@@ -451,13 +546,16 @@ function render() {
   if (state.indicators.ema20) overlays.push(['EMA 20', ind.ema20, '#f5c568']);
   if (state.indicators.ema50) overlays.push(['EMA 50', ind.ema50, '#6ca5f9']);
   if (state.indicators.sma200) overlays.push(['SMA 200', ind.sma200, '#b58dff']);
+  if (state.indicators.wma20 && ind.wma20) overlays.push(['WMA 20', ind.wma20, '#4dd0e1']);
+  if (state.indicators.vwap && ind.vwap) overlays.push(['VWAP', ind.vwap, '#ff8a65']);
+  if (state.indicators.supertrend && ind.stUp) overlays.push(['Supertrend ↑', ind.stUp, '#20bf9f'], ['Supertrend ↓', ind.stDn, '#f06b79']);
   if (state.indicators.bollinger) overlays.push(['BB sup', ind.bbU, '#748bab', true], ['BB inf', ind.bbL, '#748bab', true]);
   for (const [, arr] of overlays) for (let i = lo; i < hi; i++) if (arr[i] != null) { if (arr[i] < min) min = arr[i]; if (arr[i] > max) max = arr[i]; }
   const nn = ind.nn;
   if (nn && state.indicators.nnEma) for (let i = lo; i < hi; i++) { const a = nn.emaTop[i], b = nn.emaBot[i]; if (Number.isFinite(a) && a > max) max = a; if (Number.isFinite(b) && b < min) min = b; }
   const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * .08; min -= pad; max += pad;
   if (priceMan) { min = priceMan.min; max = priceMan.max; }
-  geo = {w, h, left, right, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH};
+  geo = {w, h, left, right, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
 
   // cuadrícula y escala de precios
   g.font = '10px system-ui'; g.textAlign = 'left'; g.lineWidth = .6;
@@ -471,7 +569,7 @@ function render() {
   g.fillStyle = text; g.textAlign = 'center';
   for (let i = Math.ceil(lo / stride) * stride; i < hi; i += stride) {
     const xx = X(i); if (xx < left + 14 || xx > w - right - 14) continue;
-    g.strokeStyle = line; g.beginPath(); g.moveTo(xx, plotTop); g.lineTo(xx, plotTop + plotH + volH + rsiH); g.stroke();
+    g.strokeStyle = line; g.beginPath(); g.moveTo(xx, plotTop); g.lineTo(xx, plotTop + plotH + volH + rsiH + extraH); g.stroke();
     g.fillText(timeLabel(candles[i].t, i > 0 ? candles[i - 1].t : null), xx, h - 7);
   }
   g.textAlign = 'left';
@@ -495,12 +593,23 @@ function render() {
     for (let i = lo; i < hi; i++) { if (arr[i] == null) { on = false; continue; } const xx = X(i), yy = Y(arr[i]); if (!on) { g.moveTo(xx, yy); on = true; } else g.lineTo(xx, yy); }
     g.stroke(); g.setLineDash([]);
   }
+  // cruces EMA 20 / EMA 50
+  if (state.indicators.cross && ind.cross) {
+    g.font = 'bold 11px system-ui'; g.textAlign = 'center';
+    for (let i = lo; i < hi; i++) {
+      const k = ind.cross[i]; if (!k) continue;
+      g.fillStyle = k > 0 ? '#20bf9f' : '#f06b79';
+      g.fillText(k > 0 ? '▲' : '▼', X(i), k > 0 ? Y(candles[i].l) + 14 : Y(candles[i].h) - 6);
+    }
+    g.textAlign = 'left';
+  }
   // Nova Nexus · señales y niveles TP/SL
   if (nn && (state.indicators.nnIa || state.indicators.nnTp)) drawNovaSignals(nn, lo, hi, n);
   if (nn && nn.smc && state.indicators.nnSmc) drawNovaStruct(nn.smc);
   // dibujos del usuario
   for (const d of getDrawings()) drawShape(d, d.id === selectedId, drawCol, text);
-  if (preview) drawShape({id: '_', type: drawTool, a: preview.a, b: preview.b}, false, drawCol, text);
+  if (pending2) drawShape({id: '_', type: 'trend', a: pending2.a, b: pending2.b}, false, drawCol, text);
+  if (preview) drawShape({id: '_', type: drawTool, a: preview.a, b: preview.b, c: preview.c}, false, drawCol, text);
   if (pending) { const P = px(pending); g.fillStyle = drawCol; g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
   g.restore();
 
@@ -517,7 +626,9 @@ function render() {
   }
   // leyenda de indicadores
   let ly2 = plotTop + 48; g.font = '10px system-ui';
-  for (const [name, arr, col] of overlays) { if (/^BB inf/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); g.fillStyle = col; g.fillText(`${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`, left + 8, ly2); ly2 += 13; }
+  for (const [name, arr, col] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); g.fillStyle = col; g.fillText(`${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`, left + 8, ly2); ly2 += 13; }
+
+  if (state.indicators.supertrend && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#20bf9f' : '#f06b79'; g.fillText(`Supertrend ${dv < 0 ? '↑' : '↓'}  ${fmt((dv < 0 ? ind.stUp : ind.stDn)[j])}`, left + 8, ly2); ly2 += 13; } }
 
   // volumen
   if (volH) {
@@ -540,6 +651,7 @@ function render() {
     for (let i = lo; i < hi; i++) { const v = ind.rsi[i]; if (v == null) { on = false; continue; } const yy = top + (100 - v) / 100 * height; if (!on) { g.moveTo(X(i), yy); on = true; } else g.lineTo(X(i), yy); }
     g.stroke();
   }
+  panelKeys.forEach((k, idx) => drawSubPanel(k, geo.extraTop + idx * panelH, panelH, lo, hi, {left, w, right, line, text}));
   if (nn && state.indicators.nnRules) drawNovaRules();
   if (nn && state.indicators.nnIa && nn.last) drawNovaScore(nn.last);
   // retícula (mantener pulsado)
@@ -560,6 +672,43 @@ function render() {
     $('#ohlcText').textContent = `O ${fmt(shown.o)}  H ${fmt(shown.h)}  L ${fmt(shown.l)}  C ${fmt(shown.c)}  ${pct(chg)}` + (sgAt ? `\n${NovaNexus.tooltip(sgAt)}` : '');
     $('#ohlcText').style.color = shown.c >= shown.o ? up : down;
   }
+}
+/* ───────── Paneles inferiores: MACD · Estocástico · ATR · OBV ───────── */
+function drawSubPanel(key, top0, H, lo, hi, o) {
+  const {left, w, right, line, text} = o, top = top0 + 4, height = H - 10, fmtV = v => v == null ? '—' : Math.abs(v) >= 1000 ? v.toLocaleString('en-US', {maximumFractionDigits: 0}) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(6);
+  const D = ind[key]; if (!D) return;
+  const series = key === 'macd' ? [[D.line, '#548fff'], [D.signal, '#f5a623']] : key === 'stoch' ? [[D.k, '#548fff'], [D.d, '#f5a623']] : [[D, key === 'atr' ? '#e07b53' : '#2ec4b6']];
+  const hist = key === 'macd' ? D.hist : null;
+  let mn = Infinity, mx = -Infinity;
+  const take = arr => { for (let i = lo; i < hi; i++) { const v = arr[i]; if (v != null) { if (v < mn) mn = v; if (v > mx) mx = v; } } };
+  if (key === 'stoch') { mn = 0; mx = 100; } else { series.forEach(([a]) => take(a)); if (hist) take(hist); }
+  if (!Number.isFinite(mn) || !Number.isFinite(mx)) return;
+  if (key === 'macd') { const m = Math.max(Math.abs(mn), Math.abs(mx)) || 1; mn = -m; mx = m; } // el cero queda al centro
+  if (mx === mn) { mx += 1; mn -= 1; }
+  const pad = key === 'stoch' ? 0 : (mx - mn) * .08; mn -= pad; mx += pad;
+  const Yp = v => top + (mx - v) / (mx - mn) * height;
+  g.save(); g.beginPath(); g.rect(left, top0, w - right - left + 2, H); g.clip();
+  g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
+  g.font = '10px system-ui';
+  const last = a => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; };
+  const label = {macd: 'MACD 12 26 9', stoch: 'Estoc 14 3 3', atr: 'ATR 14', obv: 'OBV'}[key];
+  g.fillStyle = text; g.fillText(`${label}  ${series.map(([a]) => fmtV(last(a))).join('  ')}`, left + 4, top + 9);
+  if (key === 'stoch') {
+    g.setLineDash([2, 3]);
+    for (const r of [20, 80]) { const yy = Yp(r); g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
+    g.setLineDash([]);
+  } else if (key === 'macd') {
+    const y0 = Yp(0); g.setLineDash([2, 3]); g.strokeStyle = line; g.beginPath(); g.moveTo(left, y0); g.lineTo(w - right, y0); g.stroke(); g.setLineDash([]);
+    const bw = clamp(geo.step * .6, 1, 12);
+    for (let i = lo; i < hi; i++) { const v = hist[i]; if (v == null) continue; const pv = i > 0 ? hist[i - 1] : null; g.fillStyle = v >= 0 ? (pv != null && v < pv ? '#1b8c7899' : '#20bf9fcc') : (pv != null && v > pv ? '#d45a6a99' : '#f06b79cc'); g.fillRect(X(i) - bw / 2, Math.min(y0, Yp(v)), bw, Math.max(1, Math.abs(Yp(v) - y0))); }
+  } else { g.fillStyle = text; g.fillText(fmtV(mx), w - right + 6, top + 9); g.fillText(fmtV(mn), w - right + 6, top + height); }
+  g.lineWidth = 1.4;
+  for (const [a, col] of series) {
+    g.strokeStyle = col; g.beginPath(); let on = false;
+    for (let i = lo; i < hi; i++) { const v = a[i]; if (v == null) { on = false; continue; } if (!on) { g.moveTo(X(i), Yp(v)); on = true; } else g.lineTo(X(i), Yp(v)); }
+    g.stroke();
+  }
+  g.restore();
 }
 /* ───────── Nova Nexus: dibujo ───────── */
 const NN_COL = {buy: '#11cf77', sell: '#d11645', range: '#9b59b6', sl: '#ff4444', tp1: '#11cf77', tp2: '#00aaff', tp3: '#ff9900'};
@@ -676,6 +825,65 @@ function drawNovaScore(sg) {
   g.font = 'bold 10px system-ui'; const w = g.measureText(txt).width + 14, x = geo.w - geo.right - w - 4, y = geo.plotTop + geo.plotH - 20;
   g.fillStyle = 'rgba(0,0,0,.6)'; roundRect(x, y, w, 17, 4); g.fill(); g.fillStyle = col; g.textAlign = 'left'; g.fillText(txt, x + 7, y + 12);
 }
+/* Herramientas de la fase 2: rayo, vertical, canal, flecha, texto, medición, extensión Fib, marcador, Long/Short */
+function arrowHead(from, to, size = 9) {
+  const ang = Math.atan2(to.y - from.y, to.x - from.x);
+  g.beginPath(); g.moveTo(to.x, to.y); g.lineTo(to.x - size * Math.cos(ang - .45), to.y - size * Math.sin(ang - .45)); g.lineTo(to.x - size * Math.cos(ang + .45), to.y - size * Math.sin(ang + .45)); g.closePath(); g.fill();
+}
+function tag(txt, x, y, fill, align = 'left') { // etiqueta con fondo
+  g.font = 'bold 10px system-ui'; const w = g.measureText(txt).width + 10, x0 = align === 'right' ? x - w : x;
+  g.fillStyle = fill; roundRect(x0, y - 9, w, 17, 3); g.fill(); g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText(txt, x0 + 5, y + 3.5);
+}
+function drawShapeExtra(d, a, b, rightX, col) {
+  const t = d.type; g.setLineDash([]); g.globalAlpha = 1; g.textAlign = 'left';
+  if (t === 'vertical') { g.beginPath(); g.moveTo(a.x, geo.plotTop); g.lineTo(a.x, geo.h - geo.axisH); g.stroke(); }
+  else if (t === 'ray') { const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x + dx / L * 5000, a.y + dy / L * 5000); g.stroke(); }
+  else if (t === 'arrow') { g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); g.fillStyle = col; arrowHead(a, b, 11); }
+  else if (t === 'text') { g.font = 'bold 12px system-ui'; g.fillStyle = col; g.fillText(d.text || '', a.x, a.y); }
+  else if (t === 'marker') {
+    const hi = markerKind(d) === 'high'; g.font = 'bold 11px system-ui'; g.fillStyle = col; g.textAlign = 'center';
+    g.fillText(hi ? '▼' : '▲', a.x, hi ? a.y - 3 : a.y + 12); g.font = 'bold 10px system-ui'; g.fillText(fmt(d.a.p), a.x, hi ? a.y - 15 : a.y + 24); g.textAlign = 'left';
+  }
+  else if (t === 'channel') {
+    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+    if (!d.c) return;
+    const off = channelOff(d), a2 = px({t: d.a.t, p: d.a.p + off}), b2 = px({t: d.b.t, p: d.b.p + off});
+    g.beginPath(); g.moveTo(a2.x, a2.y); g.lineTo(b2.x, b2.y); g.stroke();
+    g.globalAlpha = .1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(b2.x, b2.y); g.lineTo(a2.x, a2.y); g.closePath(); g.fill(); g.globalAlpha = 1;
+  }
+  else if (t === 'measure') {
+    const dp = d.b.p - d.a.p, up = dp >= 0, mc = up ? '#20bf9f' : '#f06b79', bars = Math.round(idxOfTime(d.b.t) - idxOfTime(d.a.t));
+    const x1 = Math.min(a.x, b.x), y1 = Math.min(a.y, b.y), w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
+    g.fillStyle = mc; g.strokeStyle = mc; g.globalAlpha = .12; g.fillRect(x1, y1, w, h); g.globalAlpha = 1; g.setLineDash([4, 3]); g.strokeRect(x1, y1, w, h); g.setLineDash([]);
+    g.lineWidth = 1.5; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); arrowHead(a, b, 8);
+    const l1 = `${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)})`, l2 = `${Math.abs(bars)} velas · ${fmtDur(d.b.t - d.a.t)}`;
+    g.font = 'bold 10px system-ui'; const tw = Math.max(g.measureText(l1).width, g.measureText(l2).width) + 12, tx = clamp(x1 + w / 2 - tw / 2, geo.left, rightX - tw), ty = up ? Math.max(geo.plotTop + 2, y1 - 34) : Math.min(geo.plotTop + geo.plotH - 34, y1 + h + 4);
+    g.fillStyle = mc; roundRect(tx, ty, tw, 30, 4); g.fill(); g.fillStyle = '#fff'; g.fillText(l1, tx + 6, ty + 12); g.fillText(l2, tx + 6, ty + 25);
+  }
+  else if (t === 'fibext') {
+    g.setLineDash([4, 4]); g.lineWidth = 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+    if (!d.c) { g.setLineDash([]); return; }
+    const c = px(d.c); g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(c.x, c.y); g.stroke(); g.setLineDash([]);
+    const x1 = Math.min(a.x, c.x); g.font = '10px system-ui';
+    FIBEXT.forEach(lv => {
+      const pr = d.c.p + (d.b.p - d.a.p) * lv, yy = Y(pr);
+      g.globalAlpha = lv === 0 || lv === 1 ? 1 : .8; g.fillStyle = col; g.beginPath(); g.moveTo(x1, yy); g.lineTo(rightX, yy); g.stroke(); g.globalAlpha = 1;
+      g.fillText(`${lv} (${fmt(pr)})`, Math.min(x1 + 4, rightX - 90), yy - 3);
+    });
+  }
+  else if (t === 'long' || t === 'short') {
+    const q = posBox(d), lg = t === 'long', gc = '#20bf9f', rc = '#f06b79', w = q.x2 - q.x1;
+    g.globalAlpha = .16; g.fillStyle = gc; g.fillRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
+    g.fillStyle = rc; g.fillRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE)); g.globalAlpha = 1;
+    g.lineWidth = 1.2; g.strokeStyle = gc; g.strokeRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
+    g.strokeStyle = rc; g.strokeRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE));
+    g.strokeStyle = 'rgba(160,170,185,.9)'; g.beginPath(); g.moveTo(q.x1, q.yE); g.lineTo(q.x2, q.yE); g.stroke();
+    const pc = v => pct((v - q.entry) / q.entry * 100);
+    tag(`${lg ? 'Long' : 'Short'} · R:R 2.00`, q.x1, q.yE, '#5b6b83');
+    tag(`Objetivo ${fmt(q.target)} (${pc(q.target)})`, q.x1, q.yT + (q.yT < q.yE ? -11 : 11), gc);
+    tag(`Stop ${fmt(q.stop)} (${pc(q.stop)})`, q.x1, q.yS + (q.yS < q.yE ? -11 : 11), rc);
+  }
+}
 function drawShape(d, selected, col, textCol) {
   const a = d.type === 'horizontal' ? {x: 0, y: Y(d.a.p)} : px(d.a), b = d.b ? px(d.b) : null;
   g.strokeStyle = col; g.fillStyle = col; g.lineWidth = selected ? 2.2 : 1.5; g.setLineDash([]);
@@ -699,6 +907,7 @@ function drawShape(d, selected, col, textCol) {
     });
     g.setLineDash([4, 4]); g.lineWidth = 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); g.setLineDash([]);
   }
+  drawShapeExtra(d, a, b, rightX, col);
   if (selected) for (const hnd of handlesOf(d)) { g.fillStyle = '#fff'; g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(hnd.x, hnd.y, 7, 0, 7); g.fill(); g.stroke(); }
 }
 
@@ -737,7 +946,7 @@ area.addEventListener('pointermove', e => {
   else if (gest.mode === 'handle') {
     const arr = getDrawings(), d = arr.find(x => x.id === selectedId); if (!d) return;
     const s = snapPoint(pt);
-    if (d.type === 'horizontal') d.a = {t: d.a.t, p: s.p}; else d[gest.handle] = s;
+    if (d.type === 'horizontal') d.a = {t: d.a.t, p: s.p}; else if (d.type === 'vertical') d.a = {t: s.t, p: d.a.p}; else d[gest.handle] = s;
     scheduleRender();
   }
   else if (gest.mode === 'scaleY') { // arriba = agrandar · abajo = achicar
@@ -752,7 +961,7 @@ area.addEventListener('pointermove', e => {
     if (priceMan) { if (gest.pm0 == null) gest.pm0 = {min: priceMan.min, max: priceMan.max}; const dy = (e.clientY - gest.y0) / geo.plotH * (gest.pm0.max - gest.pm0.min); priceMan = {min: gest.pm0.min + dy, max: gest.pm0.max + dy}; } // con escala manual también se mueve en vertical
     scheduleRender();
   }
-  else if (drawTool && gest.moved && drawTool !== 'horizontal') { preview = {a: gest.start, b: snapPoint(pt)}; scheduleRender(); }
+  else if (drawTool && gest.moved && !ONEPT.includes(drawTool)) { preview = pending2 ? {a: pending2.a, b: pending2.b, c: snapPoint(pt)} : {a: gest.start, b: snapPoint(pt)}; scheduleRender(); }
 });
 function endPointer(e, cancelled) {
   const had = ptrs.delete(e.pointerId);
@@ -770,7 +979,8 @@ function endPointer(e, cancelled) {
   if (!geo) return;
   const pt = local(e);
   if (drawTool) {
-    if (drawTool === 'horizontal') { commitDrawing(snapPoint(pt)); return; }
+    if (pending2) { const {a, b} = pending2; pending2 = null; preview = null; commitDrawing(a, b, snapPoint(pt)); return; }
+    if (ONEPT.includes(drawTool)) { commitDrawing(snapPoint(pt)); return; }
     if (gs.moved && !pending) { preview = null; commitDrawing(gs.start, snapPoint(pt)); return; }
     if (!pending) { pending = gs.start; updateDrawUI(); scheduleRender(); return; }
     const a = pending; pending = null; commitDrawing(a, snapPoint(pt)); return;
@@ -830,7 +1040,7 @@ $('#importFile').onchange = async e => {
 };
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  closeSheet(); if (drawTool) { drawTool = ''; pending = null; preview = null; updateDrawUI(); }
+  closeSheet(); if (drawTool) { drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); }
   document.body.classList.remove('expanded'); syncFullscreenLabel(); requestAnimationFrame(render);
 });
 
