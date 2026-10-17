@@ -53,6 +53,7 @@ async function getJSON(url, signal) { const r = await fetch(url, {signal}); if (
 let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null;
 let currentView = 'watchView', sheetMode = 'select', editMode = false;
 let drawTool = '', pending = null, preview = null, selectedId = null, cross = null, geo = null;
+let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
 let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0;
 const lastShown = {};
 
@@ -331,7 +332,7 @@ function selectSymbol(s) {
 /* ───────── Dibujos (anclados a tiempo y precio, guardados por activo) ───────── */
 const getDrawings = () => state.drawings[state.symbol] || [];
 const setDrawings = arr => { if (arr.length) state.drawings[state.symbol] = arr; else delete state.drawings[state.symbol]; save(); };
-function clearTransient() { drawTool = ''; pending = null; preview = null; selectedId = null; cross = null; updateDrawUI(); }
+function clearTransient() { drawTool = ''; pending = null; preview = null; selectedId = null; cross = null; priceMan = null; updateAutoBtn(); updateDrawUI(); }
 const HINTS = {
   trend: p => p ? 'Toca el segundo punto' : 'Arrastra o toca el primer punto',
   horizontal: () => 'Toca el precio donde quieres la línea',
@@ -453,6 +454,7 @@ function render() {
   const nn = ind.nn;
   if (nn && state.indicators.nnEma) for (let i = lo; i < hi; i++) { const a = nn.emaTop[i], b = nn.emaBot[i]; if (Number.isFinite(a) && a > max) max = a; if (Number.isFinite(b) && b < min) min = b; }
   const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * .08; min -= pad; max += pad;
+  if (priceMan) { min = priceMan.min; max = priceMan.max; }
   geo = {w, h, left, right, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH};
 
   // cuadrícula y escala de precios
@@ -498,6 +500,10 @@ function render() {
   if (pending) { const P = px(pending); g.fillStyle = drawCol; g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
   g.restore();
 
+  // asas de agarre: barra derecha (escala de precio) e inferior (escala de tiempo)
+  g.fillStyle = priceMan ? '#548fff' : text; g.globalAlpha = priceMan ? .95 : .55;
+  roundRect(w - 7, plotTop + plotH / 2 - 22, 4, 44, 2); g.fill();
+  g.fillStyle = text; g.globalAlpha = .55; roundRect(left + plotW / 2 - 22, h - 6, 44, 4, 2); g.fill(); g.globalAlpha = 1;
   // etiqueta de último precio
   const lastC = candles[n - 1], ly = Y(lastC.c);
   if (ly > plotTop && ly < plotTop + plotH) {
@@ -661,8 +667,11 @@ area.addEventListener('pointerdown', e => {
   if (ptrs.size > 2) return;
   const pt = local(e);
   gest = {id: e.pointerId, x0: e.clientX, y0: e.clientY, pan0: pan, moved: false, mode: 'pending', start: null, handle: null, timer: 0};
-  if (drawTool) gest.start = snapPoint(pt);
-  else if (selectedId) {
+  const onPriceAxis = pt.x >= geo.w - geo.right - 4 && pt.y <= geo.plotTop + geo.plotH + 8, onTimeAxis = pt.y >= geo.h - 34 && pt.x < geo.w - geo.right;
+  if (onPriceAxis || onTimeAxis) { // arrastrar la barra derecha = escala de precio · barra inferior = escala de tiempo
+    gest.mode = onPriceAxis ? 'scaleY' : 'scaleX'; gest.min0 = geo.min; gest.max0 = geo.max; gest.vis0 = visible; gest.pan1 = pan; cross = null;
+  } else if (drawTool) gest.start = snapPoint(pt);
+  else if (selectedId && gest.mode === 'pending') {
     const d = getDrawings().find(x => x.id === selectedId);
     const hnd = d && handlesOf(d).find(hh => Math.hypot(hh.x - pt.x, hh.y - pt.y) < 24);
     if (hnd) { gest.mode = 'handle'; gest.handle = hnd.key; }
@@ -684,7 +693,18 @@ area.addEventListener('pointermove', e => {
     if (d.type === 'horizontal') d.a = {t: d.a.t, p: s.p}; else d[gest.handle] = s;
     scheduleRender();
   }
-  else if (gest.mode === 'pan') { pan = gest.pan0 + (e.clientX - gest.x0) / geo.step; scheduleRender(); }
+  else if (gest.mode === 'scaleY') { // arriba = agrandar · abajo = achicar
+    const f = clamp(Math.exp(-(e.clientY - gest.y0) / 160), .05, 25), c = (gest.min0 + gest.max0) / 2, half = (gest.max0 - gest.min0) / 2 / f;
+    priceMan = {min: c - half, max: c + half}; updateAutoBtn(); scheduleRender();
+  }
+  else if (gest.mode === 'scaleX') { // derecha = más grande · izquierda = más chico
+    const f = clamp(Math.exp((e.clientX - gest.x0) / 180), .1, 12); visible = clamp(gest.vis0 / f, 15, 400); scheduleRender();
+  }
+  else if (gest.mode === 'pan') {
+    pan = gest.pan0 + (e.clientX - gest.x0) / geo.step;
+    if (priceMan) { if (gest.pm0 == null) gest.pm0 = {min: priceMan.min, max: priceMan.max}; const dy = (e.clientY - gest.y0) / geo.plotH * (gest.pm0.max - gest.pm0.min); priceMan = {min: gest.pm0.min + dy, max: gest.pm0.max + dy}; } // con escala manual también se mueve en vertical
+    scheduleRender();
+  }
   else if (drawTool && gest.moved && drawTool !== 'horizontal') { preview = {a: gest.start, b: snapPoint(pt)}; scheduleRender(); }
 });
 function endPointer(e, cancelled) {
@@ -695,6 +715,10 @@ function endPointer(e, cancelled) {
   if (cancelled) { cross = null; preview = null; scheduleRender(); return; }
   if (gs.mode === 'cross') { cross = null; scheduleRender(); return; }
   if (gs.mode === 'handle') { save(); render(); return; }
+  if (gs.mode === 'scaleY' || gs.mode === 'scaleX') {
+    if (!gs.moved) { const now = Date.now(); if (now - lastAxisTap < 320) { lastAxisTap = 0; if (gs.mode === 'scaleY') { priceMan = null; updateAutoBtn(); } else visible = defaultVisible(); render(); } else lastAxisTap = now; }
+    return;
+  }
   if (gs.mode === 'pan') return;
   if (!geo) return;
   const pt = local(e);
@@ -731,7 +755,9 @@ area.addEventListener('pointermove', e => {
 });
 area.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !ptrs.size && cross) { cross = null; scheduleRender(); } });
 area.addEventListener('wheel', e => { e.preventDefault(); visible = clamp(visible * (e.deltaY > 0 ? 1.12 : .89), 15, 400); scheduleRender(); }, {passive: false});
-function fit() { visible = defaultVisible(); pan = 0; render(); }
+function fit() { visible = defaultVisible(); pan = 0; priceMan = null; updateAutoBtn(); render(); }
+function updateAutoBtn() { const b = $('#autoScale'); if (b) b.hidden = !priceMan; }
+$('#autoScale').onclick = () => { priceMan = null; updateAutoBtn(); render(); };
 $('#zoomIn').onclick = () => { visible = clamp(visible / 1.3, 15, 400); render(); };
 $('#zoomOut').onclick = () => { visible = clamp(visible * 1.3, 15, 400); render(); };
 $('#fitChart').onclick = fit;
