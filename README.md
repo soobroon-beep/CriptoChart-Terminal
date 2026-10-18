@@ -38,7 +38,7 @@ En **Indicadores → Scripts de Pine → «Pegar / convertir Pine»** se pega el
 
 ## Indicador Nova Nexus (port del script de Pine)
 
-En **Indicadores** hay interruptores para cada módulo, que se dibujan directamente en el gráfico (móvil y escritorio):
+En **Indicadores → Mis indicadores** aparece **Nova Nexus como un solo indicador**, con vista previa, un interruptor general y «⚙ Configurar», donde se eligen los módulos (agrupados en Señales, Tendencia y bandas, Estructura y niveles, Liquidez y volumen) y hay «Activar todos / Desactivar todos». Al apagarlo se recuerda la selección y al encenderlo se restaura. Los parámetros numéricos de cada módulo siguen fijos en los valores por defecto del Pine (aún no son editables). La vista previa es una ilustración, no un render del gráfico real. Los módulos, que se dibujan directamente en el gráfico (móvil y escritorio):
 
 - **Señales IA** (BUY/SELL con score ⭐, cooldown y divergencias), **EMA Cloud**, **TP / SL** y panel de **Reglas**.
 - **Liquidaciones**: niveles 5x/10x/25x/50x/100x que nacen en cada pivote (3 velas a cada lado; 2 en 1d/1w/1M) solo si el volumen pasa el filtro de ese apalancamiento, y se alargan hasta que una vela los cruza. Incluye la tabla «Active Liquidation Levels» y el tinte tenue antes del 2023-01-01. Suposición: la fecha de inicio del Pine (`timestamp("2023-01-01")`) se toma como UTC. El `barcolor` lima del Pine, que pinta todas las velas, va aparte como opción **«Liquidaciones: velas lima»** (apagada por defecto).
