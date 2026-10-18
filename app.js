@@ -16,7 +16,7 @@ const ONEPT = ['horizontal', 'vertical', 'text', 'marker'], THREEPT = ['channel'
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false},
+  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
   light: false, drawings: {}
 };
 function merge(s) {
@@ -231,6 +231,7 @@ const indicatorMeta = [
   ['nnOb','Nova Nexus · Order Blocks','Order Blocks volumétricos con actividad compra/venta (últimos 5)','#f23645'],
   ['nnTrail','Nova Nexus · Smooth Trail','Trailing stop EMA 30 ± 2 ATR(20), suavizado 2 · verde alcista, morado bajista','#119c7e'],
   ['nnRev','Nova Nexus · Reversal Bands','SMA 70 ± 6/7/8 ATR(70): zonas de posible reversión','#f23645'],
+  ['nnVP','Nova Nexus · Volume Profile','Perfil de volumen (25 filas, últimas 200 velas): nodos, sentimiento y zona POC en un margen a la derecha','#ffeb3b'],
   ['nnLiq','Nova Nexus · Liquidaciones','Niveles de liquidación 5x/10x/25x/50x/100x desde pivotes con filtro de volumen, y tabla de niveles activos','#22ab94'],
   ['nnLiqBars','Nova Nexus · Liquidaciones: velas lima','Opcional: colorea todas las velas de lima, como el barcolor del Pine al activar Liquidaciones (requiere Liquidaciones)','#00e676'],
   ['nnPiv','Nova Nexus · Pivots','Zigzag de pivotes (50), pivotes perdidos y niveles fantasma','#26a69a'],
@@ -285,6 +286,7 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.sr = I.nnSR ? T.supportResistance(candles) : null;
   ind.piv = I.nnPiv ? T.pivots(candles, 50) : null;
   ind.liq = I.nnLiq ? T.liquidations(candles, iv) : null;
+  ind.vp = I.nnVP ? T.volumeProfile(candles) : null;
 }
 function calcNova() {
   const I = state.indicators;
@@ -544,7 +546,8 @@ function render() {
   const panelKeys = PANELS.filter(k => state.indicators[k] && ind[k]);
   const panelBudget = Math.max(0, h * .58 - rsiH - volH);
   const panelH = panelKeys.length ? Math.round(Math.max(40, Math.min(clamp(h * .16, 52, 110), panelBudget / panelKeys.length))) : 0, extraH = panelH * panelKeys.length;
-  const plotH = Math.max(80, h - axisH - rsiH - volH - extraH - plotTop), plotW = w - left - right;
+  const vpOn = !!(state.indicators.nnVP && ind.vp), gutter = vpOn ? clamp(Math.round((w - left - right) * .4), 110, 300) : 0; // margen derecho para el perfil
+  const plotH = Math.max(80, h - axisH - rsiH - volH - extraH - plotTop), plotW = w - left - right - gutter;
   const count = clamp(visible, 15, 400);
   pan = clamp(pan, -Math.floor(count * .4), Math.max(0, n - Math.ceil(count * .3)));
   const end = n - pan, start = end - count, step = plotW / count;
@@ -567,7 +570,7 @@ function render() {
   if (nn && state.indicators.nnEma) for (let i = lo; i < hi; i++) { const a = nn.emaTop[i], b = nn.emaBot[i]; if (Number.isFinite(a) && a > max) max = a; if (Number.isFinite(b) && b < min) min = b; }
   const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * .08; min -= pad; max += pad;
   if (priceMan) { min = priceMan.min; max = priceMan.max; }
-  geo = {w, h, left, right, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
+  geo = {w, h, left, right, gutter, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
 
   // cuadrícula y escala de precios
   g.font = '10px system-ui'; g.textAlign = 'left'; g.lineWidth = .6;
@@ -594,6 +597,7 @@ function render() {
   if (state.indicators.nnSR && ind.sr) drawNovaSRBoxes(ind.sr, lo, hi);
   if (state.indicators.nnPiv && ind.piv) drawNovaPivots(ind.piv, lo, hi);
   if (state.indicators.nnLiq && ind.liq) drawNovaLiq(ind.liq, lo, hi, fg);
+  if (vpOn) drawNovaVPZone(ind.vp);
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailFill(ind.trail, lo, hi);
   // velas
   const barW = clamp(step * .66, 1.5, 16), limeBars = !!(state.indicators.nnLiq && state.indicators.nnLiqBars && ind.liq);
@@ -671,6 +675,7 @@ function render() {
     g.stroke();
   }
   panelKeys.forEach((k, idx) => drawSubPanel(k, geo.extraTop + idx * panelH, panelH, lo, hi, {left, w, right, line, text}));
+  if (vpOn) drawNovaVP(ind.vp, fg);
   if (state.indicators.nnLiq && ind.liq) drawNovaLiqTable(fg);
   if (nn && state.indicators.nnRules) drawNovaRules();
   if (nn && state.indicators.nnIa && nn.last) drawNovaScore(nn.last);
@@ -707,7 +712,7 @@ function drawSubPanel(key, top0, H, lo, hi, o) {
   if (mx === mn) { mx += 1; mn -= 1; }
   const pad = key === 'stoch' ? 0 : (mx - mn) * .08; mn -= pad; mx += pad;
   const Yp = v => top + (mx - v) / (mx - mn) * height;
-  g.save(); g.beginPath(); g.rect(left, top0, w - right - left + 2, H); g.clip();
+  g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip(); // incluye el eje derecho para que se vean los niveles y la escala
   g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
   g.font = '10px system-ui';
   const last = a => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; };
@@ -794,6 +799,49 @@ function drawNovaTrailLine(t, lo, hi) { // cada tramo toma el color de la tenden
   }
 }
 
+/* ───────── Nova Nexus: Volume Profile ───────── */
+const rgbaOf = (c, a = c[3]) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${+a.toFixed(3)})`;
+function fmtVolPine(v) { // aproxima format.volume: 1.23K · 4.5M · 2B
+  const a = Math.abs(v), sg = v < 0 ? '-' : '', t = x => String(+x.toFixed(2));
+  return sg + (a >= 1e12 ? t(a / 1e12) + 'T' : a >= 1e9 ? t(a / 1e9) + 'B' : a >= 1e6 ? t(a / 1e6) + 'M' : a >= 1e3 ? t(a / 1e3) + 'K' : t(a));
+}
+function drawNovaVPZone(vp) { // zona del POC (Last(Zone)): caja y línea punteada sobre las velas del perfil
+  const C = vp.colors, x1 = X(vp.from), x2 = X(vp.to), yT = Y(vp.pocTop), yB = Y(vp.pocBot), yc = Y(vp.pocPrice);
+  g.fillStyle = rgbaOf(C.HVC, .27); g.fillRect(x1, yT, x2 - x1, yB - yT);
+  g.strokeStyle = rgbaOf(C.HVC); g.lineWidth = 1; g.setLineDash([]); g.strokeRect(x1, yT, x2 - x1, yB - yT);
+  g.setLineDash([1, 3]); g.beginPath(); g.moveTo(x1, yc); g.lineTo(x2, yc); g.stroke(); g.setLineDash([]);
+}
+function drawNovaVP(vp, fg) { // columnas del perfil: sentimiento | precios | volumen, en el margen derecho (mismo orden que el Pine)
+  const G = geo.gutter, x0 = geo.left + geo.plotW, small = geo.w < 480;
+  const Wp = clamp(Math.round(G * .30), 38, 56), R = G - Wp - 8, Ws = Math.round(R * .42), Wv = R - Ws;
+  const sb = x0 + 4 + Ws, pc = sb + 1, vb = pc + Wp; // base del sentimiento (crece a la izquierda), columna de precios, base del volumen (crece a la derecha)
+  g.save(); g.beginPath(); g.rect(x0, geo.plotTop, G, geo.plotH); g.clip();
+  g.font = `${small ? 8 : 9}px system-ui`; g.textBaseline = 'alphabetic';
+  const fits = (txt, wMax) => g.measureText(txt).width + 6 <= wMax;
+  const pctTxt = v => `(${+v.toFixed(2)}%)`;
+  for (const r of vp.rows) {
+    const yT = Y(r.bot + vp.step * .9), yB = Y(r.bot + vp.step * .1), h = yB - yT;
+    if (yB < geo.plotTop || yT > geo.plotTop + geo.plotH) continue;
+    const ty = yT + h / 2 + 3, tall = h >= 8;
+    // columna de precios
+    g.fillStyle = 'rgba(41,98,255,.063)'; g.fillRect(pc, yT, Wp, h); g.strokeStyle = 'rgba(41,98,255,.5)'; g.lineWidth = 1; g.strokeRect(pc, yT, Wp, h);
+    if (tall) { g.fillStyle = fg; g.textAlign = 'center'; g.fillText(fmt(r.center), pc + Wp / 2, ty); }
+    // volumen (hacia la derecha)
+    const wv = r.lpm * Wv;
+    if (wv >= .5) {
+      g.fillStyle = rgbaOf(r.vcol); g.fillRect(vb, yT, wv, h); g.strokeStyle = rgbaOf(r.vcol); g.strokeRect(vb, yT, wv, h);
+      if (tall) { const full = `${fmtVolPine(r.quote)} USDT ${pctTxt(r.pct)}`, txt = fits(full, wv) ? full : fits(pctTxt(r.pct), wv) ? pctTxt(r.pct) : ''; if (txt) { g.fillStyle = fg; g.textAlign = 'left'; g.fillText(txt, vb + 3, ty); } }
+    }
+    // sentimiento (hacia la izquierda)
+    const ws = r.dpm * Ws;
+    if (r.scol && ws >= .5) {
+      g.fillStyle = rgbaOf(r.scol); g.fillRect(sb - ws, yT, ws, h); g.strokeStyle = rgbaOf(r.scol); g.strokeRect(sb - ws, yT, ws, h);
+      if (tall) { const full = `${fmtVolPine(r.bbp)} ${pctTxt(r.bpct)}`, txt = fits(full, ws) ? full : fits(pctTxt(r.bpct), ws) ? pctTxt(r.bpct) : ''; if (txt) { g.fillStyle = fg; g.textAlign = 'right'; g.fillText(txt, sb - 3, ty); } }
+    }
+  }
+  g.restore(); g.textAlign = 'left';
+}
+
 /* ───────── Nova Nexus: Liquidaciones ───────── */
 const LIQ_RGB = {up: '34,171,148', dn: '247,82,95'}, LIQ_ALPHA = {5: .10, 10: .20, 25: .30, 50: .40, 100: .50}; // transparencias 90/80/70/60/50 del Pine
 function drawNovaLiq(liq, lo, hi, fg) {
@@ -810,7 +858,7 @@ function drawNovaLiq(liq, lo, hi, fg) {
 }
 function drawNovaLiqTable(fg) { // tabla "Active Liquidation Levels" (centro-derecha); los cinco apalancamientos van activos por defecto
   const rows = [5, 10, 25, 50, 100], small = geo.w < 480, lh = small ? 14 : 17, w = small ? 96 : 118, hdr = lh * 2 + 4, h = hdr + rows.length * lh + 6;
-  const x = geo.w - geo.right - w - 4, y = geo.plotTop + (geo.plotH - h) / 2;
+  const x = geo.left + geo.plotW - w - 4, y = geo.plotTop + (geo.plotH - h) / 2;
   g.save(); g.fillStyle = 'rgba(0,0,0,.35)'; roundRect(x, y, w, h, 4); g.fill();
   g.font = `${small ? 8 : 10}px system-ui`; g.textAlign = 'left'; g.fillStyle = fg; g.globalAlpha = .5;
   g.fillText('Active', x + 6, y + lh - 3); g.fillText('Liquidation Levels', x + 6, y + lh * 2 - 3); g.globalAlpha = 1;
@@ -926,7 +974,7 @@ function drawNovaSignals(nn, lo, hi, n) {
   }
 }
 function drawNovaRules() {
-  const txt = NovaNexus.defaults.rulesText.split('\n'), x2 = geo.w - geo.right - 4, small = geo.w < 480, y0 = geo.plotTop + (small ? 58 : 44);
+  const txt = NovaNexus.defaults.rulesText.split('\n'), x2 = geo.left + geo.plotW - 4, small = geo.w < 480, y0 = geo.plotTop + (small ? 58 : 44);
   g.font = `${small ? 8 : 10}px system-ui`; const lh = small ? 11 : 14, wText = Math.max(...txt.map(t => g.measureText(t).width)) + 14, w = Math.max(wText, 70), x = x2 - w;
   g.save(); g.globalAlpha = .92;
   g.fillStyle = '#4361cf'; g.fillRect(x, y0, w, small ? 16 : 20);
@@ -938,7 +986,7 @@ function drawNovaRules() {
 }
 function drawNovaScore(sg) {
   const buy = sg.side === 'buy', col = NN_COL[buy ? 'buy' : 'sell'], txt = `${buy ? '▲ BUY' : '▼ SELL'}  ${sg.score} ${'★'.repeat(sg.score)}`;
-  g.font = 'bold 10px system-ui'; const w = g.measureText(txt).width + 14, x = geo.w - geo.right - w - 4, y = geo.plotTop + geo.plotH - 20;
+  g.font = 'bold 10px system-ui'; const w = g.measureText(txt).width + 14, x = geo.left + geo.plotW - w - 4, y = geo.plotTop + geo.plotH - 20;
   g.fillStyle = 'rgba(0,0,0,.6)'; roundRect(x, y, w, 17, 4); g.fill(); g.fillStyle = col; g.textAlign = 'left'; g.fillText(txt, x + 7, y + 12);
 }
 /* Herramientas de la fase 2: rayo, vertical, canal, flecha, texto, medición, extensión Fib, marcador, Long/Short */
@@ -947,7 +995,8 @@ function arrowHead(from, to, size = 9) {
   g.beginPath(); g.moveTo(to.x, to.y); g.lineTo(to.x - size * Math.cos(ang - .45), to.y - size * Math.sin(ang - .45)); g.lineTo(to.x - size * Math.cos(ang + .45), to.y - size * Math.sin(ang + .45)); g.closePath(); g.fill();
 }
 function tag(txt, x, y, fill, align = 'left') { // etiqueta con fondo
-  g.font = 'bold 10px system-ui'; const w = g.measureText(txt).width + 10, x0 = align === 'right' ? x - w : x;
+  g.font = 'bold 10px system-ui'; const w = g.measureText(txt).width + 10; let x0 = align === 'right' ? x - w : x;
+  const rx = geo.left + geo.plotW; x0 = Math.max(geo.left, Math.min(x0, rx - w)); // dentro del área del gráfico
   g.fillStyle = fill; roundRect(x0, y - 9, w, 17, 3); g.fill(); g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText(txt, x0 + 5, y + 3.5);
 }
 function drawShapeExtra(d, a, b, rightX, col) {

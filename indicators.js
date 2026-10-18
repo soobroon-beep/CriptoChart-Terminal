@@ -295,6 +295,49 @@
     return {levels, after};
   }
 
-  root.CCTIndicators = {liquidations, LIQ_AFTER, pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
+  /* Nova Nexus · Volume Profile (con detección de nodos) — port de las líneas 2282-2600 del Pine, configuración por defecto:
+     fuente Volumen, 25 filas, últimas 200 velas (199 si hay más historial: `rpLN := last_bar_index > rpLN ? rpLN-1 : last_bar_index`),
+     umbral de nodos altos 53 % y bajos 37 %, perfil de sentimiento por polaridad de vela (cierre > apertura), POC «Last(Zone)», tema Default.
+     Reparto del volumen de cada vela entre las filas que toca, proporcional al rango de precio que cubre (las 4 ramas de `vPOR` del Pine).
+     Como en el Pine, solo se dibuja si la última vela tiene volumen > 0. Colores: [r, g, b, alfa] con la interpolación lineal de color.from_gradient. */
+  const VP = {HVC: [255, 235, 59, .5], AVC: [41, 98, 255, .5], LVC: [242, 54, 69, .5], BLC: [38, 166, 154], BRC: [239, 83, 80]};
+  function gradient(v, lo, hi, c1, c2) {
+    const t = hi === lo ? 1 : Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+    return c1.map((x, i) => x + (c2[i] - x) * t);
+  }
+  function volumeProfile(c, o = {}) {
+    const R = o.rows || 25, n = c.length, last = n - 1; if (n < 2) return null;
+    const hiT = (o.hiThr == null ? 53 : o.hiThr) / 100, loT = (o.loThr == null ? 37 : o.loThr) / 100;
+    let ln = o.lookback || 200; ln = last > ln ? ln - 1 : last;
+    if (ln <= 0 || !(c[last].v > 0)) return null;
+    const from = last - ln; let lo = c[from].l, hi = c[from].h;
+    for (let i = from + 1; i <= last; i++) { if (c[i].l < lo) lo = c[i].l; if (c[i].h > hi) hi = c[i].h; }
+    const step = (hi - lo) / R; if (!(step > 0)) return null;
+    const vst = new Array(R).fill(0), vsb = new Array(R).fill(0);
+    for (let bi = ln; bi >= 0; bi--) {
+      const b = c[last - bi], v = b.v || 0, bull = b.c > b.o;
+      for (let l = 0; l < R; l++) {
+        const pl = lo + l * step;
+        if (b.h >= pl && b.l < pl + step) {
+          const por = b.l >= pl && b.h > pl + step ? (pl + step - b.l) / (b.h - b.l)
+            : b.h <= pl + step && b.l < pl ? (b.h - pl) / (b.h - b.l)
+            : b.l >= pl && b.h <= pl + step ? 1 : step / (b.h - b.l);
+          vst[l] += v * por; if (bull) vsb[l] += v * por;
+        }
+      }
+    }
+    const total = vst.reduce((a, b) => a + b, 0), maxV = Math.max(...vst); if (!(maxV > 0)) return null;
+    const poc = vst.indexOf(maxV), bbps = vst.map((t, l) => 2 * vsb[l] - t), maxD = Math.max(...bbps.map(Math.abs));
+    const rows = vst.map((vol, l) => {
+      const bot = lo + l * step, center = lo + (l + .5) * step, lpm = vol / maxV, bbp = bbps[l], dpm = maxD > 0 ? Math.abs(bbp) / maxD : 0;
+      const vcol = lpm > hiT ? gradient(lpm, hiT, 1, VP.AVC, VP.HVC) : gradient(lpm, 0, loT, VP.LVC, VP.AVC);
+      const sb = bbp > 0 ? VP.BLC : VP.BRC; // transparencias 88 → 48 (70 + int(73/4) → 30 + int(73/4)) del Pine
+      return {l, bot, top: bot + step, center, vol, bull: vsb[l], bbp, lpm, dpm, vcol, scol: maxD > 0 ? gradient(dpm, 0, .7, [...sb, .12], [...sb, .52]) : null,
+        quote: vol * center, pct: Math.abs(vol / total * 100), bpct: vol ? Math.abs(bbp / vol * 100) : 0};
+    });
+    return {from, to: last, ln, lo, hi, step, rows, poc, pocPrice: lo + (poc + .5) * step, pocBot: lo + poc * step, pocTop: lo + (poc + 1) * step, total, colors: VP};
+  }
+
+  root.CCTIndicators = {volumeProfile, gradient, liquidations, LIQ_AFTER, pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTIndicators;
 })(typeof window !== 'undefined' ? window : globalThis);

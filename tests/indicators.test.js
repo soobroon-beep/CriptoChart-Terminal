@@ -154,3 +154,34 @@ test('Liquidaciones: nada antes de la fecha `after` y nunca más de 500 líneas 
   const t0 = Date.UTC(2026, 0, 1), z = Array.from({length: 4000}, (_, i) => { const p = 100 + (i % 2 ? 5 : -5) * (1 + (i % 10) / 10); return {t: t0 + i * 36e5, o: p, h: p + 1, l: p - 1, c: p, v: 100 + (i % 7) * 5 + (i > 60 ? i : 0)}; });
   const r = I.liquidations(z, 36e5, {lookback: 2}); assert.ok(r.levels.every(L => L.lines.length <= 500)); assert.ok(r.levels.some(L => L.lines.length === 500));
 });
+/* Volume Profile — escenario a mano: 4 filas de ancho 4 entre 0 y 16, tres velas de rango 8.
+   B0 (0–8, alcista, v 80): 40 a la fila 0, 40 a la 1, 0 a la 2 (toca el borde) · B1 (4–12, bajista, v 40): 20 / 20 · B2 (8–16, alcista, v 16): 8 / 8.
+   Volumen por fila 40/60/28/8 (suma 136 = volumen total) · alcista 40/40/8/8 → bbp = 2·alcista − total = 40/20/−12/8 → |bbp| máx 40. */
+const vpBars = () => [{o: 2, h: 8, l: 0, c: 6, v: 80}, {o: 9, h: 12, l: 4, c: 5, v: 40}, {o: 9, h: 16, l: 8, c: 15, v: 16}];
+test('Volume Profile: reparto por filas, sentimiento, POC y porcentajes (escenario revisado a mano)', () => {
+  const p = I.volumeProfile(vpBars(), {rows: 4});
+  assert.deepEqual([p.from, p.to, p.lo, p.hi, p.step, p.poc, p.pocPrice, p.total], [0, 2, 0, 16, 4, 1, 6, 136]);
+  assert.deepEqual(p.rows.map(r => r.vol), [40, 60, 28, 8]); assert.deepEqual(p.rows.map(r => r.bull), [40, 40, 8, 8]); assert.deepEqual(p.rows.map(r => r.bbp), [40, 20, -12, 8]);
+  [2 / 3, 1, 28 / 60, 8 / 60].forEach((v, i) => near(p.rows[i].lpm, v)); [1, .5, .3, .2].forEach((v, i) => near(p.rows[i].dpm, v));
+  near(p.rows[1].quote, 360); near(p.rows[1].pct, 60 / 136 * 100); near(p.rows[1].bpct, 100 / 3);
+  assert.equal(p.pocBot, 4); assert.equal(p.pocTop, 8);
+});
+test('Volume Profile: colores de nodos y de sentimiento según color.from_gradient (extremos exactos, intermedios calculados a mano)', () => {
+  const p = I.volumeProfile(vpBars(), {rows: 4}), c = i => p.rows[i].vcol, s = i => p.rows[i].scol, close = (a, b) => a.forEach((x, k) => near(x, b[k], 1e-2));
+  assert.deepEqual(c(1), [255, 235, 59, .5]);                                  // nodo máximo → amarillo
+  close(c(0), [103.23, 137.84, 198.01, .5]);                                   // 2/3 > 53 %: t = (0.6667−0.53)/0.47 = 0.2908 entre azul y amarillo
+  assert.deepEqual(c(2), [41, 98, 255, .5]);                                   // entre 37 % y 53 % → azul (promedio)
+  close(c(3), [169.57, 69.86, 136.03, .5]);                                    // 13.3 % < 37 %: t = 0.3604 entre rojo y azul
+  assert.deepEqual(s(0), [38, 166, 154, .52]);                                 // bbp > 0 y dpm 1 → alcista con la opacidad máxima
+  close(s(2), [239, 83, 80, .12 + .4 * (.3 / .7)]);                            // bbp < 0, dpm 0.3 → bajista
+  assert.deepEqual(I.gradient(5, 0, 1, [0, 0, 0, 0], [10, 20, 30, 1]), [10, 20, 30, 1]); assert.deepEqual(I.gradient(-3, 0, 1, [0, 0, 0, 0], [10, 20, 30, 1]), [0, 0, 0, 0]);
+});
+test('Volume Profile: ventana (199/200 velas o todas), conservación del volumen y casos sin perfil', () => {
+  const t0 = Date.UTC(2026, 0, 1), mkc = n => Array.from({length: n}, (_, i) => { const p = 100 + Math.sin(i / 6) * 9 + i * .05, w = 1 + (i % 5) * .7; return {t: t0 + i * 36e5, o: p - w / 3, c: p + w / 3, h: p + w, l: p - w, v: 10 + (i * 13) % 37}; });
+  const a = I.volumeProfile(mkc(500)), b = I.volumeProfile(mkc(120)), d = I.volumeProfile(mkc(500), {lookback: 50});
+  assert.equal(a.to - a.from + 1, 200); assert.equal(b.from, 0); assert.equal(b.to, 119); assert.equal(d.to - d.from + 1, 50);
+  for (const [p, bars] of [[a, mkc(500)], [b, mkc(120)]]) near(p.total, bars.slice(p.from).reduce((x, y) => x + y.v, 0), 1e-6);
+  assert.equal(a.rows.length, 25);
+  const z = mkc(60); z[59].v = 0; assert.equal(I.volumeProfile(z), null);        // sin volumen en la última vela no hay perfil
+  assert.equal(I.volumeProfile(Array.from({length: 30}, () => ({o: 5, h: 5, l: 5, c: 5, v: 1}))), null); // rango plano
+});
