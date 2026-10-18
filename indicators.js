@@ -263,6 +263,38 @@
     return {lines};
   }
 
-  root.CCTIndicators = {pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
+  /* Nova Nexus · Liquidaciones — port de las líneas 2602-2760 del Pine.
+     Para cada apalancamiento (5x, 10x, 25x, 50x, 100x) se traza, en cada pivote (3 barras a cada lado; 2 en 1d/1w/1M),
+     un nivel de liquidación: pivote bajo → low/(1+riesgo) (liquidación de largos), pivote alto → high·(1+riesgo) (de cortos).
+     Solo se crea si el volumen "pasa el filtro" del apalancamiento: avg = (máx+mín del volumen en `lookback` barras)/2 frente
+     a su SMA(lookback+10): 5x avg>media · 10x ≥1.025× · 25x ≥1.05× · 50x ≥1.1× · 100x ≥1.2×.
+     La línea nace en la barra del pivote y se alarga cada barra mientras la vela NO contenga el nivel (high>y y low<y);
+     al primer cruce deja de alargarse. Máximo 500 líneas por apalancamiento. Solo cuenta desde `after` (2023-01-01 UTC por defecto).
+     Suposición: timestamp("2023-01-01") sin zona horaria se toma como UTC. */
+  const LIQ_AFTER = Date.UTC(2023, 0, 1);
+  const LIQ_SPEC = [
+    {lev: 5, risk: .20, ok: (a, m) => a > m}, {lev: 10, risk: .10, ok: (a, m) => a >= 1.025 * m},
+    {lev: 25, risk: .04, ok: (a, m) => a >= 1.05 * m}, {lev: 50, risk: .02, ok: (a, m) => a >= 1.1 * m}, {lev: 100, risk: .01, ok: (a, m) => a >= 1.2 * m}];
+  function liquidations(c, intervalMs, o = {}) {
+    const N = o.lookback || 40, M = N + 10, P = intervalMs >= 864e5 ? 2 : 3, n = c.length, after = o.after == null ? LIQ_AFTER : o.after;
+    const avg = blank(n), mean = blank(n);
+    for (let i = N - 1; i < n; i++) { let hi = -Infinity, lo = Infinity; for (let k = 0; k < N; k++) { const v = c[i - k].v; if (v > hi) hi = v; if (v < lo) lo = v; } avg[i] = (hi + lo) / 2; }
+    for (let i = N - 1 + M - 1; i < n; i++) { let t = 0; for (let k = 0; k < M; k++) t += avg[i - k]; mean[i] = t / M; } // con algún na en la ventana, ta.sma da na
+    const levels = LIQ_SPEC.map(sp => ({lev: sp.lev, risk: sp.risk, lines: []}));
+    for (let i = 0; i < n; i++) {
+      if (!(after < c[i].t)) continue;
+      const pl = pivotAt(c, i, P, false), ph = pivotAt(c, i, P, true);
+      LIQ_SPEC.forEach((sp, li) => {
+        const arr = levels[li].lines, flag = avg[i] != null && mean[i] != null && sp.ok(avg[i], mean[i]);
+        const push = ln => { if (arr.length === 500) arr.shift(); arr.push(ln); };
+        if (pl != null && flag) push({x1: i - P, x2: i, y: pl / (1 + sp.risk), side: 'dn'});
+        if (ph != null && flag) push({x1: i - P, x2: i, y: ph * (1 + sp.risk), side: 'up'});
+        for (let k = arr.length - 1; k >= 0; k--) { const l = arr[k]; if (i - 1 === l.x2 && !(c[i].h > l.y && c[i].l < l.y)) l.x2 = i; }
+      });
+    }
+    return {levels, after};
+  }
+
+  root.CCTIndicators = {liquidations, LIQ_AFTER, pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTIndicators;
 })(typeof window !== 'undefined' ? window : globalThis);

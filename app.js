@@ -16,7 +16,7 @@ const ONEPT = ['horizontal', 'vertical', 'text', 'marker'], THREEPT = ['channel'
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false},
+  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false},
   light: false, drawings: {}
 };
 function merge(s) {
@@ -231,6 +231,8 @@ const indicatorMeta = [
   ['nnOb','Nova Nexus · Order Blocks','Order Blocks volumétricos con actividad compra/venta (últimos 5)','#f23645'],
   ['nnTrail','Nova Nexus · Smooth Trail','Trailing stop EMA 30 ± 2 ATR(20), suavizado 2 · verde alcista, morado bajista','#119c7e'],
   ['nnRev','Nova Nexus · Reversal Bands','SMA 70 ± 6/7/8 ATR(70): zonas de posible reversión','#f23645'],
+  ['nnLiq','Nova Nexus · Liquidaciones','Niveles de liquidación 5x/10x/25x/50x/100x desde pivotes con filtro de volumen, y tabla de niveles activos','#22ab94'],
+  ['nnLiqBars','Nova Nexus · Liquidaciones: velas lima','Opcional: colorea todas las velas de lima, como el barcolor del Pine al activar Liquidaciones (requiere Liquidaciones)','#00e676'],
   ['nnPiv','Nova Nexus · Pivots','Zigzag de pivotes (50), pivotes perdidos y niveles fantasma','#26a69a'],
   ['nnSR','Nova Nexus · Soporte y Resistencia','Cajas de soporte/resistencia con Break y Retest (pivotes de 20 velas)','#ff5252'],
   ['nnRules','Nova Nexus · Reglas','Panel de reglas de trading sobre el gráfico','#4361cf']
@@ -282,6 +284,7 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.rev = I.nnRev ? T.reversalBands(candles) : null;
   ind.sr = I.nnSR ? T.supportResistance(candles) : null;
   ind.piv = I.nnPiv ? T.pivots(candles, 50) : null;
+  ind.liq = I.nnLiq ? T.liquidations(candles, iv) : null;
 }
 function calcNova() {
   const I = state.indicators;
@@ -590,11 +593,12 @@ function render() {
   if (state.indicators.nnRev && ind.rev) drawNovaRev(ind.rev, lo, hi);
   if (state.indicators.nnSR && ind.sr) drawNovaSRBoxes(ind.sr, lo, hi);
   if (state.indicators.nnPiv && ind.piv) drawNovaPivots(ind.piv, lo, hi);
+  if (state.indicators.nnLiq && ind.liq) drawNovaLiq(ind.liq, lo, hi, fg);
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailFill(ind.trail, lo, hi);
   // velas
-  const barW = clamp(step * .66, 1.5, 16);
+  const barW = clamp(step * .66, 1.5, 16), limeBars = !!(state.indicators.nnLiq && state.indicators.nnLiqBars && ind.liq);
   for (let i = lo; i < hi; i++) {
-    const d = candles[i], xx = X(i), col = d.c >= d.o ? up : down, yo = Y(d.o), yc = Y(d.c);
+    const d = candles[i], xx = X(i), col = limeBars && d.t > ind.liq.after ? '#00e676' : d.c >= d.o ? up : down, yo = Y(d.o), yc = Y(d.c);
     g.strokeStyle = g.fillStyle = col; g.lineWidth = 1;
     g.beginPath(); g.moveTo(xx, Y(d.h)); g.lineTo(xx, Y(d.l)); g.stroke();
     g.fillRect(xx - barW / 2, Math.min(yo, yc), barW, Math.max(1, Math.abs(yo - yc)));
@@ -667,6 +671,7 @@ function render() {
     g.stroke();
   }
   panelKeys.forEach((k, idx) => drawSubPanel(k, geo.extraTop + idx * panelH, panelH, lo, hi, {left, w, right, line, text}));
+  if (state.indicators.nnLiq && ind.liq) drawNovaLiqTable(fg);
   if (nn && state.indicators.nnRules) drawNovaRules();
   if (nn && state.indicators.nnIa && nn.last) drawNovaScore(nn.last);
   // retícula (mantener pulsado)
@@ -787,6 +792,30 @@ function drawNovaTrailLine(t, lo, hi) { // cada tramo toma el color de la tenden
     g.strokeStyle = t.trend[i] === 1 ? TRAIL_COL.bull : TRAIL_COL.bear;
     g.beginPath(); g.moveTo(X(i - 1), Y(t.trail[i - 1])); g.lineTo(X(i), Y(t.trail[i])); g.stroke();
   }
+}
+
+/* ───────── Nova Nexus: Liquidaciones ───────── */
+const LIQ_RGB = {up: '34,171,148', dn: '247,82,95'}, LIQ_ALPHA = {5: .10, 10: .20, 25: .30, 50: .40, 100: .50}; // transparencias 90/80/70/60/50 del Pine
+function drawNovaLiq(liq, lo, hi, fg) {
+  // fondo tenue en las velas anteriores a la fecha de inicio (bgcolor del Pine con chart.fg_color al 95 % de transparencia)
+  g.fillStyle = fg; g.globalAlpha = .05;
+  for (let i = lo; i < hi; i++) if (candles[i].t <= liq.after) g.fillRect(X(i) - geo.step / 2, geo.plotTop, geo.step, geo.plotH);
+  g.globalAlpha = 1; g.lineWidth = 3; g.setLineDash([]); g.lineCap = 'butt';
+  for (const L of liq.levels) for (const l of L.lines) {
+    if (l.x2 < lo - 1 || l.x1 > hi + 1) continue;
+    const y = Y(l.y); if (y < geo.plotTop - 4 || y > geo.plotTop + geo.plotH + 4) continue;
+    g.strokeStyle = `rgba(${LIQ_RGB[l.side]},${LIQ_ALPHA[L.lev]})`;
+    g.beginPath(); g.moveTo(X(l.x1), y); g.lineTo(X(l.x2), y); g.stroke();
+  }
+}
+function drawNovaLiqTable(fg) { // tabla "Active Liquidation Levels" (centro-derecha); los cinco apalancamientos van activos por defecto
+  const rows = [5, 10, 25, 50, 100], small = geo.w < 480, lh = small ? 14 : 17, w = small ? 96 : 118, hdr = lh * 2 + 4, h = hdr + rows.length * lh + 6;
+  const x = geo.w - geo.right - w - 4, y = geo.plotTop + (geo.plotH - h) / 2;
+  g.save(); g.fillStyle = 'rgba(0,0,0,.35)'; roundRect(x, y, w, h, 4); g.fill();
+  g.font = `${small ? 8 : 10}px system-ui`; g.textAlign = 'left'; g.fillStyle = fg; g.globalAlpha = .5;
+  g.fillText('Active', x + 6, y + lh - 3); g.fillText('Liquidation Levels', x + 6, y + lh * 2 - 3); g.globalAlpha = 1;
+  rows.forEach((r, k) => { const yy = y + hdr + (k + 1) * lh - 3; g.fillStyle = fg; g.fillText(r + 'X', x + 6, yy); g.fillStyle = '#00e676'; g.fillText('⬤', x + w - (small ? 20 : 24), yy); });
+  g.restore();
 }
 
 /* ───────── Nova Nexus: Pivots ───────── */

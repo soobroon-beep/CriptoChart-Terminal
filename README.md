@@ -31,10 +31,11 @@ Hasta que se configure Firebase, la app funciona igual y guarda todo solo en el 
 En **Indicadores** hay interruptores para cada módulo, que se dibujan directamente en el gráfico (móvil y escritorio):
 
 - **Señales IA** (BUY/SELL con score ⭐, cooldown y divergencias), **EMA Cloud**, **TP / SL** y panel de **Reglas**.
+- **Liquidaciones**: niveles 5x/10x/25x/50x/100x que nacen en cada pivote (3 velas a cada lado; 2 en 1d/1w/1M) solo si el volumen pasa el filtro de ese apalancamiento, y se alargan hasta que una vela los cruza. Incluye la tabla «Active Liquidation Levels» y el tinte tenue antes del 2023-01-01. Suposición: la fecha de inicio del Pine (`timestamp("2023-01-01")`) se toma como UTC. El `barcolor` lima del Pine, que pinta todas las velas, va aparte como opción **«Liquidaciones: velas lima»** (apagada por defecto).
 - **Pivots** (longitud 50, estilo LuxAlgo): zigzag entre pivotes, pivotes «perdidos» discontinuos, niveles fantasma y la proyección de la última barra. Las etiquetas del Pine original están anuladas en el script, por eso aquí tampoco hay.
 - **Soporte y Resistencia** (port de *Breaks and Retests [HG]* © HoanGhetti, MPL 2.0): cajas por pivote de 20 velas, etiquetas Break / Potential Retest / Retest. Usa el modo «Repainting: On» del Pine; sin alertas.
 - **Smooth Trail** (EMA 30 ± 2 ATR(20), suavizado 2) y **Reversal Bands** (SMA 70 ± 6/7/8 ATR(70)): cálculos en `indicators.js`, con pruebas.
 - **Estructura SMC**: BOS / CHoCH con barridos (`x`), swing de longitud 5, ventana de las últimas 500 velas.
 - **Order Blocks**: volumétricos, con actividad de compra/venta y % de volumen (últimos 5).
 
-Los módulos SMC están apagados por defecto. Pendientes de portar: Volume Profile y Liquidaciones. Los perfiles Mobile/Cloud/SMC del Pine todavía no existen aquí. Los parámetros de cada módulo están fijos en los valores por defecto del Pine y se usa el tema Default.
+Los módulos SMC están apagados por defecto. Pendiente de portar: Volume Profile. Los perfiles Mobile/Cloud/SMC del Pine todavía no existen aquí. Los parámetros de cada módulo están fijos en los valores por defecto del Pine y se usa el tema Default.

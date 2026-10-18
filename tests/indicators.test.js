@@ -123,3 +123,34 @@ test('Pivots: dos máximos seguidos generan el mínimo "perdido", su nivel fanta
     'miss_ph:7,19.5>12,8:s:w1', 'miss_pl:12,8>17,20:s:w1',
     'miss_ph:17,20>19,14:d:w1', 'proj_h:19,14>19,14:s:w2']);
 });
+/* Escenario de Liquidaciones diseñado a mano (lookback 2 → SMA de 12; volumen 10 hasta la barra 19 y 100 desde la 20).
+   Pivote bajo en la barra 24 (low 100), confirmado en la 27: avg=100, media=795/12=66.25 → pasan los 5 filtros.
+   Pivote alto en la 31 (high 140), confirmado en la 34: avg=108, media=1212/12=101 → ratio 1.069: pasan 5x, 10x y 25x, no 50x ni 100x.
+   Barra 37 (h 120, l 95) contiene 96.15 / 98.04 / 99.01 → esos niveles dejan de alargarse; barra 38 (h 150, l 140) contiene 145.6. */
+const liqBars = () => {
+  const t0 = Date.UTC(2026, 0, 1), b = [], add = (i, h, l, cl, v) => b.push({t: t0 + i * 36e5, o: cl, h, l, c: cl, v});
+  for (let i = 0; i <= 24; i++) { const p = 130 - 29 * i / 24; add(i, p + 1, p - 1, p, i < 20 ? 10 : 100); }
+  for (let i = 25; i <= 31; i++) { const p = 101 + 38 * (i - 24) / 7; add(i, p + 1, p - 1, p, 100); }
+  for (let i = 32; i <= 36; i++) { const p = 139 - 21 * (i - 31) / 5; add(i, p + 1, p - 1, p, i === 33 || i === 34 ? 108 : 100); }
+  add(37, 120, 95, 100, 100); add(38, 150, 140, 148, 200); add(39, 148, 146, 147, 200);
+  return b;
+};
+const liqSummary = (r, only) => r.levels.filter(L => !only || only.includes(L.lev)).map(L => [L.lev, L.lines.map(l => `${l.side}:${l.x1}-${l.x2}@${l.y.toFixed(4)}`)]);
+test('Liquidaciones: niveles por apalancamiento, filtro de volumen y fin de la extensión al ser cruzados', () => {
+  assert.deepEqual(liqSummary(I.liquidations(liqBars(), 36e5, {lookback: 2})), [
+    [5, ['dn:24-39@83.3333', 'up:31-39@168.0000']],
+    [10, ['dn:24-39@90.9091', 'up:31-39@154.0000']],
+    [25, ['dn:24-36@96.1538', 'up:31-37@145.6000']],   // dn se detiene al cruzarlo la barra 37; up al cruzarlo la 38
+    [50, ['dn:24-36@98.0392']],                          // el pivote alto no pasa el filtro 1.1×
+    [100, ['dn:24-36@99.0099']]]);
+});
+test('Liquidaciones: en 1d/1w/1M el pivote usa 2 barras (más pivotes, filtro 25x lo descarta el alto)', () => {
+  assert.deepEqual(liqSummary(I.liquidations(liqBars(), 864e5, {lookback: 2}), [5, 25]), [
+    [5, ['dn:24-39@83.3333', 'up:31-39@168.0000', 'dn:37-39@79.1667']],
+    [25, ['dn:24-36@96.1538', 'dn:37-39@91.3462']]]);    // el pivote alto confirmado en la 33 tiene ratio 1.037 < 1.05
+});
+test('Liquidaciones: nada antes de la fecha `after` y nunca más de 500 líneas por apalancamiento', () => {
+  assert.deepEqual(I.liquidations(liqBars(), 36e5, {lookback: 2, after: Date.UTC(2030, 0, 1)}).levels.map(l => l.lines.length), [0, 0, 0, 0, 0]);
+  const t0 = Date.UTC(2026, 0, 1), z = Array.from({length: 4000}, (_, i) => { const p = 100 + (i % 2 ? 5 : -5) * (1 + (i % 10) / 10); return {t: t0 + i * 36e5, o: p, h: p + 1, l: p - 1, c: p, v: 100 + (i % 7) * 5 + (i > 60 ? i : 0)}; });
+  const r = I.liquidations(z, 36e5, {lookback: 2}); assert.ok(r.levels.every(L => L.lines.length <= 500)); assert.ok(r.levels.some(L => L.lines.length === 500));
+});
