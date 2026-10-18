@@ -1330,16 +1330,38 @@ function pineRunRaw(code, opts) { // Worker aislado con tiempo límite; si no ha
       pineWorker.onerror = () => { pineNoWorker = true; try { pineWorker.terminate(); } catch {} pineWorker = null; for (const [id, j] of [...pineJobs]) { clearTimeout(j.t); pineJobs.delete(id); j.ok(pineInline(j.code, j.opts)); } };
     }
     return new Promise(ok => {
-      const id = ++pineSeq, t = setTimeout(() => { pineJobs.delete(id); try { pineWorker.terminate(); } catch {} pineWorker = null; ok({ok: false, error: {msg: 'El script tardó demasiado y se detuvo', line: 0}}); }, 14000);
+      const id = ++pineSeq, t = setTimeout(() => { pineJobs.delete(id); try { pineWorker.terminate(); } catch {} pineWorker = null; ok({ok: false, error: {msg: 'El script tardó demasiado y se detuvo', line: 0}}); }, 30000);
       pineJobs.set(id, {ok, t, code, opts}); pineWorker.postMessage({id, code, candles, opts});
     });
   } catch { pineNoWorker = true; return Promise.resolve(pineInline(code, opts)); }
+}
+// request.security: la app descarga las velas de Binance que pide el script y repite la corrida una vez
+const pineSecCache = new Map();
+async function pineSecCandles(sym, itv) {
+  const key = sym + '|' + itv, hit = pineSecCache.get(key); if (hit && Date.now() - hit.at < 30000) return hit.data;
+  let data = [];
+  try {
+    const agg = itv === '3M' ? 'q' : itv === '12M' ? 'y' : null, raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${agg ? '1M' : itv}&limit=1000`);
+    let cs = raw.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}));
+    if (agg) { const out = [], bucket = t => { const d = new Date(t); return agg === 'y' ? d.getUTCFullYear() : d.getUTCFullYear() * 4 + Math.floor(d.getUTCMonth() / 3); }; for (const c of cs) { const b = bucket(c.t), last = out[out.length - 1]; if (last && last.b === b) { last.h = Math.max(last.h, c.h); last.l = Math.min(last.l, c.l); last.c = c.c; last.v += c.v; } else out.push({b, t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v}); } cs = out.map(({b, ...r}) => r); }
+    data = cs;
+  } catch {}
+  pineSecCache.set(key, {at: Date.now(), data}); return data;
+}
+async function pineRunFull(code, opts) {
+  let res = await pineRunRaw(code, opts);
+  if (res && res.ok && res.needs && res.needs.length) {
+    const sec = Object.assign({}, opts.sec);
+    await Promise.all(res.needs.slice(0, 12).map(async n => { sec[n.symbol + '|' + n.interval] = await pineSecCandles(n.symbol, n.interval); }));
+    res = await pineRunRaw(code, Object.assign({}, opts, {sec}));
+  }
+  return res;
 }
 async function pineRunOne(p) {
   if (pineBusy[p.sid]) { pineDirty[p.sid] = true; return; }
   const code = (scripts.find(x => x.id === p.sid) || {}).code; if (!code || !candles.length) return;
   const key = `${state.symbol}|${state.interval}|${candles[0].t}`; pineBusy[p.sid] = true;
-  const res = await pineRunRaw(code, {inputs: p.inputs, interval: state.interval, symbol: state.symbol, name: pineName(p.sid), timeLimitMs: 8000});
+  const res = await pineRunFull(code, {inputs: p.inputs, interval: state.interval, symbol: state.symbol, name: pineName(p.sid), timeLimitMs: 12000});
   pineBusy[p.sid] = false; res._key = key; pineRes[p.sid] = res;
   if (pineDirty[p.sid]) { pineDirty[p.sid] = false; pineKey = ''; schedulePine(); }
   if (currentView === 'indicatorView' || (sheetMode === 'indicators' && $('#sheet').classList.contains('open'))) { renderIndicators(); if (sheetMode === 'indicators') $('#sheetList').innerHTML = indicatorRows(); }
@@ -1363,11 +1385,11 @@ function pineSection() {
 }
 function pineMsgHtml(res, code) {
   if (!res.ok) { const src = (code || '').split('\n')[res.error.line - 1]; return `<div class="pine-box err"><b>No se pudo interpretar</b><div>${res.error.line ? 'Línea ' + res.error.line + ': ' : ''}${esc(res.error.msg)}</div>${src ? `<pre>${esc(src.trim().slice(0, 160))}</pre>` : ''}</div>`; }
-  const un = res.warnings.filter(w => w.level === 'unsupported'), rest = res.warnings.filter(w => w.level !== 'unsupported');
+  const un = res.warnings.filter(w => w.level === 'unsupported'), fx = res.warnings.filter(w => w.level === 'fix'), rest = res.warnings.filter(w => w.level !== 'unsupported' && w.level !== 'fix');
   const li = w => `<li>${w.line ? 'Línea ' + w.line + ' · ' : ''}${esc(w.msg)}</li>`;
   return `<div class="pine-box ${res.complete ? 'ok' : 'warn'}"><b>${res.complete ? '✓ Interpretado: no se detectó nada sin soporte' : '⚠ Interpretado con partes SIN soporte: el resultado puede diferir de TradingView'}</b>`
     + `<div>${res.plots.length} plot(s) · ${res.shapes.length} forma(s) · ${res.labels.length + res.lines.length + res.boxes.length} objeto(s) · ${res.stats.ms} ms</div>`
-    + (un.length ? `<ul>${un.map(li).join('')}</ul>` : '') + (rest.length ? `<ul class="info">${rest.map(li).join('')}</ul>` : '') + '</div>';
+    + (fx.length ? `<div class="pine-fix"><b>🔧 Reparado automáticamente (${fx.length})</b><ul class="info">${fx.map(li).join('')}</ul></div>` : '') + (un.length ? `<ul>${un.map(li).join('')}</ul>` : '') + (rest.length ? `<ul class="info">${rest.map(li).join('')}</ul>` : '') + '</div>';
 }
 const PINE_EXAMPLE = `//@version=5
 indicator("Cruce de EMAs (ejemplo)", overlay=true)
@@ -1399,7 +1421,7 @@ function renderPineEditor(list) {
     if (activePine().length >= PINE_MAX) { msg.innerHTML = `<div class="pine-box err">Máximo ${PINE_MAX} scripts activos a la vez. Apaga o quita alguno.</div>`; return; }
     btn.disabled = true; btn.textContent = 'Interpretando…';
     const key = `${state.symbol}|${state.interval}|${candles[0].t}`;
-    const res = await pineRunRaw(code, {interval: state.interval, symbol: state.symbol, name: pineDraft.name || 'Script', timeLimitMs: 8000});
+    const res = await pineRunFull(code, {interval: state.interval, symbol: state.symbol, name: pineDraft.name || 'Script', timeLimitMs: 12000});
     btn.disabled = false; btn.textContent = 'Añadir al gráfico';
     msg.innerHTML = pineMsgHtml(res, code);
     if (!res.ok) return;

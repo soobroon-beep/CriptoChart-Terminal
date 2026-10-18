@@ -115,6 +115,36 @@
       if (lb.yloc === 'abovebar') y = Y(c.h); else if (lb.yloc === 'belowbar') y = Y(c.l); else if (isn(lb.y)) continue; else y = Y(lb.y);
       drawLabel(g, lb, X(lb.x), y, col(lb.ci), col(lb.tci), lb.yloc === 'abovebar' ? 'up' : lb.yloc === 'belowbar' ? 'down' : null);
     }
+    for (const pl of res.polylines || []) {
+      const pts = pl.pts.filter(q => !isn(q[0]) && !isn(q[1])); if (pts.length < 2) continue;
+      g.beginPath(); pts.forEach((q, k) => k ? g.lineTo(X(q[0]), Y(q[1])) : g.moveTo(X(q[0]), Y(q[1]))); if (pl.closed) g.closePath();
+      if (pl.fci !== null && pl.fci !== undefined && P[pl.fci]) { g.fillStyle = P[pl.fci]; g.fill(); }
+      g.strokeStyle = col(pl.lci) || '#2962FF'; g.lineWidth = Math.min(4, pl.w || 1); g.setLineDash(DASH[pl.style] || []); g.stroke(); g.setLineDash([]);
+    }
+    g.restore();
+    drawTables(g, res, o);
+  }
+  // tablas del script: se anclan a una esquina del gráfico (Pine las dibuja en la pantalla, no en el precio)
+  function drawTables(g, res, o) {
+    const P = res.palette, {left, right, top, bottom} = o, SZ = {tiny: 8, small: 9, normal: 11, large: 13, huge: 16, auto: 10};
+    g.save(); g.textBaseline = 'middle';
+    for (const t of res.tables || []) {
+      if (!t.cells.length) continue;
+      const colW = [], rowH = [];
+      for (const c of t.cells) { const fs = SZ[(c.size || 'small').replace(/^size\./, '')] || 9; g.font = fs + 'px system-ui'; const w = c.text ? g.measureText(c.text).width + 10 : 6; colW[c.c] = Math.max(colW[c.c] || 0, Math.min(w, 190)); rowH[c.r] = Math.max(rowH[c.r] || 0, fs + 7); }
+      const cw = i => colW[i] || 0, rh = i => rowH[i] || 0; let W = 0, H = 0; for (let i = 0; i < t.cols; i++) W += cw(i); for (let i = 0; i < t.rows; i++) H += rh(i);
+      if (!W || !H) continue;
+      const pos = t.pos, x0 = pos.includes('left') ? left + 6 : pos.includes('center') ? (left + right - W) / 2 : right - W - 6, y0 = pos.includes('top') ? top + 6 : pos.includes('middle') ? (top + bottom - H) / 2 : bottom - H - 6;
+      if (t.bci !== null && t.bci !== undefined && P[t.bci]) { g.fillStyle = P[t.bci]; g.fillRect(x0, y0, W, H); }
+      for (const c of t.cells) {
+        let x = x0, y = y0; for (let i = 0; i < c.c; i++) x += cw(i); for (let i = 0; i < c.r; i++) y += rh(i);
+        if (c.bci !== null && c.bci !== undefined && P[c.bci]) { g.fillStyle = P[c.bci]; g.fillRect(x, y, cw(c.c), rh(c.r)); }
+        if (!c.text) continue; const fs = SZ[(c.size || 'small').replace(/^size\./, '')] || 9; g.font = fs + 'px system-ui'; g.fillStyle = (c.tci !== null && c.tci !== undefined && P[c.tci]) || '#d1d4dc';
+        const al = String(c.halign || 'center').replace(/^text\./, ''); g.textAlign = al === 'left' ? 'left' : al === 'right' ? 'right' : 'center';
+        g.fillText(c.text.split('\n')[0], al === 'left' ? x + 4 : al === 'right' ? x + cw(c.c) - 4 : x + cw(c.c) / 2, y + rh(c.r) / 2, cw(c.c) - 4);
+      }
+      if (t.frame !== null && t.frame !== undefined && P[t.frame] && t.fw > 0) { g.strokeStyle = P[t.frame]; g.lineWidth = Math.min(3, t.fw); g.strokeRect(x0, y0, W, H); }
+    }
     g.restore();
   }
   function strokePlot(g, p, lo, hi, X, Y, colAt, P, lw, step) {

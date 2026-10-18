@@ -69,11 +69,11 @@ test('label.new / line.new / box.new con límite y delete', () => {
   assert.equal(r2.labels.length, 2); assert.equal(r2.labels[0].x, 2);
 });
 test('lo no soportado se avisa con su línea y marca el resultado como incompleto', () => {
-  const r = vals('t = table.new(position.top_right, 2, 2)\nx = ta.foo(close, 3)\nplot(x)\nstrategy.entry("L", strategy.long)', closes([1, 2, 3]));
+  const r = vals('t = matrix.new<float>(2, 2)\nx = ta.foo(close, 3)\nplot(x)\nstrategy.entry("L", strategy.long)', closes([1, 2, 3]));
   assert.equal(r.complete, false);
   const un = r.warnings.filter(w => w.level === 'unsupported').map(w => w.msg);
-  assert.ok(un.some(m => m.includes('table.new')) && un.some(m => m.includes('ta.foo')) && un.some(m => m.includes('strategy')), un.join(' | '));
-  assert.ok(r.warnings.find(w => w.msg.includes('table.new')).line === 3);
+  assert.ok(un.some(m => m.includes('matrix.new')) && un.some(m => m.includes('ta.foo')) && un.some(m => m.includes('strategy')), un.join(' | '));
+  assert.ok(r.warnings.find(w => w.msg.includes('matrix.new')).line === 3);
   assert.equal(r.plots[0].values[2], null);
   const ok = vals('plot(ta.sma(close,2))', closes([1, 2, 3])); assert.equal(ok.complete, true);
 });
@@ -85,7 +85,7 @@ test('errores de sintaxis y de ejecución dan línea; tipos y bibliotecas no sop
   let r = P.run(hdr + 'x = (1 + ', closes([1])); assert.equal(r.ok, false);
   r = P.run(hdr + 'plot(1)\nx = $', closes([1])); assert.equal(r.ok, false); assert.equal(r.error.line, 4);
   r = P.run(hdr + 'plot(noexiste)', closes([1])); assert.equal(r.ok, false); assert.match(r.error.msg, /noexiste/);
-  r = P.run(hdr + 'type Foo\n    float x', closes([1])); assert.equal(r.ok, false); assert.match(r.error.msg, /type/);
+  r = P.run(hdr + 'enum Color\n    red', closes([1])); assert.equal(r.ok, false); assert.match(r.error.msg, /enum/);
   r = P.run(hdr + 'import a/b/1 as c', closes([1])); assert.equal(r.ok, false);
 });
 test('seguridad: sin acceso a JavaScript ni al prototipo; bucle infinito se corta por tiempo', () => {
@@ -101,4 +101,39 @@ test('versión antigua: study() y sma() sin prefijo con aviso informativo', () =
 test('arrays, strings y math', () => {
   const r = vals('a = array.new_float(0)\narray.push(a, close)\na.push(close * 2)\nplot(a.size())\nplot(array.sum(a))\nplot(math.round(2.5))\nplot(math.max(1, 5, 3))\nplot(str.length(str.tostring(close, "#.##")))\nplot(math.round(-2.5))\nplot(nz(na, 7))', closes([1.234]));
   assert.deepEqual(r.plots.map(p => p.values[0]), [2, 3.702, 3, 5, 4, -3, 7]);
+});
+
+test('varias sentencias por línea, textos multilínea y reparación del texto pegado', () => {
+  const r = vals('var float a = 0.0\nvar int b = 0\nif bar_index > 0\n    a := close, b := b + 1\nnote = \'uno\ndos\'\nplot(a)\nplot(b)', closes([1, 2, 3]));
+  assert.deepEqual(r.plots[1].values, [0, 1, 2]);
+  const r2 = P.run(hdr + 't = “hola”\nplot(close \u2212 1)', closes([5]));
+  assert.ok(r2.ok, JSON.stringify(r2.error)); assert.equal(r2.plots[0].values[0], 4);
+  const fx = r2.warnings.filter(w => w.level === 'fix').map(w => w.msg).join('|'); assert.match(fx, /comillas/); assert.match(fx, /guiones|menos/);
+});
+test('tipos definidos por el usuario, métodos, arrays de objetos y map', () => {
+  const r = vals(['type Zone', '    float top', '    int n = 0', '    array<float> hist', 'method grow(Zone z, float v) =>', '    z.top := math.max(nz(z.top), v)', '    z.n += 1', '    z.hist.push(v)', '    z', 'method size(Zone z) => z.n',
+    'var Zone[] zs = array.new<Zone>()', 'var map<string, float> m = map.new<string, float>()', 'if barstate.isfirst', '    zs.push(Zone.new(0.0, 0, array.new<float>()))', 'zz = zs.get(0)', 'zz.grow(close)', 'm.put("last", close)', 'plot(zz.top)', 'plot(zz.size())', 'plot(m.get("last"))', 'plot(zz.hist.size())'].join('\n'), closes([3, 1, 2]));
+  assert.deepEqual(r.plots[0].values, [3, 3, 3]); assert.deepEqual(r.plots[1].values, [1, 2, 3]); assert.deepEqual(r.plots[2].values, [3, 1, 2]); assert.deepEqual(r.plots[3].values, [1, 2, 3]);
+});
+
+const mkc = (n, ms, t0) => Array.from({length: n}, (_, i) => ({t: t0 + i * ms, o: i + 1, h: i + 2, l: i, c: i + 1.5, v: 1}));
+test('request.security a otra temporalidad: pide las velas y respeta lookahead', () => {
+  const t0 = Date.UTC(2026, 0, 1), chart = mkc(8, 36e5, t0), d4 = mkc(2, 144e5, t0);
+  const code = '//@version=5\nindicator("t")\nx = request.security(syminfo.tickerid, "240", high, lookahead=barmerge.lookahead_off)\ny = request.security(syminfo.tickerid, "240", high, lookahead=barmerge.lookahead_on)\nplot(x)\nplot(y)';
+  const a = P.run(code, chart, {interval: '1h', symbol: 'BTCUSDT'});
+  assert.deepEqual(a.needs, [{symbol: 'BTCUSDT', interval: '4h'}]); assert.equal(a.complete, false);
+  const r = P.run(code, chart, {interval: '1h', symbol: 'BTCUSDT', sec: {'BTCUSDT|4h': d4}});
+  assert.equal(r.complete, true);
+  assert.deepEqual(r.plots[0].values, [null, null, null, 2, 2, 2, 2, 3]);
+  assert.deepEqual(r.plots[1].values, [2, 2, 2, 2, 3, 3, 3, 3]);
+});
+test('sentencias separadas por coma, métodos llamados como función, timestamp e int()', () => {
+  const r = vals('var a = 0\nvar b = 0\nif bar_index >= 0\n    a := a + 1, b := b + 2\ntype P\n    float x = 1.0\nmethod dbl(P this, float k) =>\n    this.x * k\np = P.new(3.0)\nplot(a)\nplot(b)\nplot(dbl(p, 2.0))\nplot(timestamp(2023, 1, 1))\nplot(int(3.9))', closes([1, 2, 3]));
+  assert.deepEqual(r.plots[0].values, [1, 2, 3]); assert.deepEqual(r.plots[1].values, [2, 4, 6]);
+  assert.deepEqual(r.plots[2].values, [6, 6, 6]); assert.equal(r.plots[3].values[0], Date.UTC(2023, 0, 1)); assert.equal(r.plots[4].values[0], 3);
+});
+test('tablas y polilíneas: se devuelven para dibujarlas', () => {
+  const r = vals('var t = table.new(position.top_right, 2, 2, bgcolor=color.new(color.black, 20))\nif barstate.islast\n    table.cell(t, 0, 0, "hola", text_color=color.white)\n    table.cell(t, 1, 1, "x")\n    pts = array.new<chart.point>()\n    pts.push(chart.point.from_index(0, 1.0))\n    pts.push(chart.point.from_index(2, 3.0))\n    polyline.new(pts, line_color=color.red)', closes([1, 2, 3]));
+  assert.equal(r.tables.length, 1); assert.equal(r.tables[0].pos, 'top_right'); assert.equal(r.tables[0].cells.length, 2); assert.equal(r.tables[0].cells[0].text, 'hola');
+  assert.equal(r.polylines.length, 1); assert.deepEqual(r.polylines[0].pts, [[0, 1], [2, 3]]);
 });

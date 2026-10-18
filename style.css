@@ -119,3 +119,5 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
 .nova-prev{display:block;width:100%;height:auto;max-height:150px}.sheet-list>.nova-prev{border-radius:10px;margin-bottom:10px}
 .nova-body{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 12px}.nova-body>div:first-child{min-width:0}.nova-body small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
 .setting-row.dim{opacity:.45}
+
+.pine-fix{margin-top:6px;padding:6px 8px;border-left:3px solid #26a69a;background:rgba(38,166,154,.08);border-radius:4px}
