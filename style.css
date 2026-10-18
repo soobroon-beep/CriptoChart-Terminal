@@ -103,3 +103,14 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
 
 .chart-controls .auto-scale{font-weight:800;color:var(--accent);border-color:var(--accent)}
 .chart-controls .auto-scale[hidden]{display:none}
+
+.pine-head{display:flex;flex-direction:column;gap:2px;margin:14px 2px 8px}.pine-head small{color:var(--muted);font-size:12px}
+.pine-err{color:var(--red)}.pine-warn{color:var(--draw)}
+#pineCode{width:100%;height:34dvh;background:var(--bg);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:10px;font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;resize:none}
+.pine-actions{display:flex;gap:8px;align-items:center;margin:10px 0}.pine-actions .primary{flex:1}
+.pine-box{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;font-size:12.5px;line-height:1.45;background:var(--raised)}
+.pine-box.err{border-color:var(--red)}.pine-box.warn{border-color:var(--draw)}.pine-box.ok{border-color:var(--green)}
+.pine-box ul{margin:8px 0 0;padding-left:18px}.pine-box ul.info{color:var(--muted)}.pine-box pre{margin:8px 0 0;padding:8px;background:var(--bg);border-radius:8px;overflow:auto;font:11px ui-monospace,Menlo,Consolas,monospace}
+.pine-in{gap:10px}.pine-in label{display:flex;flex-direction:column;flex:1;min-width:0}.pine-in label small{color:var(--muted)}
+.pine-in input[type=number],.pine-in input[type=text],.pine-in select{width:120px;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px;font-size:14px}
+.pine-in input[type=color]{width:46px;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:2px}

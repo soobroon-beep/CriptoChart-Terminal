@@ -1,0 +1,1062 @@
+/* CryptoChart Terminal · intérprete de Pine Script v5 (subconjunto)
+   - Lexer + parser + evaluador propios. NO usa eval ni Function: el código pegado nunca se ejecuta como JavaScript.
+   - Puro y sin DOM: corre igual en un Web Worker (aislado, con tiempo límite), en Node (pruebas) o en línea como último recurso.
+   - Solo análisis: no hay órdenes reales. Lo que no soporta se avisa con su línea; nada se omite en silencio.
+   - No promete equivalencia universal con TradingView: ver README (alcance y límites). */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api; else root.CCTPine = api;
+  if (typeof WorkerGlobalScope !== 'undefined' && typeof self !== 'undefined' && self instanceof WorkerGlobalScope) {
+    self.onmessage = e => { // protocolo del Worker: {id, code, candles, opts} → {id, result}
+      const m = e.data || {};
+      try { self.postMessage({id: m.id, result: api.run(m.code, m.candles, m.opts || {})}); }
+      catch (err) { self.postMessage({id: m.id, result: {ok: false, error: {msg: String(err && err.message || err), line: 0}}}); }
+    };
+  }
+})(typeof self !== 'undefined' ? self : this, function () {
+'use strict';
+
+class PineError extends Error { constructor(msg, line) { super(msg); this.line = line || 0; this.pine = true; } }
+const isna = v => v === null || v === undefined || (typeof v === 'number' && v !== v);
+
+/* ───────────── Lexer ───────────── */
+const KW = new Set(['if', 'else', 'for', 'to', 'by', 'in', 'while', 'switch', 'var', 'varip', 'true', 'false', 'and', 'or', 'not', 'break', 'continue', 'import', 'export', 'type', 'method', 'enum']);
+const OPS = [':=', '==', '!=', '<=', '>=', '=>', '+=', '-=', '*=', '/=', '%=', '+', '-', '*', '/', '%', '<', '>', '=', '?', ':', '(', ')', '[', ']', ',', '.'];
+const CONT_END = new Set(['+', '-', '*', '/', '%', '==', '!=', '<', '>', '<=', '>=', '=', '?', ':', ',', ':=', '+=', '-=', '*=', '/=', '%=']);
+const START_RE = /(?:(?:and|or)(?![A-Za-z0-9_]))|==|!=|<=|>=|[?:+\-*\/%<>.]/y;
+
+function lex(src) {
+  src = String(src).replace(/\r\n?/g, '\n').replace(/^﻿/, '');
+  const T = [], n = src.length, ind = [0]; let i = 0, line = 1, depth = 0, bol = true;
+  const add = (t, v) => T.push({t, v, line});
+  while (i < n) {
+    if (bol) {
+      bol = false; let w = 0;
+      while (i < n && (src[i] === ' ' || src[i] === '\t')) { w += src[i] === '\t' ? 4 : 1; i++; }
+      if (i >= n) break;
+      if (src[i] === '\n') { i++; line++; bol = true; continue; }
+      if (src[i] === '/' && src[i + 1] === '/') { while (i < n && src[i] !== '\n') i++; if (i < n) { i++; line++; } bol = true; continue; }
+      if (depth === 0 && T.length) {
+        const last = T[T.length - 1];
+        START_RE.lastIndex = i;
+        const startsOp = START_RE.test(src);
+        const endsOp = (last.t === 'op' && CONT_END.has(last.v)) || (last.t === 'id' && (last.v === 'and' || last.v === 'or' || last.v === 'not'));
+        const cont = startsOp || endsOp || (w % 4 !== 0 && w > ind[ind.length - 1]);
+        if (!cont) {
+          if (last.t !== 'nl') add('nl');
+          if (w > ind[ind.length - 1]) { ind.push(w); add('indent'); }
+          else while (w < ind[ind.length - 1]) { ind.pop(); add('dedent'); }
+        }
+      }
+      continue;
+    }
+    const ch = src[i];
+    if (ch === '\n') { i++; line++; bol = true; continue; }
+    if (ch === ' ' || ch === '\t') { i++; continue; }
+    if (ch === '/' && src[i + 1] === '/') { while (i < n && src[i] !== '\n') i++; continue; }
+    if (ch === '"' || ch === "'") {
+      let s = '', j = i + 1;
+      while (j < n && src[j] !== ch) {
+        if (src[j] === '\n') throw new PineError('Texto sin cerrar', line);
+        if (src[j] === '\\' && j + 1 < n) { const e = src[j + 1]; s += e === 'n' ? '\n' : e === 't' ? '\t' : e; j += 2; } else s += src[j++];
+      }
+      if (j >= n) throw new PineError('Texto sin cerrar', line);
+      add('str', s); i = j + 1; continue;
+    }
+    if (ch === '#') {
+      const m = /#([0-9a-fA-F]{8}|[0-9a-fA-F]{6})(?![0-9a-zA-Z_])/y; m.lastIndex = i; const r = m.exec(src);
+      if (!r) throw new PineError("Color hexadecimal no válido", line);
+      add('color', r[1]); i += r[0].length; continue;
+    }
+    if ((ch >= '0' && ch <= '9') || (ch === '.' && src[i + 1] >= '0' && src[i + 1] <= '9')) {
+      const m = /(\d+\.\d*|\.\d+|\d+)([eE][+-]?\d+)?/y; m.lastIndex = i; const r = m.exec(src);
+      add('num', parseFloat(r[0])); i += r[0].length; continue;
+    }
+    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch === '_') {
+      let j = i + 1; while (j < n && /[A-Za-z0-9_]/.test(src[j])) j++;
+      add('id', src.slice(i, j)); i = j; continue;
+    }
+    let hit = null; for (const op of OPS) if (src.startsWith(op, i)) { hit = op; break; }
+    if (!hit) throw new PineError(`Carácter no reconocido «${ch}»`, line);
+    if (hit === '(' || hit === '[') depth++; else if ((hit === ')' || hit === ']') && depth > 0) depth--;
+    add('op', hit); i += hit.length;
+  }
+  if (T.length && T[T.length - 1].t !== 'nl') add('nl');
+  while (ind.length > 1) { ind.pop(); add('dedent'); }
+  add('eof'); return T;
+}
+
+/* ───────────── Parser ───────────── */
+function parse(T) {
+  let p = 0;
+  const peek = (o = 0) => T[Math.min(p + o, T.length - 1)], next = () => T[p++];
+  const isOp = (v, o = 0) => { const t = peek(o); return t.t === 'op' && t.v === v; };
+  const isId = (v, o = 0) => { const t = peek(o); return t.t === 'id' && t.v === v; };
+  const fail = (msg, t) => { throw new PineError(msg, (t || peek()).line); };
+  const expectOp = v => { if (!isOp(v)) fail(`Se esperaba «${v}»`); return next(); };
+  const identTok = () => { const t = next(); if (t.t !== 'id' || KW.has(t.v)) fail('Se esperaba un nombre', t); return t; };
+
+  function endStmt() {
+    const t = peek();
+    if (t.t === 'nl') { next(); return; }
+    if (t.t === 'eof' || t.t === 'dedent' || T[p - 1].t === 'dedent') return;
+    fail('Se esperaba el fin de la línea');
+  }
+  function parseBlock() {
+    if (peek().t === 'nl') next();
+    if (peek().t !== 'indent') fail('Se esperaba un bloque indentado');
+    next(); const body = [];
+    while (peek().t !== 'dedent' && peek().t !== 'eof') { if (peek().t === 'nl') { next(); continue; } body.push(parseStatement()); }
+    if (peek().t === 'dedent') next();
+    return body;
+  }
+  function skipGeneric(j) { // T[j] es «<»; devuelve el índice tras el «>» que lo cierra
+    let d = 0;
+    for (let q = j; T[q].t !== 'eof' && T[q].t !== 'nl'; q++) {
+      if (T[q].t === 'op' && T[q].v === '<') d++;
+      else if (T[q].t === 'op' && T[q].v === '>') { d--; if (!d) return q + 1; }
+    }
+    return -1;
+  }
+  function looksLikeFn() {
+    let q = p; if (isId('export')) q++;
+    if (!(T[q].t === 'id' && T[q + 1].t === 'op' && T[q + 1].v === '(')) return false;
+    let d = 0;
+    for (q = q + 1; q < T.length; q++) {
+      const tk = T[q];
+      if (tk.t === 'nl' || tk.t === 'eof') return false;
+      if (tk.t === 'op') {
+        if (tk.v === '(' || tk.v === '[') d++;
+        else if (tk.v === ')' || tk.v === ']') { d--; if (d === 0) return T[q + 1].t === 'op' && T[q + 1].v === '=>'; }
+      }
+    }
+    return false;
+  }
+  function skipTypes() { // «float», «simple int», «array<float>» delante de un nombre
+    for (;;) {
+      const a = peek(), b = peek(1);
+      if (a.t === 'id' && !KW.has(a.v) && b.t === 'id' && !KW.has(b.v)) { next(); continue; }
+      if (a.t === 'id' && !KW.has(a.v) && b.t === 'op' && b.v === '<') { const j = skipGeneric(p + 1); if (j < 0) return; p = j; return; }
+      return;
+    }
+  }
+  function parseFn() {
+    const line = peek().line; if (isId('export')) next();
+    const name = next().v; expectOp('('); const params = [];
+    while (!isOp(')')) {
+      skipTypes(); const nm = identTok().v; let def = null;
+      if (isOp('=')) { next(); def = parseExpr(); }
+      params.push({name: nm, def});
+      if (isOp(',')) next(); else break;
+    }
+    expectOp(')'); expectOp('=>');
+    let body;
+    if (peek().t === 'nl') body = parseBlock(); else { const l = peek().line; body = [{k: 'expr', e: parseExpr(), line: l}]; endStmt(); }
+    return {k: 'fn', name, params, body, line};
+  }
+  function tryDecl() {
+    let j = p, mode = null;
+    if (isId('var') || isId('varip')) { mode = T[j].v; j++; }
+    for (;;) {
+      const a = T[j], b = T[j + 1];
+      if (a.t === 'id' && !KW.has(a.v) && b.t === 'id' && !KW.has(b.v)) { j++; continue; }
+      if (a.t === 'id' && !KW.has(a.v) && b.t === 'op' && b.v === '<') { const q = skipGeneric(j + 1); if (q < 0) return null; j = q; continue; }
+      break;
+    }
+    const nm = T[j], eq = T[j + 1];
+    if (nm.t === 'id' && !KW.has(nm.v) && eq.t === 'op' && eq.v === '=') {
+      const line = nm.line; p = j + 2; const init = parseExpr(); endStmt();
+      return {k: 'decl', name: nm.v, init, mode, line};
+    }
+    if (mode) fail('Declaración no válida');
+    return null;
+  }
+  function parseIf() {
+    const line = next().line, cond = parseExpr(), then = parseBlock(); let els = null;
+    if (isId('else')) { next(); els = isId('if') ? [parseIf()] : parseBlock(); }
+    return {k: 'if', cond, then, els, line};
+  }
+  function parseFor() {
+    const line = next().line;
+    if (isOp('[')) { next(); const a = identTok().v; expectOp(','); const b = identTok().v; expectOp(']'); if (!isId('in')) fail("Se esperaba «in»"); next(); const it = parseExpr(); return {k: 'forin', idx: a, v: b, iter: it, body: parseBlock(), line}; }
+    const v = identTok().v;
+    if (isId('in')) { next(); const it = parseExpr(); return {k: 'forin', idx: null, v, iter: it, body: parseBlock(), line}; }
+    expectOp('='); const from = parseExpr(); if (!isId('to')) fail("Se esperaba «to»"); next(); const to = parseExpr(); let by = null;
+    if (isId('by')) { next(); by = parseExpr(); }
+    return {k: 'for', v, from, to, by, body: parseBlock(), line};
+  }
+  function parseSwitch() {
+    const line = next().line; let subject = null;
+    if (peek().t !== 'nl') subject = parseExpr();
+    if (peek().t === 'nl') next(); if (peek().t !== 'indent') fail('Se esperaba un bloque indentado'); next();
+    const cases = [];
+    while (peek().t !== 'dedent' && peek().t !== 'eof') {
+      if (peek().t === 'nl') { next(); continue; }
+      let test = null; if (!isOp('=>')) test = parseExpr();
+      expectOp('=>'); let body;
+      if (peek().t === 'nl') body = parseBlock(); else { const l = peek().line; body = [{k: 'expr', e: parseExpr(), line: l}]; endStmt(); }
+      cases.push({test, body});
+    }
+    if (peek().t === 'dedent') next();
+    return {k: 'switch', subject, cases, line};
+  }
+  function parseStatement() {
+    const t = peek(), line = t.line;
+    if (t.t === 'id') {
+      switch (t.v) {
+        case 'if': return parseIf();
+        case 'for': return parseFor();
+        case 'while': { next(); const cond = parseExpr(); return {k: 'while', cond, body: parseBlock(), line}; }
+        case 'switch': return parseSwitch();
+        case 'break': next(); endStmt(); return {k: 'break', line};
+        case 'continue': next(); endStmt(); return {k: 'continue', line};
+        case 'import': fail('«import» (bibliotecas) todavía no está soportado');
+        case 'type': fail('«type» (tipos definidos por el usuario) todavía no está soportado');
+        case 'enum': fail('«enum» todavía no está soportado');
+        case 'method': fail('«method» todavía no está soportado');
+      }
+      if (looksLikeFn()) return parseFn();
+      const d = tryDecl(); if (d) return d;
+      if (peek().t === 'id' && !KW.has(peek().v)) {
+        const o = peek(1);
+        if (o.t === 'op' && (o.v === ':=' || o.v === '+=' || o.v === '-=' || o.v === '*=' || o.v === '/=' || o.v === '%=')) {
+          const name = next().v; next(); const e = parseExpr(); endStmt();
+          return {k: 'assign', name, op: o.v, e, line};
+        }
+      }
+    } else if (isOp('[')) { // [a, b] = f()
+      let q = p + 1; const names = [];
+      while (T[q].t === 'id' && !KW.has(T[q].v)) { names.push(T[q].v); q++; if (T[q].t === 'op' && T[q].v === ',') q++; else break; }
+      if (names.length && T[q].t === 'op' && T[q].v === ']' && T[q + 1].t === 'op' && T[q + 1].v === '=') {
+        p = q + 2; const init = parseExpr(); endStmt(); return {k: 'tdecl', names, init, line};
+      }
+    }
+    const e = parseExpr(); endStmt(); return {k: 'expr', e, line};
+  }
+
+  function parseExpr() { return parseTernary(); }
+  function parseTernary() {
+    const c = parseOr();
+    if (isOp('?')) { const line = next().line; const a = parseTernary(); expectOp(':'); const b = parseTernary(); return {k: 'tern', c, a, b, line}; }
+    return c;
+  }
+  function parseOr() { let l = parseAnd(); while (isId('or')) { const line = next().line; l = {k: 'bin', op: 'or', l, r: parseAnd(), line}; } return l; }
+  function parseAnd() { let l = parseCmp(); while (isId('and')) { const line = next().line; l = {k: 'bin', op: 'and', l, r: parseCmp(), line}; } return l; }
+  function parseCmp() {
+    let l = parseAdd();
+    while (peek().t === 'op' && ['==', '!=', '<', '<=', '>', '>='].includes(peek().v)) { const o = next(); l = {k: 'bin', op: o.v, l, r: parseAdd(), line: o.line}; }
+    return l;
+  }
+  function parseAdd() { let l = parseMul(); while (isOp('+') || isOp('-')) { const o = next(); l = {k: 'bin', op: o.v, l, r: parseMul(), line: o.line}; } return l; }
+  function parseMul() { let l = parseUnary(); while (isOp('*') || isOp('/') || isOp('%')) { const o = next(); l = {k: 'bin', op: o.v, l, r: parseUnary(), line: o.line}; } return l; }
+  function parseUnary() {
+    if (isOp('-') || isOp('+')) { const o = next(); return {k: 'un', op: o.v, e: parseUnary(), line: o.line}; }
+    if (isId('not')) { const o = next(); return {k: 'un', op: 'not', e: parseUnary(), line: o.line}; }
+    return parsePostfix();
+  }
+  function parsePostfix() {
+    let e = parsePrimary();
+    for (;;) {
+      const line = peek().line;
+      if (isOp('(')) {
+        next(); const args = [];
+        while (!isOp(')')) {
+          if (peek().t === 'id' && isOp('=', 1)) { const name = next().v; next(); args.push({name, e: parseExpr()}); }
+          else args.push({e: parseExpr()});
+          if (isOp(',')) next(); else break;
+        }
+        expectOp(')'); e = {k: 'call', fn: e, args, line};
+      } else if (isOp('[')) { next(); const idx = parseExpr(); expectOp(']'); e = {k: 'idx', obj: e, idx, line}; }
+      else if (isOp('.')) { next(); const t = next(); if (t.t !== 'id') fail('Se esperaba un nombre tras «.»', t); e = {k: 'mem', obj: e, prop: t.v, line}; }
+      else if (isOp('<') && e.k === 'mem' && e.prop === 'new') { const j = skipGeneric(p); if (j < 0 || !(T[j].t === 'op' && T[j].v === '(')) break; p = j; }
+      else break;
+    }
+    return e;
+  }
+  function parsePrimary() {
+    const t = next(), line = t.line;
+    switch (t.t) {
+      case 'num': return {k: 'num', v: t.v, line};
+      case 'str': return {k: 'str', v: t.v, line};
+      case 'color': return {k: 'color', v: t.v, line};
+      case 'op':
+        if (t.v === '(') { const e = parseExpr(); expectOp(')'); return e; }
+        if (t.v === '[') { const items = []; while (!isOp(']')) { items.push(parseExpr()); if (isOp(',')) next(); else break; } expectOp(']'); return {k: 'tup', items, line}; }
+        break;
+      case 'id':
+        if (t.v === 'true' || t.v === 'false') return {k: 'bool', v: t.v === 'true', line};
+        if (t.v === 'if') { p--; return {k: 'bx', s: parseIf(), line}; }
+        if (t.v === 'for') { p--; return {k: 'bx', s: parseFor(), line}; }
+        if (t.v === 'switch') { p--; return {k: 'bx', s: parseSwitch(), line}; }
+        if (t.v === 'while') { p--; const l = next().line, cond = parseExpr(); return {k: 'bx', s: {k: 'while', cond, body: parseBlock(), line: l}, line}; }
+        if (KW.has(t.v)) fail(`«${t.v}» no se puede usar aquí`, t);
+        return {k: 'id', name: t.v, line};
+    }
+    fail('Expresión no válida', t);
+  }
+  const body = []; while (peek().t !== 'eof') { if (peek().t === 'nl' || peek().t === 'dedent' || peek().t === 'indent') { next(); continue; } body.push(parseStatement()); }
+  return body;
+}
+
+/* ───────────── Colores ───────────── */
+class Col { constructor(r, g, b, t) { this.r = r; this.g = g; this.b = b; this.t = t || 0; } }
+const hexCol = h => { h = h.replace('#', ''); return new Col(parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16), h.length === 8 ? (1 - parseInt(h.slice(6, 8), 16) / 255) * 100 : 0); };
+const NAMED = {aqua: '00BCD4', black: '363A45', blue: '2962FF', fuchsia: 'E040FB', gray: '787B86', green: '4CAF50', lime: '00E676', maroon: '880E4F', navy: '311B92', olive: '808000', orange: 'FF9800', purple: '9C27B0', red: 'F23645', silver: 'B2B5BE', teal: '00897B', white: 'FFFFFF', yellow: 'FFEB3B'};
+const clamp01 = x => Math.max(0, Math.min(1, x));
+
+/* ───────────── Entorno de ejecución ───────────── */
+class Tup { constructor(a) { this.a = a; } }
+class V { constructor(isVar) { this.cur = null; this.hist = []; this.isVar = isVar; this.done = false; } }
+class Frame {
+  constructor() { this.vars = new Map(); this.st = new Map(); }
+  slot(node, isVar) { let v = this.vars.get(node); if (!v) { v = new V(!!isVar); this.vars.set(node, v); } return v; }
+  state(node) { let s = this.st.get(node); if (!s) { s = {}; this.st.set(node, s); } return s; }
+}
+const truthy = v => v !== null && v !== undefined && v !== false && v !== 0 && v === v;
+const SERIES = new Set(['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'time', 'bar_index']);
+function seriesAt(ctx, name, i) {
+  const c = ctx.candles[i]; if (!c) return null;
+  switch (name) {
+    case 'open': return c.o; case 'high': return c.h; case 'low': return c.l; case 'close': return c.c; case 'volume': return c.v;
+    case 'hl2': return (c.h + c.l) / 2; case 'hlc3': return (c.h + c.l + c.c) / 3; case 'ohlc4': return (c.o + c.h + c.l + c.c) / 4; case 'hlcc4': return (c.h + c.l + 2 * c.c) / 4;
+    case 'time': return c.t; case 'bar_index': return i;
+  }
+  return null;
+}
+const dt = ctx => new Date(ctx.candles[ctx.bar].t);
+const BVARS = Object.assign(Object.create(null), {
+  last_bar_index: c => c.n - 1, last_bar_time: c => c.candles[c.n - 1].t, timenow: c => Date.now(),
+  time_close: c => c.candles[c.bar].t + c.ms, time_tradingday: c => { const d = dt(c); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); },
+  dayofmonth: c => dt(c).getUTCDate(), dayofweek: c => dt(c).getUTCDay() + 1, hour: c => dt(c).getUTCHours(), minute: c => dt(c).getUTCMinutes(),
+  second: c => dt(c).getUTCSeconds(), month: c => dt(c).getUTCMonth() + 1, year: c => dt(c).getUTCFullYear(),
+  weekofyear: c => { const d = dt(c), s = Date.UTC(d.getUTCFullYear(), 0, 1); return Math.floor((d.getTime() - s) / 864e5 / 7) + 1; }
+});
+const ENUM_NS = new Set(['plot', 'hline', 'line', 'label', 'box', 'shape', 'location', 'size', 'xloc', 'yloc', 'extend', 'text', 'position', 'format', 'currency', 'session', 'barmerge', 'order', 'display', 'adjustment', 'backadjustment', 'settlement_as_close', 'scale', 'alert', 'font']);
+const KNOWN_ROOTS = new Set(['ta', 'math', 'str', 'array', 'color', 'input', 'request', 'strategy', 'timeframe', 'syminfo', 'barstate', 'table', 'matrix', 'map', 'chart', 'ticker', 'runtime', 'log', 'dividends', 'earnings', 'splits']);
+const TF_MIN = Object.assign(Object.create(null), {'1m': 1, '3m': 3, '5m': 5, '15m': 15, '30m': 30, '1h': 60, '2h': 120, '4h': 240, '6h': 360, '8h': 480, '12h': 720, '1d': 1440, '3d': 4320, '1w': 10080, '1M': 43200});
+const tfPeriod = iv => { const m = TF_MIN[iv]; if (!m) return iv || '60'; return iv === '1M' ? 'M' : iv === '1w' ? 'W' : iv === '1d' ? 'D' : iv === '3d' ? '3D' : String(m); };
+const CONSTS = Object.assign(Object.create(null), {
+  'math.pi': Math.PI, 'math.e': Math.E, 'math.phi': 1.6180339887498948, 'math.rphi': 0.6180339887498948,
+  'barstate.isfirst': c => c.bar === 0, 'barstate.islast': c => c.bar === c.n - 1, 'barstate.ishistory': c => c.bar < c.n - 1, 'barstate.isrealtime': c => c.bar === c.n - 1,
+  'barstate.isconfirmed': c => true, 'barstate.isnew': c => true, 'barstate.islastconfirmedhistory': c => c.bar === c.n - 1,
+  'timeframe.period': c => tfPeriod(c.interval), 'timeframe.multiplier': c => { const m = TF_MIN[c.interval] || 60; return m >= 43200 ? 1 : m >= 10080 ? m / 10080 : m >= 1440 ? m / 1440 : m; },
+  'timeframe.isintraday': c => (TF_MIN[c.interval] || 60) < 1440, 'timeframe.isdaily': c => c.interval === '1d' || c.interval === '3d', 'timeframe.isweekly': c => c.interval === '1w', 'timeframe.ismonthly': c => c.interval === '1M',
+  'timeframe.isdwm': c => (TF_MIN[c.interval] || 60) >= 1440, 'timeframe.isseconds': false, 'timeframe.isminutes': c => (TF_MIN[c.interval] || 60) < 1440,
+  'syminfo.ticker': c => c.symbol, 'syminfo.tickerid': c => 'BINANCE:' + c.symbol, 'syminfo.prefix': 'BINANCE', 'syminfo.currency': c => /USDT$/.test(c.symbol) ? 'USDT' : 'USD',
+  'syminfo.basecurrency': c => c.symbol.replace(/USDT$|USD$/, ''), 'syminfo.type': 'crypto', 'syminfo.mintick': c => c.mintick, 'syminfo.pointvalue': 1, 'syminfo.session': '24x7', 'syminfo.timezone': 'Etc/UTC',
+  'chart.is_standard': true, 'chart.is_heikinashi': false, 'chart.is_renko': false,
+  'dayofweek.sunday': 1, 'dayofweek.monday': 2, 'dayofweek.tuesday': 3, 'dayofweek.wednesday': 4, 'dayofweek.thursday': 5, 'dayofweek.friday': 6, 'dayofweek.saturday': 7,
+  'strategy.long': 'long', 'strategy.short': 'short', 'strategy.position_size': 0, 'strategy.equity': 0, 'strategy.netprofit': 0, 'strategy.opentrades': 0, 'strategy.closedtrades': 0
+});
+for (const k in NAMED) CONSTS['color.' + k] = hexCol(NAMED[k]);
+const CONST_DYN = Object.create(null); // series “variables” de ta.* con estado propio (ver builtins)
+
+const lookup = (env, name) => { for (let s = env.scope; s; s = s.up) { const v = s.m.get(name); if (v) return v; } return null; };
+const histAt = (ctx, v, off) => { if (off === 0) return v.cur; if (off < 0) return null; const i = ctx.bar - off; if (i < 0) return null; const h = v.hist[i]; return h === undefined ? null : h; };
+function warn(ctx, line, msg, key, level) { const k = key || msg; if (ctx.wkeys.has(k)) return; ctx.wkeys.add(k); ctx.warnings.push({line: line || 0, msg, level: level || 'warn'}); }
+function dotted(n) { const parts = []; while (n.k === 'mem') { parts.unshift(n.prop); n = n.obj; } if (n.k !== 'id') return null; parts.unshift(n.name); return parts; }
+function tick(ctx, line) { if ((++ctx.steps & 0xfff) === 0 && Date.now() > ctx.deadline) throw new PineError('El script tardó demasiado y se detuvo (límite de tiempo)', line); }
+
+function binop(op, l, r, line) {
+  if (op === '+' && (typeof l === 'string' || typeof r === 'string')) return (isna(l) ? 'NaN' : String(l)) + (isna(r) ? 'NaN' : String(r));
+  if (op === '==' || op === '!=') {
+    if (isna(l) || isna(r)) return null;
+    const eq = l instanceof Col && r instanceof Col ? (l.r === r.r && l.g === r.g && l.b === r.b && l.t === r.t) : l === r;
+    return op === '==' ? eq : !eq;
+  }
+  if (isna(l) || isna(r)) return null;
+  if (typeof l === 'string' || typeof r === 'string') {
+    if (op === '<') return l < r; if (op === '>') return l > r; if (op === '<=') return l <= r; if (op === '>=') return l >= r;
+    throw new PineError(`Operador «${op}» no válido con texto`, line);
+  }
+  if (typeof l === 'boolean') l = +l; if (typeof r === 'boolean') r = +r;
+  if (typeof l !== 'number' || typeof r !== 'number') throw new PineError(`Operador «${op}» no válido con estos tipos`, line);
+  let v;
+  switch (op) {
+    case '+': v = l + r; break; case '-': v = l - r; break; case '*': v = l * r; break; case '/': v = l / r; break; case '%': v = l % r; break;
+    case '<': return l < r; case '>': return l > r; case '<=': return l <= r; case '>=': return l >= r;
+  }
+  return Number.isFinite(v) ? v : null;
+}
+
+function evId(n, env) {
+  const v = lookup(env, n.name); if (v) return v.cur;
+  const ctx = env.ctx, name = n.name;
+  if (name === 'na') return null;
+  if (SERIES.has(name)) return seriesAt(ctx, name, ctx.bar);
+  if (BVARS[name]) return BVARS[name](ctx);
+  if (ctx.fns.has(name)) throw new PineError(`«${name}» es una función; falta llamarla con ()`, n.line);
+  throw new PineError(`Variable no definida «${name}»`, n.line);
+}
+function evMem(n, env) {
+  const ctx = env.ctx, parts = dotted(n);
+  if (parts && !lookup(env, parts[0])) {
+    const full = parts.join('.');
+    if (full in CONSTS) { const c = CONSTS[full]; return typeof c === 'function' ? c(ctx) : c; }
+    if (CONST_DYN[full]) return CONST_DYN[full](ctx, env.frame.state(n));
+    if (ENUM_NS.has(parts[0]) && parts.length === 2) return parts[1];
+    if (KNOWN_ROOTS.has(parts[0])) { warn(ctx, n.line, `«${full}» no está soportado todavía: se usa na`, 'v:' + full, 'unsupported'); ctx.incomplete = true; return null; }
+    throw new PineError(`Variable no definida «${parts[0]}»`, n.line);
+  }
+  throw new PineError(`No se puede leer «.${n.prop}» (campos de objetos no soportados)`, n.line);
+}
+
+function ev(n, env) {
+  const ctx = env.ctx; tick(ctx, n.line);
+  switch (n.k) {
+    case 'num': case 'str': case 'bool': return n.v;
+    case 'color': return n.c || (n.c = hexCol(n.v));
+    case 'id': return evId(n, env);
+    case 'mem': return evMem(n, env);
+    case 'tup': return new Tup(n.items.map(x => ev(x, env)));
+    case 'un': {
+      const v = ev(n.e, env);
+      if (n.op === 'not') return isna(v) ? null : !truthy(v);
+      if (isna(v)) return null;
+      if (typeof v !== 'number') throw new PineError(`«${n.op}» solo se aplica a números`, n.line);
+      return n.op === '-' ? -v : v;
+    }
+    case 'bin': {
+      if (n.op === 'and') return truthy(ev(n.l, env)) ? truthy(ev(n.r, env)) : false;
+      if (n.op === 'or') return truthy(ev(n.l, env)) ? true : truthy(ev(n.r, env));
+      return binop(n.op, ev(n.l, env), ev(n.r, env), n.line);
+    }
+    case 'tern': return truthy(ev(n.c, env)) ? ev(n.a, env) : ev(n.b, env);
+    case 'idx': {
+      const k = ev(n.idx, env), off = isna(k) ? null : Math.trunc(k), o = n.obj;
+      if (o.k === 'id') {
+        const v = lookup(env, o.name);
+        if (v) return off === null ? null : histAt(ctx, v, off);
+        if (SERIES.has(o.name)) return off === null || off < 0 ? null : seriesAt(ctx, o.name, ctx.bar - off);
+      }
+      const val = ev(o, env);
+      if (Array.isArray(val)) return off === null ? null : (val[off] === undefined ? null : val[off]);
+      if (off === null) return null;
+      const st = env.frame.state(n); if (!st.h) st.h = [];
+      if (st.bar !== ctx.bar) { st.h[ctx.bar] = val; st.bar = ctx.bar; }
+      if (off === 0) return val; if (off < 0) return null;
+      const r = st.h[ctx.bar - off]; return r === undefined ? null : r;
+    }
+    case 'call': return evCall(n, env);
+    case 'bx': return exec(n.s, env);
+  }
+  throw new PineError('Expresión no soportada: ' + n.k, n.line);
+}
+
+function execBlock(stmts, env) { let val = null; for (const s of stmts) { val = exec(s, env); if (env.ctx.ctrl) break; } return val; }
+const sub = env => ({ctx: env.ctx, scope: {m: new Map(), up: env.scope}, frame: env.frame});
+function loopCtl(ctx) { if (ctx.ctrl === 'break') { ctx.ctrl = null; return true; } if (ctx.ctrl === 'continue') ctx.ctrl = null; return false; }
+function exec(s, env) {
+  const ctx = env.ctx; tick(ctx, s.line);
+  switch (s.k) {
+    case 'expr': return ev(s.e, env);
+    case 'decl': {
+      const v = env.frame.slot(s, s.mode !== null);
+      if (s.mode && v.done) { env.scope.m.set(s.name, v); return v.cur; }
+      const val = ev(s.init, env); if (val instanceof Tup) throw new PineError('Para recibir varios valores usa [a, b] = …', s.line);
+      v.cur = val; v.done = true; env.scope.m.set(s.name, v); return val;
+    }
+    case 'tdecl': {
+      const val = ev(s.init, env);
+      if (!(val instanceof Tup)) throw new PineError('La expresión no devuelve varios valores', s.line);
+      if (!s.keys) s.keys = s.names.map(() => ({}));
+      s.names.forEach((nm, i) => { const v = env.frame.slot(s.keys[i], false); v.cur = val.a[i] === undefined ? null : val.a[i]; env.scope.m.set(nm, v); });
+      return null;
+    }
+    case 'assign': {
+      const v = lookup(env, s.name); if (!v) throw new PineError(`«${s.name}» no está declarada (usa «${s.name} = …» primero)`, s.line);
+      let val = ev(s.e, env);
+      if (s.op !== ':=') val = binop(s.op[0], v.cur, val, s.line);
+      v.cur = val; return val;
+    }
+    case 'if': {
+      if (truthy(ev(s.cond, env))) return execBlock(s.then, sub(env));
+      if (s.els) return execBlock(s.els, sub(env));
+      return null;
+    }
+    case 'for': {
+      const from = ev(s.from, env), to = ev(s.to, env); let step = s.by ? ev(s.by, env) : (from <= to ? 1 : -1);
+      if (isna(from) || isna(to) || isna(step) || step === 0) throw new PineError('Límites del «for» no válidos', s.line);
+      const lv = env.frame.slot(s, false); let val = null;
+      for (let i = from; step > 0 ? i <= to : i >= to; i += step) {
+        tick(ctx, s.line); lv.cur = i; const e2 = sub(env); e2.scope.m.set(s.v, lv);
+        val = execBlock(s.body, e2); if (loopCtl(ctx)) break;
+      }
+      return val;
+    }
+    case 'forin': {
+      const arr = ev(s.iter, env); if (!Array.isArray(arr)) throw new PineError('«for … in» necesita un array', s.line);
+      const lv = env.frame.slot(s, false); let val = null;
+      if (!s.ik) s.ik = {};
+      const iv2 = env.frame.slot(s.ik, false);
+      for (let i = 0; i < arr.length; i++) {
+        tick(ctx, s.line); lv.cur = arr[i]; const e2 = sub(env); e2.scope.m.set(s.v, lv);
+        if (s.idx) { iv2.cur = i; e2.scope.m.set(s.idx, iv2); }
+        val = execBlock(s.body, e2); if (loopCtl(ctx)) break;
+      }
+      return val;
+    }
+    case 'while': {
+      let val = null;
+      while (truthy(ev(s.cond, env))) { tick(ctx, s.line); val = execBlock(s.body, sub(env)); if (loopCtl(ctx)) break; }
+      return val;
+    }
+    case 'switch': {
+      const subj = s.subject ? ev(s.subject, env) : null; let dflt = null;
+      for (const c of s.cases) {
+        if (!c.test) { dflt = c; continue; }
+        const t = ev(c.test, env);
+        if (s.subject ? (!isna(subj) && !isna(t) && (subj instanceof Col ? binop('==', subj, t) : subj === t)) : truthy(t)) return execBlock(c.body, sub(env));
+      }
+      return dflt ? execBlock(dflt.body, sub(env)) : null;
+    }
+    case 'break': ctx.ctrl = 'break'; return null;
+    case 'continue': ctx.ctrl = 'continue'; return null;
+    case 'fn': return null; // ya registrada (hoisting)
+  }
+  throw new PineError('Sentencia no soportada: ' + s.k, s.line);
+}
+
+function callUser(fnNode, call, env) {
+  const ctx = env.ctx;
+  let fr = ctx.frames.get(call); if (!fr) { fr = new Frame(); ctx.frames.set(call, fr); ctx.frameList.push(fr); }
+  if (++ctx.depth > 64) throw new PineError('Recursión no permitida en Pine', call.line);
+  const scope = {m: new Map(), up: ctx.globalScope}, argv = []; let pos = 0;
+  for (const a of call.args) {
+    const val = ev(a.e, env);
+    if (a.name) { const ix = fnNode.params.findIndex(p => p.name === a.name); if (ix < 0) throw new PineError(`Parámetro desconocido «${a.name}» en ${fnNode.name}()`, call.line); argv[ix] = val; }
+    else argv[pos++] = val;
+  }
+  const inner = {ctx, scope, frame: fr};
+  fnNode.params.forEach((p, i) => {
+    let val = argv[i]; if (val === undefined) val = p.def ? ev(p.def, inner) : null;
+    const v = fr.slot(p, false); v.cur = val; scope.m.set(p.name, v);
+  });
+  const r = execBlock(fnNode.body, inner); ctx.ctrl = null; ctx.depth--; return r;
+}
+const B = Object.create(null);
+const def = (name, sig, f, opt) => { B[name] = Object.assign({sig, f}, opt || {}); };
+function callBuiltin(b, name, n, env, recv) {
+  const ctx = env.ctx, sig = b.sig, vals = []; let pos = 0;
+  if (recv !== undefined) vals[pos++] = recv;
+  for (const a of n.args) {
+    const v = ev(a.e, env);
+    if (a.name) {
+      const ix = sig ? sig.indexOf(a.name) : -1;
+      if (ix < 0) { if (!b.lenient) warn(ctx, n.line, `El parámetro «${a.name}» de ${name}() no está soportado; se ignora`, name + ':' + a.name); continue; }
+      vals[ix] = v;
+    } else vals[pos++] = v;
+  }
+  return b.f(vals, {ctx, env, node: n, st: env.frame.state(n), line: n.line, name});
+}
+function evCall(n, env) {
+  const ctx = env.ctx, f = n.fn; let parts = null;
+  if (f.k === 'id') parts = [f.name]; else if (f.k === 'mem') parts = dotted(f);
+  if (parts && !lookup(env, parts[0])) {
+    const name = parts.join('.');
+    if (parts.length === 1 && ctx.fns.has(name)) return callUser(ctx.fns.get(name), n, env);
+    let b = B[name];
+    if (!b && ctx.legacy && parts.length === 1) b = B['ta.' + name] || B['math.' + name] || B['str.' + name] || B[LEGACY[name]];
+    if (b) return callBuiltin(b, name, n, env);
+    if (parts[0] === 'strategy') { warn(ctx, n.line, 'Las órdenes de «strategy.*» se ignoran: este script solo se muestra como indicador (el backtesting llega en la Fase 7)', 'strategy', 'unsupported'); ctx.incomplete = true; return null; }
+    warn(ctx, n.line, `Función no soportada: ${name}() — devuelve na`, 'f:' + name, 'unsupported'); ctx.incomplete = true; return null;
+  }
+  if (f.k === 'mem') {
+    const recv = ev(f.obj, env);
+    const ns = Array.isArray(recv) ? 'array' : recv && recv._kind ? recv._kind : typeof recv === 'string' ? 'str' : null;
+    const b = ns && B[ns + '.' + f.prop];
+    if (b) return callBuiltin(b, ns + '.' + f.prop, n, env, recv);
+    throw new PineError(`El método «${f.prop}» no está soportado para este valor`, n.line);
+  }
+  throw new PineError(`«${f.name || 'expresión'}» no es una función`, n.line);
+}
+const LEGACY = Object.assign(Object.create(null), {study: 'indicator', security: 'request.security', tostring: 'str.tostring', tonumber: 'str.tonumber', iff: 'iff', input: 'input', na: 'na', nz: 'nz', fixnan: 'fixnan'});
+
+/* ───────────── Motor de series (ta.*) ─────────────
+   Cada llamada del script tiene su propio estado (por nodo y por llamada de función), como en Pine. */
+const LEN = x => isna(x) ? 1 : Math.max(1, Math.round(x));
+function pushV(s, bar, v) { if (!s.b) { s.b = []; s.pb = -1; } if (s.pb === bar) s.b[s.b.length - 1] = v; else { s.b.push(v); s.pb = bar; } return s.b; }
+function sma(s, bar, v, len) {
+  const b = pushV(s, bar, v); if (b.length < len) return null;
+  let t = 0; for (let i = b.length - len; i < b.length; i++) { const x = b[i]; if (isna(x)) return null; t += x; }
+  return t / len;
+}
+function ema(s, bar, v, len) {
+  if (s.eb !== bar) { s.ep = s.eo; s.eb = bar; }
+  const a = 2 / (len + 1); let o;
+  if (isna(v)) o = null; else o = isna(s.ep) ? v : a * v + (1 - a) * s.ep;
+  s.eo = o; return o;
+}
+function rma(s, bar, v, len) {
+  if (s.rb !== bar) { s.rp = s.ro; s.rb = bar; }
+  if (!s.m) s.m = {};
+  const m = sma(s.m, bar, v, len); let o;
+  if (isna(s.rp)) o = m; else o = isna(v) ? null : (v + (len - 1) * s.rp) / len;
+  s.ro = o; return o;
+}
+function wma(s, bar, v, len) {
+  const b = pushV(s, bar, v); if (b.length < len) return null;
+  let t = 0; for (let i = 0; i < len; i++) { const x = b[b.length - len + i]; if (isna(x)) return null; t += x * (i + 1); }
+  return t / (len * (len + 1) / 2);
+}
+function hhll(s, bar, v, len, hi) {
+  const b = pushV(s, bar, v); if (b.length < len) return null; let r = null;
+  for (let i = b.length - len; i < b.length; i++) { const x = b[i]; if (isna(x)) continue; if (r === null || (hi ? x > r : x < r)) r = x; }
+  return r;
+}
+function hhllBars(s, bar, v, len, hi) {
+  const b = pushV(s, bar, v); if (b.length < len) return null; let r = null, at = -1;
+  for (let i = b.length - len; i < b.length; i++) { const x = b[i]; if (isna(x)) continue; if (r === null || (hi ? x >= r : x <= r)) { r = x; at = i; } }
+  return at < 0 ? null : at - (b.length - 1);
+}
+function sumw(s, bar, v, len) { const b = pushV(s, bar, v); if (b.length < len) return null; let t = 0; for (let i = b.length - len; i < b.length; i++) { if (isna(b[i])) return null; t += b[i]; } return t; }
+function varianceE(s, bar, v, len, biased) {
+  const b = pushV(s, bar, v); if (b.length < len) return null; let t = 0;
+  for (let i = b.length - len; i < b.length; i++) { if (isna(b[i])) return null; t += b[i]; }
+  const mu = t / len; let q = 0; for (let i = b.length - len; i < b.length; i++) q += (b[i] - mu) ** 2;
+  return q / (biased ? len : len - 1);
+}
+function changeE(s, bar, v, len) { const b = pushV(s, bar, v); if (b.length <= len) return null; const p = b[b.length - 1 - len]; return isna(v) || isna(p) ? null : v - p; }
+function trV(ctx, bar, handle) {
+  const c = ctx.candles[bar], p = bar > 0 ? ctx.candles[bar - 1] : null;
+  if (!p) return handle ? c.h - c.l : null;
+  return Math.max(c.h - c.l, Math.abs(c.h - p.c), Math.abs(c.l - p.c));
+}
+function atrE(s, ctx, len) { if (!s.t) s.t = {}; return rma(s.t, ctx.bar, trV(ctx, ctx.bar, true), len); }
+function crossState(s, bar, a, b) { if (s.bar !== bar) { s.pa = s.ca; s.pb = s.cb; s.bar = bar; } s.ca = a; s.cb = b; return !(isna(a) || isna(b) || isna(s.pa) || isna(s.pb)); }
+const sub1 = (s, k) => s[k] || (s[k] = {});
+function rsiE(s, bar, v, len) {
+  const ch = changeE(sub1(s, 'c'), bar, v, 1);
+  const up = isna(ch) ? null : Math.max(ch, 0), dn = isna(ch) ? null : -Math.min(ch, 0);
+  const u = rma(sub1(s, 'u'), bar, up, len), d = rma(sub1(s, 'd'), bar, dn, len);
+  if (isna(u) || isna(d)) return null; return d === 0 ? 100 : u === 0 ? 0 : 100 - 100 / (1 + u / d);
+}
+function stochE(s, bar, src, hi, lo, len) {
+  const hh = hhll(sub1(s, 'h'), bar, hi, len, true), ll = hhll(sub1(s, 'l'), bar, lo, len, false);
+  if (isna(hh) || isna(ll) || isna(src) || hh === ll) return null; return 100 * (src - ll) / (hh - ll);
+}
+function pivotE(s, bar, src, left, right, isHigh) {
+  const b = pushV(s, bar, src), k = b.length - 1 - right; if (k - left < 0) return null;
+  const c = b[k]; if (isna(c)) return null;
+  for (let i = k - left; i <= k + right; i++) { const x = b[i]; if (isna(x)) return null; if (isHigh ? x > c : x < c) return null; }
+  return c;
+}
+function superE(s, ctx, factor, len) {
+  const bar = ctx.bar, c = ctx.candles[bar], src = (c.h + c.l) / 2, atr = atrE(sub1(s, 'a'), ctx, len);
+  if (s.bar !== bar) { s.pu = s.u; s.pl = s.l; s.pd = s.d; s.pst = s.st; s.patr = s.atr; s.bar = bar; }
+  s.atr = atr; if (isna(atr)) { s.u = s.l = s.d = s.st = null; return new Tup([null, null]); }
+  let upper = src + factor * atr, lower = src - factor * atr;
+  const pL = isna(s.pl) ? 0 : s.pl, pU = isna(s.pu) ? 0 : s.pu, pc = bar > 0 ? ctx.candles[bar - 1].c : null;
+  lower = (lower > pL || (pc !== null && pc < pL)) ? lower : pL;
+  upper = (upper < pU || (pc !== null && pc > pU)) ? upper : pU;
+  let dir; if (isna(s.patr)) dir = 1; else if (s.pst === pU) dir = c.c > upper ? -1 : 1; else dir = c.c < lower ? 1 : -1;
+  s.u = upper; s.l = lower; s.d = dir; s.st = dir === -1 ? lower : upper;
+  return new Tup([s.st, dir]);
+}
+const na2 = (a, f) => isna(a) ? null : f(a);
+
+/* ta.* */
+const S1 = ['source', 'length'];
+def('ta.sma', S1, (a, c) => sma(c.st, c.ctx.bar, a[0], LEN(a[1])));
+def('ta.ema', S1, (a, c) => ema(c.st, c.ctx.bar, a[0], LEN(a[1])));
+def('ta.rma', S1, (a, c) => rma(c.st, c.ctx.bar, a[0], LEN(a[1])));
+def('ta.wma', S1, (a, c) => wma(c.st, c.ctx.bar, a[0], LEN(a[1])));
+def('ta.swma', ['source'], (a, c) => { const b = pushV(c.st, c.ctx.bar, a[0]); if (b.length < 4) return null; const w = [1, 2, 2, 1], x = b.slice(-4); return x.some(isna) ? null : x.reduce((t, v, i) => t + v * w[i], 0) / 6; });
+def('ta.vwma', ['source', 'length'], (a, c) => { const bar = c.ctx.bar, len = LEN(a[1]), vol = c.ctx.candles[bar].v; const n = sma(sub1(c.st, 'n'), bar, isna(a[0]) ? null : a[0] * vol, len), d = sma(sub1(c.st, 'd'), bar, vol, len); return isna(n) || isna(d) || d === 0 ? null : n / d; });
+def('ta.hma', S1, (a, c) => { const bar = c.ctx.bar, len = LEN(a[1]); const w1 = wma(sub1(c.st, 'a'), bar, a[0], Math.max(1, Math.floor(len / 2))), w2 = wma(sub1(c.st, 'b'), bar, a[0], len); return wma(sub1(c.st, 'c'), bar, isna(w1) || isna(w2) ? null : 2 * w1 - w2, Math.max(1, Math.round(Math.sqrt(len)))); });
+def('ta.rsi', S1, (a, c) => rsiE(c.st, c.ctx.bar, a[0], LEN(a[1])));
+def('ta.macd', ['source', 'fastlen', 'slowlen', 'siglen'], (a, c) => {
+  const bar = c.ctx.bar, f = ema(sub1(c.st, 'f'), bar, a[0], LEN(a[1])), s = ema(sub1(c.st, 's'), bar, a[0], LEN(a[2]));
+  const m = isna(f) || isna(s) ? null : f - s, sg = ema(sub1(c.st, 'g'), bar, m, LEN(a[3]));
+  return new Tup([m, sg, isna(m) || isna(sg) ? null : m - sg]);
+});
+def('ta.stoch', ['source', 'high', 'low', 'length'], (a, c) => stochE(c.st, c.ctx.bar, a[0], a[1], a[2], LEN(a[3])));
+def('ta.tr', ['handle_na'], (a, c) => trV(c.ctx, c.ctx.bar, truthy(a[0])));
+def('ta.atr', ['length'], (a, c) => atrE(c.st, c.ctx, LEN(a[0])));
+def('ta.bb', ['series', 'length', 'mult'], (a, c) => { const bar = c.ctx.bar, len = LEN(a[1]), b = sma(sub1(c.st, 'm'), bar, a[0], len), v = varianceE(sub1(c.st, 'v'), bar, a[0], len, true); if (isna(b) || isna(v)) return new Tup([null, null, null]); const d = a[2] * Math.sqrt(v); return new Tup([b, b + d, b - d]); });
+def('ta.bbw', ['series', 'length', 'mult'], (a, c) => { const bar = c.ctx.bar, len = LEN(a[1]), b = sma(sub1(c.st, 'm'), bar, a[0], len), v = varianceE(sub1(c.st, 'v'), bar, a[0], len, true); if (isna(b) || isna(v) || b === 0) return null; return 2 * a[2] * Math.sqrt(v) / b; });
+function kcE(c, a, wantW) {
+  const bar = c.ctx.bar, len = LEN(a[1]), ma = ema(sub1(c.st, 'e'), bar, a[0], len), tr = a[3] === false ? c.ctx.candles[bar].h - c.ctx.candles[bar].l : trV(c.ctx, bar, false), r = rma(sub1(c.st, 'r'), bar, tr, len);
+  if (isna(ma) || isna(r)) return wantW ? null : new Tup([null, null, null]);
+  return wantW ? 2 * r * a[2] / ma : new Tup([ma, ma + r * a[2], ma - r * a[2]]);
+}
+def('ta.kc', ['series', 'length', 'mult', 'useTrueRange'], (a, c) => kcE(c, a, false));
+def('ta.kcw', ['series', 'length', 'mult', 'useTrueRange'], (a, c) => kcE(c, a, true));
+def('ta.cci', S1, (a, c) => { const bar = c.ctx.bar, len = LEN(a[1]), m = sub1(c.st, 'm'), ma = sma(m, bar, a[0], len); if (isna(ma)) return null; let d = 0; for (let i = m.b.length - len; i < m.b.length; i++) d += Math.abs(m.b[i] - ma); d /= len; return d === 0 ? null : (a[0] - ma) / (0.015 * d); });
+def('ta.mfi', S1, (a, c) => {
+  const bar = c.ctx.bar, len = LEN(a[1]), vol = c.ctx.candles[bar].v, ch = changeE(sub1(c.st, 'c'), bar, a[0], 1);
+  const up = sumw(sub1(c.st, 'u'), bar, isna(ch) ? null : vol * (ch <= 0 ? 0 : a[0]), len), lo = sumw(sub1(c.st, 'l'), bar, isna(ch) ? null : vol * (ch >= 0 ? 0 : a[0]), len);
+  return isna(up) || isna(lo) || lo === 0 ? null : 100 - 100 / (1 + up / lo);
+});
+def('ta.wpr', ['length'], (a, c) => { const bar = c.ctx.bar, len = LEN(a[0]), k = c.ctx.candles[bar], hh = hhll(sub1(c.st, 'h'), bar, k.h, len, true), ll = hhll(sub1(c.st, 'l'), bar, k.l, len, false); return isna(hh) || isna(ll) || hh === ll ? null : 100 * (k.c - hh) / (hh - ll); });
+def('ta.change', ['source', 'length'], (a, c) => changeE(c.st, c.ctx.bar, a[0], a[1] === undefined ? 1 : LEN(a[1])));
+def('ta.mom', S1, (a, c) => changeE(c.st, c.ctx.bar, a[0], LEN(a[1])));
+def('ta.roc', S1, (a, c) => { const b = pushV(c.st, c.ctx.bar, a[0]), len = LEN(a[1]); if (b.length <= len) return null; const p = b[b.length - 1 - len]; return isna(a[0]) || isna(p) || p === 0 ? null : 100 * (a[0] - p) / p; });
+def('ta.highest', S1, (a, c) => a[1] === undefined ? hhll(c.st, c.ctx.bar, c.ctx.candles[c.ctx.bar].h, LEN(a[0]), true) : hhll(c.st, c.ctx.bar, a[0], LEN(a[1]), true));
+def('ta.lowest', S1, (a, c) => a[1] === undefined ? hhll(c.st, c.ctx.bar, c.ctx.candles[c.ctx.bar].l, LEN(a[0]), false) : hhll(c.st, c.ctx.bar, a[0], LEN(a[1]), false));
+def('ta.highestbars', S1, (a, c) => a[1] === undefined ? hhllBars(c.st, c.ctx.bar, c.ctx.candles[c.ctx.bar].h, LEN(a[0]), true) : hhllBars(c.st, c.ctx.bar, a[0], LEN(a[1]), true));
+def('ta.lowestbars', S1, (a, c) => a[1] === undefined ? hhllBars(c.st, c.ctx.bar, c.ctx.candles[c.ctx.bar].l, LEN(a[0]), false) : hhllBars(c.st, c.ctx.bar, a[0], LEN(a[1]), false));
+def('ta.crossover', ['source1', 'source2'], (a, c) => crossState(c.st, c.ctx.bar, a[0], a[1]) && a[0] > a[1] && c.st.pa <= c.st.pb);
+def('ta.crossunder', ['source1', 'source2'], (a, c) => crossState(c.st, c.ctx.bar, a[0], a[1]) && a[0] < a[1] && c.st.pa >= c.st.pb);
+def('ta.cross', ['source1', 'source2'], (a, c) => crossState(c.st, c.ctx.bar, a[0], a[1]) && ((a[0] > a[1] && c.st.pa <= c.st.pb) || (a[0] < a[1] && c.st.pa >= c.st.pb)));
+const pivArgs = a => a.length >= 3 || a[2] !== undefined ? [a[0], a[1], a[2]] : [null, a[0], a[1]];
+def('ta.pivothigh', ['source', 'leftbars', 'rightbars'], (a, c) => { const [s, l, r] = pivArgs(a); return pivotE(c.st, c.ctx.bar, s === null ? c.ctx.candles[c.ctx.bar].h : s, LEN(l), LEN(r), true); });
+def('ta.pivotlow', ['source', 'leftbars', 'rightbars'], (a, c) => { const [s, l, r] = pivArgs(a); return pivotE(c.st, c.ctx.bar, s === null ? c.ctx.candles[c.ctx.bar].l : s, LEN(l), LEN(r), false); });
+def('ta.barssince', ['condition'], (a, c) => { const s = c.st; if (s.bar !== c.ctx.bar) { s.p = s.o; s.bar = c.ctx.bar; } s.o = truthy(a[0]) ? 0 : (isna(s.p) ? null : s.p + 1); return s.o; });
+def('ta.valuewhen', ['condition', 'source', 'occurrence'], (a, c) => { const s = c.st; if (!s.l) s.l = []; if (s.bar !== c.ctx.bar) { s.bar = c.ctx.bar; if (truthy(a[0])) { s.l.unshift(a[1]); if (s.l.length > 500) s.l.pop(); } } const v = s.l[a[2] || 0]; return v === undefined ? null : v; });
+def('ta.cum', ['source'], (a, c) => { const s = c.st; if (s.bar !== c.ctx.bar) { s.p = s.o || 0; s.bar = c.ctx.bar; } s.o = s.p + (isna(a[0]) ? 0 : a[0]); return s.o; });
+def('ta.stdev', ['source', 'length', 'biased'], (a, c) => { const v = varianceE(c.st, c.ctx.bar, a[0], LEN(a[1]), a[2] !== false); return isna(v) ? null : Math.sqrt(v); });
+def('ta.variance', ['source', 'length', 'biased'], (a, c) => varianceE(c.st, c.ctx.bar, a[0], LEN(a[1]), a[2] !== false));
+def('ta.dev', S1, (a, c) => { const len = LEN(a[1]), ma = sma(c.st, c.ctx.bar, a[0], len); if (isna(ma)) return null; let d = 0; for (let i = c.st.b.length - len; i < c.st.b.length; i++) d += Math.abs(c.st.b[i] - ma); return d / len; });
+def('ta.median', S1, (a, c) => { const len = LEN(a[1]), b = pushV(c.st, c.ctx.bar, a[0]); if (b.length < len) return null; const w = b.slice(-len); if (w.some(isna)) return null; w.sort((x, y) => x - y); return len % 2 ? w[(len - 1) / 2] : (w[len / 2 - 1] + w[len / 2]) / 2; });
+def('ta.linreg', ['source', 'length', 'offset'], (a, c) => {
+  const len = LEN(a[1]), b = pushV(c.st, c.ctx.bar, a[0]); if (b.length < len) return null; const w = b.slice(-len); if (w.some(isna)) return null;
+  let sx = 0, sy = 0, sxy = 0, sxx = 0; for (let i = 0; i < len; i++) { sx += i; sy += w[i]; sxy += i * w[i]; sxx += i * i; }
+  const den = len * sxx - sx * sx, slope = den === 0 ? 0 : (len * sxy - sx * sy) / den, icpt = (sy - slope * sx) / len;
+  return icpt + slope * (len - 1 - (a[2] || 0));
+});
+def('ta.rising', S1, (a, c) => { const len = LEN(a[1]), b = pushV(c.st, c.ctx.bar, a[0]); if (b.length <= len) return false; for (let i = 0; i < len; i++) { const x = b[b.length - 1 - i], y = b[b.length - 2 - i]; if (isna(x) || isna(y) || !(x > y)) return false; } return true; });
+def('ta.falling', S1, (a, c) => { const len = LEN(a[1]), b = pushV(c.st, c.ctx.bar, a[0]); if (b.length <= len) return false; for (let i = 0; i < len; i++) { const x = b[b.length - 1 - i], y = b[b.length - 2 - i]; if (isna(x) || isna(y) || !(x < y)) return false; } return true; });
+def('ta.percentrank', S1, (a, c) => { const len = LEN(a[1]), b = pushV(c.st, c.ctx.bar, a[0]); if (b.length <= len) return null; let k = 0; for (let i = b.length - 1 - len; i < b.length - 1; i++) if (b[i] <= a[0]) k++; return 100 * k / len; });
+def('ta.supertrend', ['factor', 'atrPeriod'], (a, c) => superE(c.st, c.ctx, a[0], LEN(a[1])));
+def('ta.dmi', ['diLength', 'adxSmoothing'], (a, c) => {
+  const bar = c.ctx.bar, ctx = c.ctx, len = LEN(a[0]), k = ctx.candles[bar], p = bar > 0 ? ctx.candles[bar - 1] : null;
+  const up = p ? k.h - p.h : null, dn = p ? p.l - k.l : null;
+  const pdm = p ? (up > dn && up > 0 ? up : 0) : null, mdm = p ? (dn > up && dn > 0 ? dn : 0) : null;
+  const tr = rma(sub1(c.st, 't'), bar, trV(ctx, bar, false), len), pp = rma(sub1(c.st, 'p'), bar, pdm, len), mm = rma(sub1(c.st, 'm'), bar, mdm, len);
+  const plus = isna(tr) || isna(pp) || tr === 0 ? null : 100 * pp / tr, minus = isna(tr) || isna(mm) || tr === 0 ? null : 100 * mm / tr;
+  const sum = isna(plus) || isna(minus) ? null : plus + minus;
+  const adx = rma(sub1(c.st, 'x'), bar, sum === null ? null : 100 * Math.abs(plus - minus) / (sum === 0 ? 1 : sum), LEN(a[1]));
+  return new Tup([plus, minus, adx]);
+});
+CONST_DYN['ta.tr'] = (ctx) => trV(ctx, ctx.bar, false);
+CONST_DYN['ta.vwap'] = (ctx, st) => { const c = ctx.candles[ctx.bar]; if (st.bar !== ctx.bar) { const d = Math.floor(c.t / 864e5); if (d !== st.day) { st.day = d; st.pv = 0; st.v = 0; } st.pv += (c.h + c.l + c.c) / 3 * c.v; st.v += c.v; st.bar = ctx.bar; } return st.v ? st.pv / st.v : null; };
+CONST_DYN['ta.obv'] = (ctx, st) => { if (st.bar !== ctx.bar) { const c = ctx.candles[ctx.bar], p = ctx.candles[ctx.bar - 1], ch = p ? c.c - p.c : 0; st.o = (st.o || 0) + (ch > 0 ? c.v : ch < 0 ? -c.v : 0); st.bar = ctx.bar; } return st.o; };
+def('ta.vwap', ['source'], (a, c) => { const ctx = c.ctx, k = ctx.candles[ctx.bar], s = c.st; if (s.bar !== ctx.bar) { const d = Math.floor(k.t / 864e5); if (d !== s.day) { s.day = d; s.pv = 0; s.v = 0; } if (!isna(a[0])) { s.pv += a[0] * k.v; s.v += k.v; } s.bar = ctx.bar; } return s.v ? s.pv / s.v : null; });
+
+/* Generales */
+def('na', ['x'], a => isna(a[0]));
+def('nz', ['source', 'replacement'], a => isna(a[0]) ? (a[1] === undefined ? 0 : a[1]) : a[0]);
+def('fixnan', ['source'], (a, c) => { if (!isna(a[0])) c.st.last = a[0]; return isna(a[0]) ? (c.st.last === undefined ? null : c.st.last) : a[0]; });
+def('iff', ['cond', 'then', 'else'], a => truthy(a[0]) ? a[1] : a[2]);
+for (const nm of ['alert', 'alertcondition', 'max_bars_back', 'log.info', 'log.warning', 'log.error', 'runtime.error']) def(nm, null, (a, c) => { if (nm === 'runtime.error') throw new PineError(String(a[0]), c.line); warn(c.ctx, c.line, `${nm}() se ignora (las alertas se configuran aparte en la plataforma)`, 'ign:' + nm, 'info'); return null; });
+
+/* math.* */
+const FINITE = v => Number.isFinite(v) ? v : null;
+const m1 = (name, f) => def('math.' + name, ['number'], a => isna(a[0]) ? null : FINITE(f(a[0])));
+m1('abs', Math.abs); m1('sqrt', Math.sqrt); m1('log', Math.log); m1('log10', Math.log10); m1('exp', Math.exp); m1('floor', Math.floor); m1('ceil', Math.ceil);
+m1('sign', Math.sign); m1('sin', Math.sin); m1('cos', Math.cos); m1('tan', Math.tan); m1('asin', Math.asin); m1('acos', Math.acos); m1('atan', Math.atan);
+m1('todegrees', x => x * 180 / Math.PI); m1('toradians', x => x * Math.PI / 180);
+def('math.round', ['number', 'precision'], a => { if (isna(a[0])) return null; const p = a[1] || 0, f = 10 ** p, x = a[0] * f; return (x < 0 ? -Math.round(-x) : Math.round(x)) / f; });
+def('math.round_to_mintick', ['number'], (a, c) => isna(a[0]) ? null : Math.round(a[0] / c.ctx.mintick) * c.ctx.mintick);
+def('math.pow', ['base', 'exponent'], a => isna(a[0]) || isna(a[1]) ? null : FINITE(a[0] ** a[1]));
+def('math.max', null, a => a.length && !a.some(isna) ? Math.max(...a) : null);
+def('math.min', null, a => a.length && !a.some(isna) ? Math.min(...a) : null);
+def('math.avg', null, a => a.length && !a.some(isna) ? a.reduce((t, v) => t + v, 0) / a.length : null);
+def('math.sum', S1, (a, c) => sumw(c.st, c.ctx.bar, a[0], LEN(a[1])));
+def('math.random', ['min', 'max', 'seed'], a => (a[0] === undefined ? 0 : a[0]) + Math.random() * ((a[1] === undefined ? 1 : a[1]) - (a[0] === undefined ? 0 : a[0])));
+
+/* str.* */
+const fmtNum = (x, f) => {
+  if (isna(x)) return 'NaN';
+  if (typeof f === 'string' && /[#0]/.test(f)) { const d = (f.split('.')[1] || '').length; return f.includes('0') && !f.includes('#') ? x.toFixed(d) : String(+x.toFixed(d)); }
+  return String(+x.toFixed(10));
+};
+const toStr = (v, f) => typeof v === 'number' ? fmtNum(v, f) : isna(v) ? 'NaN' : v instanceof Col ? '#' + [v.r, v.g, v.b].map(x => x.toString(16).padStart(2, '0')).join('') : String(v);
+def('str.tostring', ['value', 'format'], a => toStr(a[0], a[1]));
+def('str.tonumber', ['string'], a => { const x = parseFloat(a[0]); return Number.isFinite(x) ? x : null; });
+def('str.length', ['string'], a => isna(a[0]) ? null : String(a[0]).length);
+def('str.upper', ['string'], a => String(a[0]).toUpperCase()); def('str.lower', ['string'], a => String(a[0]).toLowerCase());
+def('str.contains', ['source', 'str'], a => String(a[0]).includes(a[1])); def('str.startswith', ['source', 'str'], a => String(a[0]).startsWith(a[1])); def('str.endswith', ['source', 'str'], a => String(a[0]).endsWith(a[1]));
+def('str.substring', ['source', 'begin_pos', 'end_pos'], a => String(a[0]).substring(a[1], a[2] === undefined ? undefined : a[2]));
+def('str.replace_all', ['source', 'target', 'replacement'], a => String(a[0]).split(a[1]).join(a[2]));
+def('str.replace', ['source', 'target', 'replacement', 'occurrence'], a => String(a[0]).replace(a[1], () => a[2]));
+def('str.trim', ['source'], a => String(a[0]).trim());
+def('str.split', ['string', 'separator'], a => String(a[0]).split(a[1]));
+def('str.format', null, a => String(a[0]).replace(/\{(\d+)(?:,number,([^}]*))?\}/g, (m, i, f) => { const v = a[+i + 1]; return v === undefined ? m : toStr(v, f); }));
+
+/* array.* */
+const arrOf = (v, line) => { if (!Array.isArray(v)) throw new PineError('Se esperaba un array', line); return v; };
+const ai = (arr, i, line) => { if (isna(i) || i < 0 || i >= arr.length) throw new PineError(`Índice ${i} fuera del array (tamaño ${arr.length})`, line); return Math.trunc(i); };
+const MAXARR = 100000;
+for (const t of ['float', 'int', 'bool', 'string', 'color']) def('array.new_' + t, ['size', 'initial_value'], (a, c) => { const n = a[0] || 0; if (n > MAXARR) throw new PineError('Array demasiado grande', c.line); return new Array(n).fill(a[1] === undefined ? null : a[1]); });
+def('array.new', ['size', 'initial_value'], (a, c) => { const n = a[0] || 0; if (n > MAXARR) throw new PineError('Array demasiado grande', c.line); return new Array(n).fill(a[1] === undefined ? null : a[1]); });
+def('array.from', null, a => a.slice());
+def('array.push', ['id', 'value'], (a, c) => { const r = arrOf(a[0], c.line); if (r.length >= MAXARR) throw new PineError('Array demasiado grande', c.line); r.push(a[1] === undefined ? null : a[1]); return null; });
+def('array.pop', ['id'], (a, c) => { const r = arrOf(a[0], c.line); if (!r.length) throw new PineError('pop() sobre un array vacío', c.line); return r.pop(); });
+def('array.shift', ['id'], (a, c) => { const r = arrOf(a[0], c.line); if (!r.length) throw new PineError('shift() sobre un array vacío', c.line); return r.shift(); });
+def('array.unshift', ['id', 'value'], (a, c) => { arrOf(a[0], c.line).unshift(a[1]); return null; });
+def('array.get', ['id', 'index'], (a, c) => { const r = arrOf(a[0], c.line); return r[ai(r, a[1], c.line)]; });
+def('array.set', ['id', 'index', 'value'], (a, c) => { const r = arrOf(a[0], c.line); r[ai(r, a[1], c.line)] = a[2]; return null; });
+def('array.size', ['id'], (a, c) => arrOf(a[0], c.line).length);
+def('array.clear', ['id'], (a, c) => { arrOf(a[0], c.line).length = 0; return null; });
+def('array.insert', ['id', 'index', 'value'], (a, c) => { arrOf(a[0], c.line).splice(a[1], 0, a[2]); return null; });
+def('array.remove', ['id', 'index'], (a, c) => { const r = arrOf(a[0], c.line); return r.splice(ai(r, a[1], c.line), 1)[0]; });
+def('array.includes', ['id', 'value'], (a, c) => arrOf(a[0], c.line).includes(a[1]));
+def('array.indexof', ['id', 'value'], (a, c) => arrOf(a[0], c.line).indexOf(a[1]));
+def('array.first', ['id'], (a, c) => { const r = arrOf(a[0], c.line); if (!r.length) throw new PineError('first() sobre un array vacío', c.line); return r[0]; });
+def('array.last', ['id'], (a, c) => { const r = arrOf(a[0], c.line); if (!r.length) throw new PineError('last() sobre un array vacío', c.line); return r[r.length - 1]; });
+def('array.sum', ['id'], (a, c) => arrOf(a[0], c.line).reduce((t, v) => t + (isna(v) ? 0 : v), 0));
+def('array.avg', ['id'], (a, c) => { const r = arrOf(a[0], c.line).filter(v => !isna(v)); return r.length ? r.reduce((t, v) => t + v, 0) / r.length : null; });
+def('array.max', ['id'], (a, c) => { const r = arrOf(a[0], c.line).filter(v => !isna(v)); return r.length ? Math.max(...r) : null; });
+def('array.min', ['id'], (a, c) => { const r = arrOf(a[0], c.line).filter(v => !isna(v)); return r.length ? Math.min(...r) : null; });
+def('array.reverse', ['id'], (a, c) => { arrOf(a[0], c.line).reverse(); return null; });
+def('array.sort', ['id', 'order'], (a, c) => { const r = arrOf(a[0], c.line), d = a[1] === 'descending' ? -1 : 1; r.sort((x, y) => d * (x < y ? -1 : x > y ? 1 : 0)); return null; });
+def('array.copy', ['id'], (a, c) => arrOf(a[0], c.line).slice());
+def('array.slice', ['id', 'index_from', 'index_to'], (a, c) => arrOf(a[0], c.line).slice(a[1], a[2]));
+def('array.concat', ['id1', 'id2'], (a, c) => { arrOf(a[0], c.line).push(...arrOf(a[1], c.line)); return a[0]; });
+def('array.fill', ['id', 'value', 'index_from', 'index_to'], (a, c) => { arrOf(a[0], c.line).fill(a[1], a[2], a[3]); return null; });
+def('array.join', ['id', 'separator'], (a, c) => arrOf(a[0], c.line).map(v => toStr(v)).join(a[1] === undefined ? ',' : a[1]));
+
+/* color.* */
+def('color.new', ['color', 'transp'], a => a[0] instanceof Col ? new Col(a[0].r, a[0].g, a[0].b, isna(a[1]) ? 0 : clamp(a[1], 0, 100)) : null);
+def('color.rgb', ['red', 'green', 'blue', 'transp'], a => a.slice(0, 3).some(isna) ? null : new Col(clamp(Math.round(a[0]), 0, 255), clamp(Math.round(a[1]), 0, 255), clamp(Math.round(a[2]), 0, 255), a[3] || 0));
+def('color.from_gradient', ['value', 'bottom_value', 'top_value', 'bottom_color', 'top_color'], a => {
+  const [v, lo, hi, c1, c2] = a; if (isna(v) || isna(lo) || isna(hi) || !(c1 instanceof Col) || !(c2 instanceof Col)) return null;
+  const t = hi === lo ? 0 : clamp01((v - lo) / (hi - lo)), mix = (x, y) => x + (y - x) * t;
+  return new Col(Math.round(mix(c1.r, c2.r)), Math.round(mix(c1.g, c2.g)), Math.round(mix(c1.b, c2.b)), mix(c1.t, c2.t));
+});
+def('color.r', ['color'], a => a[0] ? a[0].r : null); def('color.g', ['color'], a => a[0] ? a[0].g : null); def('color.b', ['color'], a => a[0] ? a[0].b : null); def('color.t', ['color'], a => a[0] ? a[0].t : null);
+function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+/* timeframe.* y request.* */
+def('timeframe.in_seconds', ['timeframe'], (a, c) => { const m = TF_MIN[a[0] === undefined || a[0] === '' ? c.ctx.interval : a[0]] || (isNaN(+a[0]) ? null : +a[0]); return m ? m * 60 : null; });
+def('timeframe.change', ['timeframe'], (a, c) => {
+  const ctx = c.ctx, t = ctx.candles[ctx.bar].t, p = ctx.bar > 0 ? ctx.candles[ctx.bar - 1].t : null, tf = String(a[0]);
+  if (p === null) return true;
+  const key = (x) => { const d = new Date(x); if (/^(1?D|1d)$/i.test(tf)) return Math.floor(x / 864e5); if (/^(1?W|1w)$/i.test(tf)) return Math.floor((x / 864e5 + 3) / 7); if (/^(1?M|1M)$/.test(tf)) return d.getUTCFullYear() * 12 + d.getUTCMonth(); const m = /^(\d+)$/.test(tf) ? +tf : TF_MIN[tf]; return m ? Math.floor(x / (m * 60000)) : null; };
+  const k1 = key(t), k0 = key(p); if (k1 === null) { warn(ctx, c.line, `timeframe.change('${tf}') no soportado`, 'tfc', 'unsupported'); ctx.incomplete = true; return null; }
+  return k1 !== k0;
+});
+def('request.security', ['symbol', 'timeframe', 'expression', 'gaps', 'lookahead', 'ignore_invalid_symbol', 'currency', 'calc_bars_count'], (a, c) => {
+  const ctx = c.ctx, sym = a[0], tf = a[1];
+  const symOk = isna(sym) || sym === '' || sym === ctx.symbol || sym === 'BINANCE:' + ctx.symbol;
+  const tfOk = isna(tf) || tf === '' || tf === ctx.interval || tf === tfPeriod(ctx.interval);
+  if (symOk && tfOk) return a[2];
+  warn(ctx, c.line, 'request.security() con otro símbolo o temporalidad todavía no está soportado: devuelve na (solo funciona con el símbolo y la temporalidad del gráfico)', 'sec', 'unsupported'); ctx.incomplete = true; return null;
+}, {lenient: true});
+
+/* ───────────── indicator / strategy / input ───────────── */
+function pal(ctx, col) {
+  if (!(col instanceof Col)) return null;
+  const k = col.r + ',' + col.g + ',' + col.b + ',' + col.t; let i = ctx.pal.get(k);
+  if (i === undefined) { i = ctx.out.palette.length; ctx.out.palette.push(`rgba(${col.r},${col.g},${col.b},${(1 - col.t / 100).toFixed(3)})`); ctx.pal.set(k, i); }
+  return i;
+}
+const IND_SIG = ['title', 'shorttitle', 'overlay', 'format', 'precision', 'scale', 'max_bars_back', 'timeframe', 'timeframe_gaps', 'explicit_plot_zorder', 'max_lines_count', 'max_labels_count', 'max_boxes_count', 'calc_bars_count', 'dynamic_requests', 'behind_chart'];
+function setMeta(kind) {
+  return (a, c) => {
+    const m = c.ctx.out.meta; m.kind = kind; if (typeof a[0] === 'string') m.title = a[0]; if (typeof a[1] === 'string') m.short = a[1];
+    m.overlay = a[2] === true; if (a[10]) m.maxLines = Math.min(500, a[10]); if (a[11]) m.maxLabels = Math.min(500, a[11]); if (a[12]) m.maxBoxes = Math.min(500, a[12]);
+    if (typeof a[7] === 'string' && a[7] !== '') warn(c.ctx, c.line, `El parámetro timeframe de ${kind}() se ignora (el script se calcula en la temporalidad del gráfico)`, 'ind-tf', 'unsupported');
+    if (kind === 'strategy') warn(c.ctx, c.line, 'Es una «strategy»: aquí se dibuja como indicador y las órdenes se ignoran (el backtesting llega en la Fase 7)', 'strategy-meta', 'info');
+    return null;
+  };
+}
+def('indicator', IND_SIG, setMeta('indicator'), {lenient: true});
+def('study', IND_SIG, setMeta('indicator'), {lenient: true});
+def('strategy', IND_SIG, setMeta('strategy'), {lenient: true});
+def('library', null, (a, c) => { throw new PineError('Las bibliotecas («library») no se pueden ejecutar en el gráfico', c.line); });
+
+const SRC_NAMES = ['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'volume'];
+function encodeIn(type, v) { return v instanceof Col ? '#' + [v.r, v.g, v.b].map(x => x.toString(16).padStart(2, '0')).join('') : v; }
+function regInput(c, type, defv, info) {
+  const s = c.st, o = c.ctx.out;
+  if (!s.reg) {
+    const key = String(o.inputs.length), ov = c.ctx.opts.inputs ? c.ctx.opts.inputs[key] : undefined; let val = defv;
+    if (ov !== undefined && ov !== null) {
+      if (type === 'int') { val = Math.round(+ov); if (!Number.isFinite(val)) val = defv; }
+      else if (type === 'float') { val = +ov; if (!Number.isFinite(val)) val = defv; }
+      else if (type === 'bool') val = ov === true || ov === 'true';
+      else if (type === 'color') val = typeof ov === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(ov) ? hexCol(ov) : defv;
+      else val = ov;
+      if ((type === 'int' || type === 'float') && typeof val === 'number') { if (info.min != null && val < info.min) val = info.min; if (info.max != null && val > info.max) val = info.max; }
+    }
+    s.val = val;
+    s.reg = Object.assign({key, title: info.title || ('Parámetro ' + (o.inputs.length + 1)), type, def: encodeIn(type, defv), value: encodeIn(type, val)}, info.min != null ? {min: info.min} : {}, info.max != null ? {max: info.max} : {}, info.step != null ? {step: info.step} : {}, info.options ? {options: info.options} : {}, info.group ? {group: info.group} : {}, info.tooltip ? {tooltip: info.tooltip} : {});
+    o.inputs.push(s.reg);
+  }
+  return s.val;
+}
+const numIn = type => (a, c) => { const opt = Array.isArray(a[2]); return regInput(c, type, isna(a[0]) ? 0 : a[0], {title: a[1], options: opt ? a[2] : null, min: opt ? null : a[2], max: opt ? null : a[3], step: opt ? null : a[4], tooltip: a[5], group: a[7]}); };
+const NUMSIG = ['defval', 'title', 'minval', 'maxval', 'step', 'tooltip', 'inline', 'group', 'confirm', 'display', 'options'];
+def('input.int', NUMSIG, numIn('int'), {lenient: true}); def('input.float', NUMSIG, numIn('float'), {lenient: true});
+def('input.bool', ['defval', 'title', 'tooltip', 'inline', 'group', 'confirm', 'display'], (a, c) => regInput(c, 'bool', a[0] === true, {title: a[1], tooltip: a[2], group: a[4]}), {lenient: true});
+const strIn = type => (a, c) => regInput(c, type, a[0] === undefined ? '' : a[0], {title: a[1], options: Array.isArray(a[2]) ? a[2] : null, tooltip: a[3], group: a[5]});
+const STRSIG = ['defval', 'title', 'options', 'tooltip', 'inline', 'group', 'confirm', 'display'];
+for (const t of ['string', 'timeframe', 'symbol', 'session', 'text_area']) def('input.' + t, STRSIG, strIn(t === 'text_area' ? 'string' : t), {lenient: true});
+def('input.color', ['defval', 'title', 'tooltip', 'inline', 'group', 'confirm', 'display'], (a, c) => regInput(c, 'color', a[0] instanceof Col ? a[0] : hexCol('2962FF'), {title: a[1], tooltip: a[2], group: a[4]}), {lenient: true});
+def('input.time', ['defval', 'title', 'tooltip', 'inline', 'group', 'confirm', 'display'], (a, c) => regInput(c, 'float', a[0] || 0, {title: a[1], tooltip: a[2], group: a[4]}), {lenient: true});
+def('input.source', ['defval', 'title', 'tooltip', 'inline', 'group', 'display'], (a, c) => {
+  const arg = c.node.args[0] && !c.node.args[0].name ? c.node.args[0].e : (c.node.args.find(x => x.name === 'defval') || {}).e;
+  const defName = arg && arg.k === 'id' && SRC_NAMES.includes(arg.name) ? arg.name : null;
+  const pick = regInput(c, 'source', defName || 'close', {title: a[1], options: SRC_NAMES, tooltip: a[2], group: a[4]});
+  if (defName || SRC_NAMES.includes(pick)) return seriesAt(c.ctx, pick, c.ctx.bar);
+  return a[0];
+}, {lenient: true});
+def('input', ['defval', 'title', 'type', 'minval', 'maxval', 'step', 'tooltip', 'inline', 'group', 'confirm', 'options'], (a, c) => {
+  const d = a[0], t = typeof d === 'boolean' ? 'bool' : typeof d === 'number' ? (Number.isInteger(d) ? 'int' : 'float') : d instanceof Col ? 'color' : 'string';
+  return regInput(c, t, d, {title: a[1], min: a[3], max: a[4], step: a[5], tooltip: a[6], group: a[8], options: Array.isArray(a[10]) ? a[10] : null});
+}, {lenient: true});
+
+/* ───────────── plot / hline / fill / bgcolor / formas ───────────── */
+const DEFCOL = hexCol('2962FF');
+const hidden = d => typeof d === 'string' && !d.includes('all') && !d.includes('pane');
+const nv = v => isna(v) ? null : (typeof v === 'boolean' ? +v : v);
+const PLOT_SIG = ['series', 'title', 'color', 'linewidth', 'style', 'trackprice', 'histbase', 'offset', 'join', 'editable', 'show_last', 'display', 'format', 'precision', 'force_overlay'];
+def('plot', PLOT_SIG, (a, c) => {
+  const ctx = c.ctx, o = ctx.out; let p = c.st.p;
+  if (!p) {
+    p = c.st.p = {id: o.plots.length, title: typeof a[1] === 'string' ? a[1] : 'Plot ' + (o.plots.length + 1), style: String(a[4] || 'style_line').replace(/^style_/, ''), lw: a[3] || 2, offset: a[7] || 0, hidden: hidden(a[11]), histbase: a[6] || 0, force: a[14] === true, values: new Array(ctx.n).fill(null), ci: new Array(ctx.n).fill(null)};
+    o.plots.push(p);
+  }
+  const col = a[2] === undefined ? DEFCOL : a[2]; p.values[ctx.bar] = nv(a[0]);
+  p.ci[ctx.bar] = col === null ? -1 : (pal(ctx, col));
+  return {_kind: 'plot', id: p.id};
+}, {lenient: true});
+def('hline', ['price', 'title', 'color', 'linestyle', 'linewidth', 'editable', 'display'], (a, c) => {
+  const o = c.ctx.out; let h = c.st.h;
+  if (!h) { h = c.st.h = {id: o.hlines.length, price: nv(a[0]), title: a[1] || '', ci: pal(c.ctx, a[2] === undefined ? hexCol('787B86') : a[2]), style: String(a[3] || 'style_dashed').replace(/^style_/, ''), lw: a[4] || 1, hidden: hidden(a[6])}; o.hlines.push(h); }
+  return {_kind: 'hline', id: h.id};
+}, {lenient: true});
+def('fill', ['hline1', 'hline2', 'color', 'title', 'editable', 'show_last', 'fillgaps', 'display'], (a, c) => {
+  const ctx = c.ctx, o = ctx.out; let f = c.st.f;
+  if (!f) {
+    const ref = h => h && (h._kind === 'plot' || h._kind === 'hline') ? {kind: h._kind, id: h.id} : null;
+    f = c.st.f = {a: ref(a[0]), b: ref(a[1]), ci: new Array(ctx.n).fill(null), hidden: hidden(a[7])};
+    if (!f.a || !f.b) throw new PineError('fill() necesita dos plot() o hline()', c.line);
+    o.fills.push(f);
+  }
+  f.ci[ctx.bar] = a[2] instanceof Col ? pal(ctx, a[2]) : null; return null;
+}, {lenient: true});
+const bgLike = key => (a, c) => {
+  const ctx = c.ctx, o = ctx.out; let e = c.st.e;
+  if (!e) { e = c.st.e = {pts: [], offset: a[1] || 0}; o[key].push(e); }
+  if (a[0] instanceof Col) e.pts.push([ctx.bar, pal(ctx, a[0])]); return null;
+};
+def('bgcolor', ['color', 'offset', 'editable', 'show_last', 'title', 'display', 'force_overlay'], bgLike('bgcolors'), {lenient: true});
+def('barcolor', ['color', 'offset', 'editable', 'show_last', 'title', 'display'], bgLike('barcolors'), {lenient: true});
+function shapeFn(kind) {
+  const sig = kind === 'shape' ? ['series', 'title', 'style', 'location', 'color', 'offset', 'text', 'textcolor', 'editable', 'size', 'show_last', 'display', 'format', 'precision', 'force_overlay']
+    : kind === 'char' ? ['series', 'title', 'char', 'location', 'color', 'offset', 'text', 'textcolor', 'editable', 'size', 'show_last', 'display', 'format', 'precision', 'force_overlay']
+    : ['series', 'title', 'colorup', 'colordown', 'offset', 'minheight', 'maxheight', 'editable', 'show_last', 'display', 'format', 'precision', 'force_overlay'];
+  def(kind === 'shape' ? 'plotshape' : kind === 'char' ? 'plotchar' : 'plotarrow', sig, (a, c) => {
+    const ctx = c.ctx, o = ctx.out; let s = c.st.s;
+    if (!s) {
+      s = c.st.s = kind === 'arrow' ? {kind, title: a[1] || '', offset: a[4] || 0, pts: []}
+        : {kind, title: a[1] || '', style: kind === 'shape' ? String(a[2] || 'xcross').replace(/^style_/, '') : 'char', ch: kind === 'char' ? String(a[2] === undefined ? '•' : a[2]) : null, loc: String(a[3] || 'abovebar'), size: String(a[9] || 'auto'), offset: a[5] || 0, pts: []};
+      o.shapes.push(s);
+    }
+    const v = a[0];
+    if (kind === 'arrow') { if (!isna(v) && v !== 0) s.pts.push([ctx.bar, v, pal(ctx, v > 0 ? (a[2] === undefined ? hexCol('00E676') : a[2]) : (a[3] === undefined ? hexCol('F23645') : a[3]))]); return null; }
+    if (!isna(v) && v !== false && (v !== 0 || s.loc === 'absolute')) s.pts.push([ctx.bar, nv(v), pal(ctx, a[4] === undefined ? DEFCOL : a[4]), pal(ctx, a[7] === undefined ? hexCol('FFFFFF') : a[7]), a[6] === undefined ? '' : String(a[6])]);
+    return null;
+  }, {lenient: true});
+}
+shapeFn('shape'); shapeFn('char'); shapeFn('arrow');
+
+/* ───────────── label / line / box ───────────── */
+function keepLimit(ctx, list, key, max) {
+  const o = ctx.out; list.push(key); let alive = 0; for (let i = o._p[list.__n] || 0; i < list.length; i++) if (!list[i].deleted) alive++;
+  while (alive > max) { let i = o._p[list.__n] || 0; while (i < list.length && list[i].deleted) i++; if (i >= list.length) break; list[i].deleted = true; o._p[list.__n] = i + 1; alive--; }
+}
+const dcol = (ctx, v, dflt) => pal(ctx, v === undefined ? dflt : v);
+def('label.new', ['x', 'y', 'text', 'xloc', 'yloc', 'color', 'style', 'textcolor', 'size', 'textalign', 'tooltip', 'text_font_family', 'force_overlay', 'text_formatting'], (a, c) => {
+  const ctx = c.ctx, o = {_kind: 'label', x: isna(a[0]) ? ctx.bar : a[0], y: nv(a[1]), text: a[2] === undefined ? '' : String(a[2]), xloc: String(a[3] || 'bar_index'), yloc: String(a[4] || 'price'), ci: dcol(ctx, a[5], DEFCOL), style: String(a[6] || 'style_label_down').replace(/^style_/, ''), tci: dcol(ctx, a[7], hexCol('FFFFFF')), size: String(a[8] || 'normal')};
+  keepLimit(ctx, ctx.out.labels, o, ctx.out.meta.maxLabels || 50); return o;
+}, {lenient: true});
+def('line.new', ['x1', 'y1', 'x2', 'y2', 'xloc', 'extend', 'color', 'style', 'width', 'force_overlay'], (a, c) => {
+  const ctx = c.ctx, o = {_kind: 'line', x1: nv(a[0]), y1: nv(a[1]), x2: nv(a[2]), y2: nv(a[3]), xloc: String(a[4] || 'bar_index'), extend: String(a[5] || 'none'), ci: dcol(ctx, a[6], DEFCOL), style: String(a[7] || 'style_solid').replace(/^style_/, ''), w: a[8] || 1};
+  keepLimit(ctx, ctx.out.lines, o, ctx.out.meta.maxLines || 50); return o;
+}, {lenient: true});
+def('box.new', ['left', 'top', 'right', 'bottom', 'border_color', 'border_width', 'border_style', 'extend', 'xloc', 'bgcolor', 'text', 'text_size', 'text_color', 'text_halign', 'text_valign', 'text_wrap', 'text_font_family', 'force_overlay', 'text_formatting'], (a, c) => {
+  const ctx = c.ctx, o = {_kind: 'box', l: nv(a[0]), t: nv(a[1]), r: nv(a[2]), b: nv(a[3]), bci: dcol(ctx, a[4], DEFCOL), bw: a[5] || 1, bstyle: String(a[6] || 'style_solid').replace(/^style_/, ''), extend: String(a[7] || 'none'), xloc: String(a[8] || 'bar_index'), fci: dcol(ctx, a[9], hexCol('2962FF1A')), text: a[10] === undefined ? '' : String(a[10]), tci: dcol(ctx, a[12], hexCol('FFFFFF'))};
+  keepLimit(ctx, ctx.out.boxes, o, ctx.out.meta.maxBoxes || 50); return o;
+}, {lenient: true});
+function setters(kind, map) {
+  for (const k in map) def(`${kind}.set_${k}`, ['id', 'a', 'b'], (a, c) => { const o = a[0]; if (o && o._kind === kind) map[k](o, a[1], a[2], c.ctx); return null; }, {lenient: true});
+  def(`${kind}.delete`, ['id'], a => { if (a[0] && a[0]._kind === kind) a[0].deleted = true; return null; });
+}
+const ST = (st, p) => (o, v, _, ctx) => { o[p] = String(v).replace(/^style_/, ''); };
+setters('label', {x: (o, v) => { o.x = v; }, y: (o, v) => { o.y = nv(v); }, xy: (o, x, y) => { o.x = x; o.y = nv(y); }, text: (o, v) => { o.text = String(v); }, color: (o, v, _, ctx) => { o.ci = pal(ctx, v); }, textcolor: (o, v, _, ctx) => { o.tci = pal(ctx, v); }, style: ST(0, 'style'), size: (o, v) => { o.size = String(v); }, tooltip: () => {}, text_font_family: () => {}, textalign: () => {}});
+setters('line', {x1: (o, v) => { o.x1 = v; }, y1: (o, v) => { o.y1 = nv(v); }, x2: (o, v) => { o.x2 = v; }, y2: (o, v) => { o.y2 = nv(v); }, xy1: (o, x, y) => { o.x1 = x; o.y1 = nv(y); }, xy2: (o, x, y) => { o.x2 = x; o.y2 = nv(y); }, color: (o, v, _, ctx) => { o.ci = pal(ctx, v); }, width: (o, v) => { o.w = v; }, style: ST(0, 'style'), extend: (o, v) => { o.extend = String(v); }});
+setters('box', {left: (o, v) => { o.l = v; }, right: (o, v) => { o.r = v; }, top: (o, v) => { o.t = nv(v); }, bottom: (o, v) => { o.b = nv(v); }, lefttop: (o, l, t) => { o.l = l; o.t = nv(t); }, rightbottom: (o, r, b) => { o.r = r; o.b = nv(b); }, bgcolor: (o, v, _, ctx) => { o.fci = pal(ctx, v); }, border_color: (o, v, _, ctx) => { o.bci = pal(ctx, v); }, border_width: (o, v) => { o.bw = v; }, extend: (o, v) => { o.extend = String(v); }, text: (o, v) => { o.text = String(v); }, text_color: (o, v, _, ctx) => { o.tci = pal(ctx, v); }});
+const getter = (kind, p, name) => def(`${kind}.get_${name || p}`, ['id'], a => a[0] && a[0]._kind === kind && a[0][p] !== undefined ? a[0][p] : null);
+['x', 'y', 'text'].forEach(p => getter('label', p)); [['x1'], ['y1'], ['x2'], ['y2']].forEach(([p]) => getter('line', p));
+[['l', 'left'], ['t', 'top'], ['r', 'right'], ['b', 'bottom']].forEach(([p, n]) => getter('box', p, n));
+def('line.get_price', ['id', 'x'], a => { const o = a[0]; if (!o || o.x2 === o.x1 || isna(a[1])) return null; return o.y1 + (o.y2 - o.y1) * (a[1] - o.x1) / (o.x2 - o.x1); });
+
+/* ───────────── Análisis estático y ejecución ───────────── */
+function walk(n, f) {
+  if (Array.isArray(n)) { for (const x of n) walk(x, f); return; }
+  if (!n || typeof n !== 'object' || n instanceof Col) return;
+  if (n.k) f(n);
+  for (const key in n) { const v = n[key]; if (v && typeof v === 'object') walk(v, f); }
+}
+function analyze(ast, ctx) {
+  const declared = new Set();
+  walk(ast, n => {
+    if (n.k === 'decl') declared.add(n.name); else if (n.k === 'tdecl') n.names.forEach(x => declared.add(x));
+    else if (n.k === 'for') declared.add(n.v); else if (n.k === 'forin') { declared.add(n.v); if (n.idx) declared.add(n.idx); }
+    else if (n.k === 'fn') { ctx.fns.set(n.name, n); n.params.forEach(p => declared.add(p.name)); }
+  });
+  walk(ast, n => {
+    if (n.k !== 'call') return;
+    const parts = n.fn.k === 'id' ? [n.fn.name] : n.fn.k === 'mem' ? dotted(n.fn) : null;
+    if (!parts || declared.has(parts[0])) return;
+    const name = parts.join('.');
+    if ((parts.length === 1 && ctx.fns.has(name)) || B[name]) return;
+    if (ctx.legacy && parts.length === 1 && (B['ta.' + name] || B['math.' + name] || B['str.' + name] || B[LEGACY[name]])) return;
+    if (parts[0] === 'strategy') { warn(ctx, n.line, 'Las órdenes de «strategy.*» se ignoran: este script solo se muestra como indicador (el backtesting llega en la Fase 7)', 'strategy', 'unsupported'); return; }
+    warn(ctx, n.line, `Función no soportada: ${name}() — devuelve na`, 'f:' + name, 'unsupported');
+  });
+}
+function timeToIndex(ctx, t) {
+  const cs = ctx.candles, n = cs.length; if (isna(t)) return null;
+  if (t <= cs[0].t) return (t - cs[0].t) / ctx.ms;
+  if (t >= cs[n - 1].t) return n - 1 + (t - cs[n - 1].t) / ctx.ms;
+  let lo = 0, hi = n - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cs[m].t <= t) lo = m; else hi = m; }
+  return lo + (t - cs[lo].t) / (cs[hi].t - cs[lo].t);
+}
+function uniform(arr) { let u; for (const x of arr) { if (x === null) continue; if (u === undefined) u = x; else if (x !== u) return undefined; } return u; }
+
+function run(code, candles, opts) {
+  const t0 = Date.now(); opts = opts || {};
+  if (!Array.isArray(candles) || !candles.length) return {ok: false, error: {msg: 'No hay velas cargadas', line: 0}};
+  code = String(code || ''); if (code.length > 600000) return {ok: false, error: {msg: 'El script es demasiado grande', line: 0}};
+  let ast; try { ast = parse(lex(code)); } catch (e) { if (e.pine) return {ok: false, error: {msg: e.message, line: e.line}}; throw e; }
+  const n = candles.length, vm = /\/\/\s*@version\s*=\s*(\d+)/.exec(code), version = vm ? +vm[1] : 5;
+  const iv = opts.interval || '1h', ms = (TF_MIN[iv] || (n > 1 ? (candles[n - 1].t - candles[0].t) / (n - 1) / 60000 : 60)) * 60000;
+  const ctx = {candles, n, bar: 0, steps: 0, deadline: t0 + (opts.timeLimitMs || 8000), warnings: [], wkeys: new Set(), fns: new Map(), frames: new Map(), frameList: [], depth: 0, ctrl: null,
+    legacy: version < 5, incomplete: false, interval: iv, symbol: opts.symbol || 'BTCUSDT', mintick: opts.mintick || 0.01, ms, opts, pal: new Map(),
+    out: {meta: {kind: 'indicator', title: opts.name || 'Script', overlay: false}, plots: [], hlines: [], fills: [], bgcolors: [], barcolors: [], shapes: [], labels: [], lines: [], boxes: [], inputs: [], palette: [], _p: {}}};
+  ctx.out.labels.__n = 'l'; ctx.out.lines.__n = 'n'; ctx.out.boxes.__n = 'b';
+  if (version > 5) ctx.warnings.push({line: 0, level: 'info', msg: `Script de la versión ${version}: se interpreta con la sintaxis v5; si algo no coincide con TradingView, avísalo`});
+  if (version < 5) ctx.warnings.push({line: 0, level: 'info', msg: `Script de la versión ${version}: se acepta la sintaxis antigua (study, sma, security…) sin prefijos; revisa el resultado`});
+  analyze(ast, ctx);
+  const gframe = new Frame(); ctx.frameList.push(gframe); ctx.globalScope = {m: new Map(), up: null};
+  const env = {ctx, scope: ctx.globalScope, frame: gframe};
+  try {
+    for (let bar = 0; bar < n; bar++) {
+      ctx.bar = bar;
+      for (const fr of ctx.frameList) for (const v of fr.vars.values()) if (!v.isVar) v.cur = null;
+      execBlock(ast, env); ctx.ctrl = null;
+      for (const fr of ctx.frameList) for (const v of fr.vars.values()) v.hist[bar] = v.cur;
+    }
+  } catch (e) {
+    if (e.pine) return {ok: false, error: {msg: e.message, line: e.line, bar: ctx.bar}, warnings: ctx.warnings};
+    if (e instanceof RangeError) return {ok: false, error: {msg: 'El script usa demasiada memoria o recursión', line: 0}, warnings: ctx.warnings};
+    throw e;
+  }
+  const o = ctx.out, xi = (x, loc) => loc === 'bar_time' ? timeToIndex(ctx, x) : (isna(x) ? null : x);
+  const plots = o.plots.map(p => { const u = uniform(p.ci); const r = {id: p.id, title: p.title, style: p.style, lw: p.lw, offset: p.offset, hidden: p.hidden, histbase: p.histbase, force: p.force, values: p.values}; if (u !== undefined) r.cc = u; else r.ci = p.ci; return r; });
+  const fills = o.fills.map(f => { const u = uniform(f.ci); const r = {a: f.a, b: f.b, hidden: f.hidden}; if (u !== undefined) r.cc = u; else r.ci = f.ci; return r; });
+  const labels = o.labels.filter(l => !l.deleted).map(l => ({x: xi(l.x, l.xloc), y: l.y, text: l.text, yloc: l.yloc, ci: l.ci, style: l.style, tci: l.tci, size: l.size}));
+  const lines = o.lines.filter(l => !l.deleted).map(l => ({x1: xi(l.x1, l.xloc), y1: l.y1, x2: xi(l.x2, l.xloc), y2: l.y2, extend: l.extend, ci: l.ci, style: l.style, w: l.w}));
+  const boxes = o.boxes.filter(b => !b.deleted).map(b => ({l: xi(b.l, b.xloc), t: b.t, r: xi(b.r, b.xloc), b: b.b, extend: b.extend, bci: b.bci, bw: b.bw, bstyle: b.bstyle, fci: b.fci, text: b.text, tci: b.tci}));
+  return {ok: true, version, meta: o.meta, inputs: o.inputs, plots, hlines: o.hlines, fills, bgcolors: o.bgcolors, barcolors: o.barcolors, shapes: o.shapes, labels, lines, boxes, palette: o.palette,
+    warnings: ctx.warnings, complete: !ctx.incomplete, stats: {bars: n, ms: Date.now() - t0, steps: ctx.steps}};
+}
+
+return {run, lex, parse, PineError, supported: () => Object.keys(B).sort()};
+});

@@ -26,6 +26,16 @@ Hasta que se configure Firebase, la app funciona igual y guarda todo solo en el 
 3. **Firestore Database:** crea la base y pega las reglas de `firestore.rules`.
 4. Copia el objeto `firebaseConfig` de la app web dentro de `firebase-config.js` (son claves públicas, no secretos) y sube el cambio.
 
+## Convertidor de Pine Script (pegar y ver en el gráfico)
+
+En **Indicadores → Scripts de Pine → «Pegar / convertir Pine»** se pega el código de TradingView, se interpreta aquí y se dibuja en el gráfico. Cada script se guarda en «Mis scripts» (y en tu cuenta de Google) y se puede encender, apagar, quitar y ajustar (⚙ muestra sus `input.*` como formulario).
+
+- **Cómo funciona:** `pine.js` es un intérprete propio (lexer + parser + evaluador barra a barra). **No usa `eval` ni `Function`**: el código pegado nunca se ejecuta como JavaScript. Corre en un Web Worker con tiempo límite (si no hay Worker, en línea con el mismo límite). `pine-draw.js` dibuja el resultado en el canvas. Solo análisis: no hay órdenes ni claves.
+- **Soportado (v5, y sintaxis antigua v4 básica):** `var`/`varip`, `:=`, `if`/`for`/`while`/`switch` (también como expresión), funciones propias, tuplas, historial `x[n]`, `input.*` (editables), `ta.*` (sma, ema, rma, wma, vwma, hma, swma, rsi, macd, stoch, atr, tr, bb, bbw, kc, kcw, cci, mfi, wpr, change, mom, roc, highest/lowest(+bars), crossover/under, cross, pivothigh/low, barssince, valuewhen, cum, stdev, variance, dev, median, linreg, rising, falling, percentrank, supertrend, dmi, vwap, obv), `math.*`, `str.*`, `array.*`, `color.*`, `plot` (línea, escalón, histograma, columnas, área, círculos, cruces), `hline`, `fill`, `bgcolor`, `barcolor`, `plotshape`, `plotchar`, `plotarrow`, `label.*`, `line.*`, `box.*`, `timeframe.*`, `syminfo.*`, `barstate.*`. Lista exacta: `CCTPine.supported()`.
+- **No soportado todavía (se avisa con su línea, nunca en silencio):** `request.security` con otro símbolo/temporalidad (devuelve `na`), `table.*`, `matrix.*`, `map.*`, `type`/`method`/`enum` y `import` (el script falla con mensaje claro), órdenes de `strategy.*` (se ignoran; el backtesting es la Fase 7), alertas (se ignoran). Un script con partes sin soporte se marca «⚠ resultado puede diferir de TradingView».
+- **Equivalencia con TradingView:** no se promete. Las pruebas (`tests/pine.test.js`) comprueban valores derivados a mano y contra implementaciones independientes (RSI de Wilder, ATR, MACD, Supertrend), pero no se ha comparado contra TradingView con datos reales. Suposiciones: `ta.ema` se siembra con la primera fuente (referencia de Pine); empates cuentan como pivote; horas en UTC; el color por defecto de `plot` es #2962FF.
+- **Overlay:** un script con `overlay=true` solo ajusta la escala del precio con los plots cuya escala se parece a la del precio; los demás quedan fuera de vista (se avisa en la leyenda). Con `overlay=false` tiene su panel.
+
 ## Indicador Nova Nexus (port del script de Pine)
 
 En **Indicadores** hay interruptores para cada módulo, que se dibujan directamente en el gráfico (móvil y escritorio):

@@ -17,12 +17,13 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  light: false, drawings: {}
+  light: false, drawings: {}, pine: []
 };
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
   if (!o.drawings || typeof o.drawings !== 'object' || Array.isArray(o.drawings)) o.drawings = {};
+  o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => ({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}})) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
   if (typeof o.symbol !== 'string') o.symbol = o.symbols[0];
@@ -54,6 +55,8 @@ async function getJSON(url, signal) { const r = await fetch(url, {signal}); if (
 /* ───────── Variables de ejecución ───────── */
 let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null;
 let currentView = 'watchView', sheetMode = 'select', editMode = false;
+let pineRes = {}, pineBusy = {}, pineDirty = {}, pineLast = 0, pineTimer = 0, pineKey = '', pineDraft = {name: '', code: ''}, pineSetSid = null, pineWorker = null, pineNoWorker = false, pineSeq = 0;
+const pineJobs = new Map(), PINE_MAX = 6;
 let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null;
 let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
 let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0;
@@ -266,7 +269,7 @@ function recalc() {
   const up = Array(n).fill(null), lo = Array(n).fill(null);
   for (let i = 19; i < n; i++) { let s = 0; for (let j = i - 19; j <= i; j++) { const d = c[j] - m[i]; s += d * d; } const sd = Math.sqrt(s / 20); up[i] = m[i] + 2 * sd; lo[i] = m[i] - 2 * sd; }
   ind = {ema20: ema(c, 20), ema50: ema(c, 50), sma200: sma(c, 200), bbU: up, bbL: lo, rsi: rsi(c, 14)};
-  ind.nn = null; calcNova(); calcExtra();
+  ind.nn = null; calcNova(); calcExtra(); schedulePine();
 }
 const PANELS = ['macd', 'stoch', 'atr', 'obv'];
 function calcExtra() { // indicadores de la fase 2: solo se calculan los activados
@@ -294,7 +297,7 @@ function calcNova() {
   try { ind.nn = NovaNexus.compute(candles, {smc: !!(I.nnSmc || I.nnOb)}); } catch (e) { ind.nn = null; console.warn('Nova Nexus:', e); }
 }
 const indicatorRows = () => indicatorMeta.map(([key, title, desc]) =>
-  `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div>`).join('');
+  `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div>`).join('') + pineSection();
 function renderIndicators() { $('#indicatorList').innerHTML = indicatorRows(); }
 function countIndicators() { const n = Object.values(state.indicators).filter(Boolean).length; $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
 document.addEventListener('click', e => {
@@ -308,8 +311,8 @@ document.addEventListener('click', e => {
 /* ───────── Hojas inferiores (activo / añadir / dibujar / indicadores) ───────── */
 function openSheet(mode = 'select') {
   sheetMode = mode;
-  $('#sheetTitle').textContent = {add: 'Añadir a seguimiento', tools: 'Herramientas de dibujo', indicators: 'Indicadores', select: 'Seleccionar criptomoneda', script: 'Código del script', paste: 'Pegar script de Pine'}[mode];
-  $('#sheetSearch').style.display = ['tools', 'indicators', 'script', 'paste'].includes(mode) ? 'none' : 'block';
+  $('#sheetTitle').textContent = {add: 'Añadir a seguimiento', tools: 'Herramientas de dibujo', indicators: 'Indicadores', select: 'Seleccionar criptomoneda', script: 'Código del script', paste: 'Pegar script de Pine', pine: 'Convertir script de Pine', pineSet: 'Script de Pine'}[mode];
+  $('#sheetSearch').style.display = ['tools', 'indicators', 'script', 'paste', 'pine', 'pineSet'].includes(mode) ? 'none' : 'block';
   $('#sheetSearch').value = '';
   $('#sheetBackdrop').classList.add('open'); $('#sheet').classList.add('open');
   renderSheet();
@@ -335,6 +338,8 @@ const TOOLS = [
 function renderSheet() {
   const list = $('#sheetList');
   if (sheetMode === 'indicators') { list.innerHTML = indicatorRows(); return; }
+  if (sheetMode === 'pine') { renderPineEditor(list); return; }
+  if (sheetMode === 'pineSet') { renderPineSettings(list); return; }
   if (sheetMode === 'script') {
     const sc = scripts.find(x => x.id === viewScriptId); if (!sc) { list.innerHTML = ''; return; }
     const MAXV = 30000, shown = sc.code.length > MAXV ? sc.code.slice(0, MAXV) : sc.code;
@@ -541,9 +546,12 @@ function render() {
   g.clearRect(0, 0, w, h);
   const n = candles.length; if (!n) { geo = null; return; }
 
+  const pineKeyNow = `${state.symbol}|${state.interval}|${candles[0].t}`;
+  const pr = activePine().map(p => ({p, r: pineRes[p.sid]})).filter(x => x.r && x.r.ok && x.r._key === pineKeyNow);
+  const pOver = pr.filter(x => x.r.meta.overlay), pSub = pr.filter(x => !x.r.meta.overlay);
   const left = 6, right = 64, axisH = 22, plotTop = 6;
   const rsiH = state.indicators.rsi ? Math.round(Math.max(70, h * .18)) : 0, volH = state.indicators.volume ? Math.round(Math.max(40, h * .12)) : 0;
-  const panelKeys = PANELS.filter(k => state.indicators[k] && ind[k]);
+  const panelKeys = [...PANELS.filter(k => state.indicators[k] && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
   const panelBudget = Math.max(0, h * .58 - rsiH - volH);
   const panelH = panelKeys.length ? Math.round(Math.max(40, Math.min(clamp(h * .16, 52, 110), panelBudget / panelKeys.length))) : 0, extraH = panelH * panelKeys.length;
   const vpOn = !!(state.indicators.nnVP && ind.vp), gutter = vpOn ? clamp(Math.round((w - left - right) * .4), 110, 300) : 0; // margen derecho para el perfil
@@ -556,6 +564,8 @@ function render() {
 
   let min = Infinity, max = -Infinity;
   for (let i = lo; i < hi; i++) { if (candles[i].l < min) min = candles[i].l; if (candles[i].h > max) max = candles[i].h; }
+  const pineOff = [];
+  for (const {r} of pOver) { const c = CCTPineDraw.contrib(r, lo, hi, min, max); if (Number.isFinite(c.min)) { min = Math.min(min, c.min); max = Math.max(max, c.max); } pineOff.push(...c.off); }
   const overlays = [];
   if (state.indicators.ema20) overlays.push(['EMA 20', ind.ema20, '#f5c568']);
   if (state.indicators.ema50) overlays.push(['EMA 50', ind.ema50, '#6ca5f9']);
@@ -601,8 +611,10 @@ function render() {
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailFill(ind.trail, lo, hi);
   // velas
   const barW = clamp(step * .66, 1.5, 16), limeBars = !!(state.indicators.nnLiq && state.indicators.nnLiqBars && ind.liq);
+  const pineBar = {};
+  for (const {r} of pr) for (const e of r.barcolors) for (const [bar, ci] of e.pts) pineBar[bar + (e.offset || 0)] = r.palette[ci];
   for (let i = lo; i < hi; i++) {
-    const d = candles[i], xx = X(i), col = limeBars && d.t > ind.liq.after ? '#00e676' : d.c >= d.o ? up : down, yo = Y(d.o), yc = Y(d.c);
+    const d = candles[i], xx = X(i), col = pineBar[i] || (limeBars && d.t > ind.liq.after ? '#00e676' : d.c >= d.o ? up : down), yo = Y(d.o), yc = Y(d.c);
     g.strokeStyle = g.fillStyle = col; g.lineWidth = 1;
     g.beginPath(); g.moveTo(xx, Y(d.h)); g.lineTo(xx, Y(d.l)); g.stroke();
     g.fillRect(xx - barW / 2, Math.min(yo, yc), barW, Math.max(1, Math.abs(yo - yc)));
@@ -614,6 +626,7 @@ function render() {
     for (let i = lo; i < hi; i++) { if (arr[i] == null) { on = false; continue; } const xx = X(i), yy = Y(arr[i]); if (!on) { g.moveTo(xx, yy); on = true; } else g.lineTo(xx, yy); }
     g.stroke(); g.setLineDash([]);
   }
+  for (const {r} of pOver) CCTPineDraw.draw(g, r, {X, Y, lo, hi, left, right: left + plotW, top: plotTop, bottom: plotTop + plotH, step, candles, overlay: true});
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailLine(ind.trail, lo, hi);
   if (state.indicators.nnSR && ind.sr) drawNovaSRLabels(ind.sr, lo, hi);
   // cruces EMA 20 / EMA 50
@@ -651,6 +664,7 @@ function render() {
   let ly2 = plotTop + 48; g.font = '10px system-ui';
   for (const [name, arr, col] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); g.fillStyle = col; g.fillText(`${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`, left + 8, ly2); ly2 += 13; }
 
+  for (const {p, r} of pOver) { g.fillStyle = text; g.fillText(`ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`, left + 8, ly2); ly2 += 13; for (const it of CCTPineDraw.legend(r, n - 1).slice(0, 4)) { g.fillStyle = it.color; g.fillText(it.text, left + 8, ly2); ly2 += 13; } }
   if (state.indicators.supertrend && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#20bf9f' : '#f06b79'; g.fillText(`Supertrend ${dv < 0 ? '↑' : '↓'}  ${fmt((dv < 0 ? ind.stUp : ind.stDn)[j])}`, left + 8, ly2); ly2 += 13; } }
 
   // volumen
@@ -674,7 +688,7 @@ function render() {
     for (let i = lo; i < hi; i++) { const v = ind.rsi[i]; if (v == null) { on = false; continue; } const yy = top + (100 - v) / 100 * height; if (!on) { g.moveTo(X(i), yy); on = true; } else g.lineTo(X(i), yy); }
     g.stroke();
   }
-  panelKeys.forEach((k, idx) => drawSubPanel(k, geo.extraTop + idx * panelH, panelH, lo, hi, {left, w, right, line, text}));
+  panelKeys.forEach((k, idx) => k.startsWith('pine:') ? drawPinePane(pr.find(x => 'pine:' + x.p.sid === k), geo.extraTop + idx * panelH, panelH, lo, hi, {left, w, right, line, text, step, plotW}) : drawSubPanel(k, geo.extraTop + idx * panelH, panelH, lo, hi, {left, w, right, line, text}));
   if (vpOn) drawNovaVP(ind.vp, fg);
   if (state.indicators.nnLiq && ind.liq) drawNovaLiqTable(fg);
   if (nn && state.indicators.nnRules) drawNovaRules();
@@ -1233,21 +1247,173 @@ function pushScripts() {
 function addScript(code, fallbackName) {
   code = String(code || '').replace(/\r\n?/g, '\n');
   if (!code.trim()) { toast('El script está vacío'); return false; }
+  const same = scripts.find(x => x.code === code); if (same) { toast('Ese script ya estaba guardado'); return same.id; }
   const size = new Blob([code]).size;
   if (scriptsBytes(scripts) + size > SCRIPTS_MAX) { toast('Se pasa del límite de 600 KB de scripts por cuenta'); return false; }
   const m = code.match(/indicator\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/) || code.match(/strategy\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/);
-  scripts.push({id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: (m ? m[1] : fallbackName || 'Script').slice(0, 80), code, size, lines: code.split('\n').length, addedAt: Date.now()});
-  saveScripts(); renderScripts(); toast('Script guardado'); return true;
+  const sid = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  scripts.push({id: sid, name: (m ? m[1] : fallbackName || 'Script').slice(0, 80), code, size, lines: code.split('\n').length, addedAt: Date.now()});
+  saveScripts(); renderScripts(); toast('Script guardado'); return sid;
 }
 function renderScripts() {
-  $('#scriptList').innerHTML = scripts.length ? scripts.map(x => `<div class="setting-row script-row"><div><b>${esc(x.name)}</b><small>${x.lines} líneas · ${Math.max(1, Math.round(x.size / 1024))} KB · guardado</small></div><div class="script-btns"><button class="small-button" data-view-script="${x.id}">Ver</button><button class="small-button danger" data-del-script="${x.id}" aria-label="Eliminar">✕</button></div></div>`).join('')
+  $('#scriptList').innerHTML = scripts.length ? scripts.map(x => `<div class="setting-row script-row"><div><b>${esc(x.name)}</b><small>${x.lines} líneas · ${Math.max(1, Math.round(x.size / 1024))} KB · guardado</small></div><div class="script-btns"><button class="small-button" data-pine-add="${x.id}">Al gráfico</button><button class="small-button" data-view-script="${x.id}">Ver</button><button class="small-button danger" data-del-script="${x.id}" aria-label="Eliminar">✕</button></div></div>`).join('')
     : '<div class="setting-row"><div><b>Sin scripts guardados</b><small>Importa un archivo .pine o pega el código.</small></div></div>';
+  renderIndicators(); pineKey = ''; schedulePine();
 }
 $('#scriptList').addEventListener('click', e => {
   const v = e.target.closest('[data-view-script]'), d = e.target.closest('[data-del-script]');
   if (v) { viewScriptId = v.dataset.viewScript; openSheet('script'); }
-  if (d) { const x = scripts.find(y => y.id === d.dataset.delScript); if (x && confirm(`¿Eliminar "${x.name}"?`)) { scripts = scripts.filter(y => y.id !== x.id); saveScripts(); renderScripts(); } }
+  if (d) { const x = scripts.find(y => y.id === d.dataset.delScript); if (x && confirm(`¿Eliminar "${x.name}"?`)) { scripts = scripts.filter(y => y.id !== x.id); state.pine = state.pine.filter(q => q.sid !== x.id); delete pineRes[x.id]; save(); saveScripts(); renderScripts(); scheduleRender(); } }
 });
+/* ───────── Scripts de Pine en el gráfico (intérprete propio: pine.js; dibujo: pine-draw.js) ───────── */
+const activePine = () => state.pine.filter(p => p.on && scripts.some(s => s.id === p.sid));
+const pineName = sid => { const s = scripts.find(x => x.id === sid); return s ? s.name : 'Script'; };
+function pineInline(code, opts) {
+  try { return window.CCTPine ? CCTPine.run(code, candles, opts) : {ok: false, error: {msg: 'El motor de Pine no está disponible', line: 0}}; }
+  catch (e) { return {ok: false, error: {msg: String(e && e.message || e), line: 0}}; }
+}
+function pineRunRaw(code, opts) { // Worker aislado con tiempo límite; si no hay Worker, en línea (con el mismo límite interno)
+  if (typeof Worker === 'undefined' || pineNoWorker) return Promise.resolve(pineInline(code, opts));
+  try {
+    if (!pineWorker) {
+      pineWorker = new Worker('pine.js');
+      pineWorker.onmessage = e => { const j = pineJobs.get(e.data.id); if (j) { clearTimeout(j.t); pineJobs.delete(e.data.id); j.ok(e.data.result); } };
+      pineWorker.onerror = () => { pineNoWorker = true; try { pineWorker.terminate(); } catch {} pineWorker = null; for (const [id, j] of [...pineJobs]) { clearTimeout(j.t); pineJobs.delete(id); j.ok(pineInline(j.code, j.opts)); } };
+    }
+    return new Promise(ok => {
+      const id = ++pineSeq, t = setTimeout(() => { pineJobs.delete(id); try { pineWorker.terminate(); } catch {} pineWorker = null; ok({ok: false, error: {msg: 'El script tardó demasiado y se detuvo', line: 0}}); }, 14000);
+      pineJobs.set(id, {ok, t, code, opts}); pineWorker.postMessage({id, code, candles, opts});
+    });
+  } catch { pineNoWorker = true; return Promise.resolve(pineInline(code, opts)); }
+}
+async function pineRunOne(p) {
+  if (pineBusy[p.sid]) { pineDirty[p.sid] = true; return; }
+  const code = (scripts.find(x => x.id === p.sid) || {}).code; if (!code || !candles.length) return;
+  const key = `${state.symbol}|${state.interval}|${candles[0].t}`; pineBusy[p.sid] = true;
+  const res = await pineRunRaw(code, {inputs: p.inputs, interval: state.interval, symbol: state.symbol, name: pineName(p.sid), timeLimitMs: 8000});
+  pineBusy[p.sid] = false; res._key = key; pineRes[p.sid] = res;
+  if (pineDirty[p.sid]) { pineDirty[p.sid] = false; pineKey = ''; schedulePine(); }
+  if (currentView === 'indicatorView' || (sheetMode === 'indicators' && $('#sheet').classList.contains('open'))) { renderIndicators(); if (sheetMode === 'indicators') $('#sheetList').innerHTML = indicatorRows(); }
+  scheduleRender();
+}
+function schedulePine() {
+  if (!candles.length || !activePine().length) return;
+  const key = `${state.symbol}|${state.interval}|${candles[0].t}|${candles.length}`, wait = key !== pineKey ? 0 : Math.max(0, 1500 - (Date.now() - pineLast));
+  clearTimeout(pineTimer);
+  pineTimer = setTimeout(() => { pineKey = key; pineLast = Date.now(); activePine().forEach(pineRunOne); }, wait);
+}
+function pineSection() {
+  const rows = state.pine.map(p => {
+    const s = scripts.find(x => x.id === p.sid); if (!s) return ''; const r = pineRes[p.sid]; let st;
+    if (!p.on) st = 'Apagado'; else if (!r) st = 'Calculando…';
+    else if (!r.ok) st = `<span class="pine-err">Error${r.error.line ? ' · línea ' + r.error.line : ''}: ${esc(r.error.msg)}</span>`;
+    else { const u = r.warnings.filter(w => w.level === 'unsupported').length; st = `${r.plots.length} plot${r.plots.length === 1 ? '' : 's'} · ` + (u ? `<span class="pine-warn">⚠ ${u} aviso${u > 1 ? 's' : ''} de no soportado</span>` : r.warnings.length ? `${r.warnings.length} aviso${r.warnings.length > 1 ? 's' : ''}` : 'sin avisos') + (r.meta.overlay ? '' : ' · panel propio'); }
+    return `<div class="setting-row pine-row"><div><b>${esc(s.name)}</b><small>${st}</small></div><div class="script-btns"><button class="small-button" data-pine-set="${p.sid}" aria-label="Ajustes">⚙</button><button class="small-button danger" data-pine-del="${p.sid}" aria-label="Quitar">✕</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${p.on}" aria-label="Activar"></button></div></div>`;
+  }).join('');
+  return `<div class="pine-head"><b>Scripts de Pine</b><small>Pega código de TradingView: se interpreta aquí y se dibuja en el gráfico</small></div>${rows}<div class="setting-row"><button class="primary" data-pine-new="1">＋ Pegar / convertir Pine</button></div>`;
+}
+function pineMsgHtml(res, code) {
+  if (!res.ok) { const src = (code || '').split('\n')[res.error.line - 1]; return `<div class="pine-box err"><b>No se pudo interpretar</b><div>${res.error.line ? 'Línea ' + res.error.line + ': ' : ''}${esc(res.error.msg)}</div>${src ? `<pre>${esc(src.trim().slice(0, 160))}</pre>` : ''}</div>`; }
+  const un = res.warnings.filter(w => w.level === 'unsupported'), rest = res.warnings.filter(w => w.level !== 'unsupported');
+  const li = w => `<li>${w.line ? 'Línea ' + w.line + ' · ' : ''}${esc(w.msg)}</li>`;
+  return `<div class="pine-box ${res.complete ? 'ok' : 'warn'}"><b>${res.complete ? '✓ Interpretado: no se detectó nada sin soporte' : '⚠ Interpretado con partes SIN soporte: el resultado puede diferir de TradingView'}</b>`
+    + `<div>${res.plots.length} plot(s) · ${res.shapes.length} forma(s) · ${res.labels.length + res.lines.length + res.boxes.length} objeto(s) · ${res.stats.ms} ms</div>`
+    + (un.length ? `<ul>${un.map(li).join('')}</ul>` : '') + (rest.length ? `<ul class="info">${rest.map(li).join('')}</ul>` : '') + '</div>';
+}
+const PINE_EXAMPLE = `//@version=5
+indicator("Cruce de EMAs (ejemplo)", overlay=true)
+fast = input.int(9, "EMA rápida", minval=1)
+slow = input.int(21, "EMA lenta", minval=1)
+emaF = ta.ema(close, fast)
+emaS = ta.ema(close, slow)
+plot(emaF, "Rápida", color.aqua, 2)
+plot(emaS, "Lenta", color.orange, 2)
+up = ta.crossover(emaF, emaS)
+dn = ta.crossunder(emaF, emaS)
+plotshape(up, "Compra", shape.triangleup, location.belowbar, color.lime, size=size.small)
+plotshape(dn, "Venta", shape.triangledown, location.abovebar, color.red, size=size.small)
+bgcolor(emaF > emaS ? color.new(color.green, 92) : color.new(color.red, 92))
+`;
+function renderPineEditor(list) {
+  list.innerHTML = `<input id="pineName" class="paste-name" placeholder="Nombre (opcional)" autocomplete="off"><textarea id="pineCode" placeholder="Pega aquí tu código de Pine Script (v5 o anterior)…" spellcheck="false" autocapitalize="off"></textarea>
+    <div class="pine-actions"><button class="primary" id="pineRun">Añadir al gráfico</button><button class="small-button" id="pineExample">Ejemplo</button><button class="small-button" id="pineFile">Abrir archivo</button></div>
+    <div id="pineMsg"></div>
+    <p class="small-note">Es un intérprete propio, no TradingView: soporta una parte de Pine (indicadores, ta.*, plot/plotshape/bgcolor/fill/hline, label/line/box, input.*, arrays, funciones). Lo que no soporta se avisa con su línea; no se omite en silencio. Solo análisis: no se ejecutan órdenes.</p>`;
+  $('#pineName').value = pineDraft.name; $('#pineCode').value = pineDraft.code;
+  $('#pineCode').oninput = () => { pineDraft.code = $('#pineCode').value; }; $('#pineName').oninput = () => { pineDraft.name = $('#pineName').value; };
+  $('#pineExample').onclick = () => { pineDraft.code = PINE_EXAMPLE; $('#pineCode').value = PINE_EXAMPLE; };
+  $('#pineFile').onclick = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.pine,.txt,text/plain'; i.onchange = async () => { const f = i.files[0]; if (!f) return; if (f.size > 600000) { toast('Archivo demasiado grande'); return; } pineDraft.code = await f.text(); if (!pineDraft.name) pineDraft.name = f.name.replace(/\.[^.]+$/, ''); renderPineEditor(list); }; i.click(); };
+  $('#pineRun').onclick = async () => {
+    const code = $('#pineCode').value, msg = $('#pineMsg'), btn = $('#pineRun');
+    if (!code.trim()) { msg.innerHTML = '<div class="pine-box err">Pega primero el código.</div>'; return; }
+    if (!candles.length) { msg.innerHTML = '<div class="pine-box err">Abre un gráfico y espera a que carguen las velas.</div>'; return; }
+    if (activePine().length >= PINE_MAX) { msg.innerHTML = `<div class="pine-box err">Máximo ${PINE_MAX} scripts activos a la vez. Apaga o quita alguno.</div>`; return; }
+    btn.disabled = true; btn.textContent = 'Interpretando…';
+    const key = `${state.symbol}|${state.interval}|${candles[0].t}`;
+    const res = await pineRunRaw(code, {interval: state.interval, symbol: state.symbol, name: pineDraft.name || 'Script', timeLimitMs: 8000});
+    btn.disabled = false; btn.textContent = 'Añadir al gráfico';
+    msg.innerHTML = pineMsgHtml(res, code);
+    if (!res.ok) return;
+    const sid = addScript(code, pineDraft.name.trim() || 'Script de Pine'); if (!sid) return;
+    res._key = key; pineRes[sid] = res;
+    const ex = state.pine.find(p => p.sid === sid); if (ex) ex.on = true; else state.pine.push({sid, on: true, inputs: {}});
+    save(); renderIndicators(); countIndicators(); scheduleRender(); toast('Script añadido al gráfico');
+    if (res.complete && !res.warnings.length) closeSheet();
+  };
+}
+function renderPineSettings(list) {
+  const p = state.pine.find(x => x.sid === pineSetSid), s = scripts.find(x => x.id === pineSetSid), r = pineRes[pineSetSid];
+  if (!p || !s) { list.innerHTML = ''; return; }
+  const inputs = r && r.ok ? r.inputs : [];
+  const ctl = i => {
+    const v = i.value, id = 'pin_' + i.key;
+    if (i.options && i.options.length) return `<select id="${id}" data-k="${i.key}" data-t="${i.type}">${i.options.map(o => `<option value="${esc(o)}" ${String(o) === String(v) ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+    if (i.type === 'bool') return `<button class="toggle ${v ? 'on' : ''}" id="${id}" data-k="${i.key}" data-t="bool" data-on="${v ? 1 : 0}" aria-pressed="${!!v}"></button>`;
+    if (i.type === 'color') return `<input type="color" id="${id}" data-k="${i.key}" data-t="color" value="${esc(String(v).slice(0, 7))}">`;
+    if (i.type === 'int' || i.type === 'float') return `<input type="number" id="${id}" data-k="${i.key}" data-t="${i.type}" value="${esc(v)}" ${i.min != null ? `min="${i.min}"` : ''} ${i.max != null ? `max="${i.max}"` : ''} step="${i.step || (i.type === 'int' ? 1 : 'any')}">`;
+    return `<input type="text" id="${id}" data-k="${i.key}" data-t="${i.type}" value="${esc(v)}">`;
+  };
+  list.innerHTML = `<p class="small-note"><b>${esc(s.name)}</b> · ${s.lines} líneas</p>${r ? pineMsgHtml(r, s.code) : '<p class="small-note">Calculando…</p>'}`
+    + (inputs.length ? `<div class="pine-head"><b>Parámetros</b></div>` + inputs.map(i => `<div class="setting-row pine-in"><label for="pin_${i.key}"><b>${esc(i.title)}</b>${i.group ? `<small>${esc(i.group)}</small>` : ''}</label>${ctl(i)}</div>`).join('') + `<div class="pine-actions"><button class="primary" id="pineApply">Aplicar</button><button class="small-button" id="pineReset">Restablecer</button></div>` : '')
+    + `<div class="pine-actions"><button class="small-button" id="pineView">Ver código</button></div>`;
+  $$('#sheetList .toggle[data-k]').forEach(b => b.onclick = () => { const on = b.dataset.on !== '1'; b.dataset.on = on ? 1 : 0; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+  const ap = $('#pineApply'); if (ap) ap.onclick = () => {
+    const o = {}; $$('#sheetList [data-k]').forEach(el => { const t = el.dataset.t; o[el.dataset.k] = t === 'bool' ? el.dataset.on === '1' : (t === 'int' || t === 'float') ? (el.value === '' ? null : +el.value) : el.value; });
+    p.inputs = o; save(); pineKey = ''; schedulePine(); toast('Parámetros aplicados'); closeSheet();
+  };
+  const rs = $('#pineReset'); if (rs) rs.onclick = () => { p.inputs = {}; save(); pineKey = ''; schedulePine(); toast('Parámetros restablecidos'); closeSheet(); };
+  $('#pineView').onclick = () => { viewScriptId = pineSetSid; openSheet('script'); };
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-pine-new],[data-pine-set],[data-pine-del],[data-pine-tog],[data-pine-add]'); if (!t) return;
+  const d = t.dataset;
+  if (d.pineNew) { openSheet('pine'); return; }
+  if (d.pineSet) { pineSetSid = d.pineSet; openSheet('pineSet'); return; }
+  if (d.pineAdd) {
+    if (state.pine.some(p => p.sid === d.pineAdd)) { toast('Ya está en el gráfico'); return; }
+    if (activePine().length >= PINE_MAX) { toast(`Máximo ${PINE_MAX} scripts activos`); return; }
+    state.pine.push({sid: d.pineAdd, on: true, inputs: {}}); save(); renderIndicators(); pineKey = ''; schedulePine(); toast('Añadido al gráfico: revisa Indicadores'); return;
+  }
+  const p = state.pine.find(x => x.sid === (d.pineDel || d.pineTog)); if (!p) return;
+  if (d.pineDel) { state.pine = state.pine.filter(x => x !== p); delete pineRes[p.sid]; }
+  else { if (!p.on && activePine().length >= PINE_MAX) { toast(`Máximo ${PINE_MAX} scripts activos`); return; } p.on = !p.on; if (p.on) { pineKey = ''; schedulePine(); } }
+  save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); scheduleRender();
+});
+function drawPinePane(x, top0, H, lo, hi, o) {
+  if (!x) return; const {left, w, right, line, text, step, plotW} = o, r = x.r, top = top0 + 4, height = H - 10;
+  const rg = CCTPineDraw.range(r, lo, hi); let mn = rg ? rg.min : 0, mx = rg ? rg.max : 1;
+  if (mx === mn) { mx += 1; mn -= 1; } const pad = (mx - mn) * .08; mn -= pad; mx += pad;
+  const Yp = v => top + (mx - v) / (mx - mn) * height;
+  g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip();
+  g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
+  g.font = '10px system-ui'; g.fillStyle = text; g.textAlign = 'left';
+  g.fillText(`${(r.meta.short || r.meta.title || '').slice(0, 22)}  ${CCTPineDraw.legend(r, candles.length - 1).slice(0, 2).map(i => i.text.replace(/^.* /, '')).join('  ')}`, left + 4, top + 9);
+  g.fillText(CCTPineDraw.fmtV(mx - pad), w - right + 6, top + 9); g.fillText(CCTPineDraw.fmtV(mn + pad), w - right + 6, top + height);
+  g.beginPath(); g.rect(left, top0, plotW + 2, H); g.clip();
+  CCTPineDraw.draw(g, r, {X, Y: Yp, lo, hi, left, right: left + plotW, top: top0 + 2, bottom: top0 + H - 2, step, candles, overlay: false});
+  g.restore();
+}
+
 $('#pasteScript').onclick = () => openSheet('paste');
 $('#scriptFile').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
