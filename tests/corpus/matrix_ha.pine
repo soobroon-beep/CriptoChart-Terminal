@@ -1,0 +1,18 @@
+//@version=5
+indicator("Matrix and Heikin Ashi", overlay=true)
+var m = matrix.new<float>(3, 3, 0.0)
+m.set(0, 0, close)
+m.set(1, 1, 2.0)
+mt = m.transpose()
+p = m.mult(mt)
+tr = p.get(0, 0) + m.sum(0.0).avg()
+haO = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, open)
+haC = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, close)
+plot(haC, "HA close", color.teal)
+plot(haO, "HA open", color.red)
+plot(tr * 0 + m.rows() + m.columns(), "dims", display=display.data_window)
+enum Mode
+    fast = "Fast"
+    slow = "Slow"
+mode = input.enum(Mode.fast, "Mode")
+plot(mode == Mode.fast ? 1 : 2, "mode", display=display.data_window)

@@ -1,0 +1,19 @@
+//@version=5
+indicator("Pivot Points Standard", overlay=true, max_lines_count=500, max_labels_count=500)
+tfIn = input.timeframe("D", "Timeframe")
+showLabels = input.bool(true, "Show labels")
+[ph, pl, pc] = request.security(syminfo.tickerid, tfIn, [high[1], low[1], close[1]], lookahead=barmerge.lookahead_on)
+pp = (ph + pl + pc) / 3
+r1 = 2 * pp - pl
+s1 = 2 * pp - ph
+r2 = pp + (ph - pl)
+s2 = pp - (ph - pl)
+plot(pp, "P", color.gray, style=plot.style_stepline)
+plot(r1, "R1", color.red, style=plot.style_stepline)
+plot(s1, "S1", color.green, style=plot.style_stepline)
+plot(r2, "R2", color.new(color.red, 40), style=plot.style_circles)
+plot(s2, "S2", color.new(color.green, 40), style=plot.style_circles)
+var label lb = na
+if showLabels and barstate.islast
+    label.delete(lb)
+    lb := label.new(bar_index + 2, pp, "P " + str.tostring(pp, format.mintick), style=label.style_label_left, color=color.gray, textcolor=color.white)

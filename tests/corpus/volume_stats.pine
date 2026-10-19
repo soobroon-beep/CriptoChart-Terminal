@@ -1,0 +1,18 @@
+//@version=5
+indicator("Volume Stats", format=format.volume)
+maLen = input.int(20, "MA")
+colorUp = input.color(color.new(color.teal, 20), "Up")
+colorDown = input.color(color.new(color.red, 20), "Down")
+avg = ta.sma(volume, maLen)
+rel = volume / avg
+isUp = close >= open
+plot(volume, "Volume", isUp ? colorUp : colorDown, style=plot.style_columns)
+plot(avg, "Average", color.yellow)
+plotchar(rel > 2 ? volume : na, "Spike", "▲", location.top, color.orange, size=size.tiny)
+var tbl = table.new(position.top_right, 2, 2, border_width=1)
+if barstate.islast
+    table.cell(tbl, 0, 0, "Rel vol", text_color=color.white, bgcolor=color.gray)
+    table.cell(tbl, 1, 0, str.tostring(rel, "#.##"), text_color=color.white)
+    table.cell(tbl, 0, 1, "Avg", text_color=color.white, bgcolor=color.gray)
+    table.cell(tbl, 1, 1, str.tostring(avg, format.volume), text_color=color.white)
+alertcondition(rel > 3, "Volume spike", "Volume 3x average")

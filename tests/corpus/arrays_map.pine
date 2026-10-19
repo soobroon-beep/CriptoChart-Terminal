@@ -1,0 +1,26 @@
+//@version=5
+indicator("Arrays and Maps", overlay=false)
+len = input.int(10, "Len")
+var arr = array.new_float(0)
+array.push(arr, close)
+if array.size(arr) > len
+    array.shift(arr)
+avg = array.avg(arr)
+mx = array.max(arr)
+mn = array.min(arr)
+sd = array.stdev(arr)
+sorted = array.copy(arr)
+array.sort(sorted, order.ascending)
+med = array.size(sorted) > 0 ? array.get(sorted, array.size(sorted) / 2) : na
+var m = map.new<string, float>()
+m.put("last", close)
+v = m.get("last")
+plot(avg, "avg")
+plot(mx - mn, "range")
+plot(sd, "sd")
+plot(med, "median")
+plot(v - avg, "diff")
+s = ""
+for i = 0 to 2
+    s += str.tostring(i) + ","
+label.new(bar_index, 0.0, s, style=label.style_none)

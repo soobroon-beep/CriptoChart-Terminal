@@ -1,0 +1,28 @@
+//@version=5
+indicator("Support Resistance Levels", overlay=true, max_lines_count=200, max_labels_count=200)
+left = input.int(15, "Left")
+right = input.int(15, "Right")
+showTable = input.bool(true, "Table")
+var levels = array.new<float>()
+var lines = array.new<line>()
+ph = ta.pivothigh(high, left, right)
+pl = ta.pivotlow(low, left, right)
+f(price, col) =>
+    ln = line.new(bar_index - right, price, bar_index, price, extend=extend.right, color=col, style=line.style_dashed)
+    array.push(lines, ln)
+    array.push(levels, price)
+if not na(ph)
+    f(ph, color.red)
+if not na(pl)
+    f(pl, color.green)
+for i = array.size(lines) - 1 to 0 by -1
+    ln = array.get(lines, i)
+    p = line.get_y1(ln)
+    if (close > p and close[1] <= p) or (close < p and close[1] >= p)
+        line.set_extend(ln, extend.none)
+        line.set_x2(ln, bar_index)
+        array.remove(lines, i)
+        array.remove(levels, i)
+if showTable and barstate.islast
+    var t = table.new(position.bottom_right, 1, 2)
+    table.cell(t, 0, 0, "Levels: " + str.tostring(array.size(levels)), bgcolor=color.new(color.gray, 70), text_color=color.white)

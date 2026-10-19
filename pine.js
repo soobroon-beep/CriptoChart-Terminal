@@ -23,6 +23,10 @@ const isna = v => v === null || v === undefined || (typeof v === 'number' && v !
    Arregla lo que el copiar/pegar suele estropear y lo cuenta (nunca en silencio). */
 function sanitize(src) {
   src = String(src).replace(/\r\n?/g, '\n'); const fixes = {}, first = {}; let line = 1, out = '', i = 0, str = null, cmt = false;
+  { // números de línea copiados junto con el código («1 //@version=5», «2| indicator(…)»)
+    const ls = src.split('\n'), ne = ls.filter(l => l.trim()), m = ne.filter(l => /^\s*\d{1,5}[.:|)]?(\s|$)/.test(l));
+    if (ne.length >= 3 && m.length >= ne.length * 0.8 && /^\s*\d{1,5}[.:|)]?\s+(\/\/|indicator|study|strategy|library)/.test(ne[0])) { src = ls.map(l => l.replace(/^\s*\d{1,5}[.:|)]?(?: |\t|$)/, '')).join('\n'); fixes['números de línea pegados con el código eliminados'] = ne.length; first['números de línea pegados con el código eliminados'] = 1; }
+  }
   const fx = (k, c) => { fixes[k] = (fixes[k] || 0) + 1; if (!first[k]) first[k] = line; };
   while (i < src.length) {
     const c = src[i];
@@ -185,6 +189,17 @@ function parse(T) {
     if (peek().t === 'nl') body = parseBlock(); else { const l = peek().line; body = [{k: 'expr', e: parseExpr(), line: l}]; endStmt(); }
     return {k: 'fn', name, params, body, line, method: !!isMethod};
   }
+  function parseEnum() {
+    const line = next().line, name = identTok().v, fields = [];
+    if (peek().t === 'nl') next(); if (peek().t !== 'indent') fail('Se esperaba la lista de valores indentada'); next();
+    while (peek().t !== 'dedent' && peek().t !== 'eof') {
+      if (peek().t === 'nl') { next(); continue; }
+      const nm = identTok().v; let title = nm; if (isOp('=')) { next(); const e = parseExpr(); if (e.k === 'str') title = e.v; }
+      endStmt(); fields.push({name: nm, title});
+    }
+    if (peek().t === 'dedent') next();
+    return {k: 'enum', name, fields, line};
+  }
   function parseType() {
     const line = next().line, name = identTok().v, fields = [];
     if (peek().t === 'nl') next(); if (peek().t !== 'indent') fail('Se esperaba la lista de campos indentada'); next();
@@ -250,7 +265,7 @@ function parse(T) {
         case 'continue': next(); endStmt(); return {k: 'continue', line};
         case 'import': fail('«import» (bibliotecas) todavía no está soportado');
         case 'type': return parseType();
-        case 'enum': fail('«enum» todavía no está soportado');
+        case 'enum': return parseEnum();
         case 'method': return parseFn(true);
         case 'export': next(); return parseStatement();
       }
@@ -388,11 +403,13 @@ const CONSTS = Object.assign(Object.create(null), {
   'chart.fg_color': hexCol('D1D4DC'), 'chart.bg_color': hexCol('131722'), 'chart.is_standard': true, 'chart.is_heikinashi': false, 'chart.is_renko': false,
   'display.none': 0, 'display.pane': 1, 'display.data_window': 2, 'display.price_scale': 4, 'display.status_line': 8, 'display.all': 15, 'display.pine_screener': 16,
   'dayofweek.sunday': 1, 'dayofweek.monday': 2, 'dayofweek.tuesday': 3, 'dayofweek.wednesday': 4, 'dayofweek.thursday': 5, 'dayofweek.friday': 6, 'dayofweek.saturday': 7,
+  'input.integer': 'int', 'input.float': 'float', 'input.bool': 'bool', 'input.string': 'string', 'input.source': 'source', 'input.resolution': 'timeframe', 'input.timeframe': 'timeframe', 'input.session': 'session', 'input.symbol': 'symbol', 'input.color': 'color', 'input.price': 'price', 'input.time': 'time', 'input.text_area': 'text_area',
   'strategy.long': 'long', 'strategy.short': 'short', 'strategy.position_size': 0, 'strategy.equity': 0, 'strategy.netprofit': 0, 'strategy.opentrades': 0, 'strategy.closedtrades': 0
 });
 for (const k in NAMED) CONSTS['color.' + k] = hexCol(NAMED[k]);
 const CONST_DYN = Object.create(null); // series “variables” de ta.* con estado propio (ver builtins)
 
+const OLDVAR = Object.assign(Object.create(null), {tickerid: 'syminfo.tickerid', ticker: 'syminfo.ticker', period: 'timeframe.period', interval: 'timeframe.multiplier', isintraday: 'timeframe.isintraday', isdaily: 'timeframe.isdaily', isweekly: 'timeframe.isweekly', ismonthly: 'timeframe.ismonthly', isdwm: 'timeframe.isdwm', mintick: 'syminfo.mintick', n: 'bar_index'});
 const lookup = (env, name) => { for (let s = env.scope; s; s = s.up) { const v = s.m.get(name); if (v) return v; } return null; };
 const histAt = (ctx, v, off) => { if (off === 0) return v.cur; if (off < 0) return null; const i = ctx.bar - off; if (i < 0) return null; const h = v.hist[i]; return h === undefined ? null : h; };
 function warn(ctx, line, msg, key, level) { const k = key || msg; if (ctx.wkeys.has(k)) return; ctx.wkeys.add(k); ctx.warnings.push({line: line || 0, msg, level: level || 'warn'}); }
@@ -427,6 +444,9 @@ function evId(n, env) {
   if (name === 'na') return null;
   if (SERIES.has(name)) return seriesAt(ctx, name, ctx.bar);
   if (BVARS[name]) return BVARS[name](ctx);
+  if (name === 'tr') return CONST_DYN['ta.tr'](ctx, env.frame.state(n));
+  if (OLDVAR[name] && !ctx.fns.has(name)) { const to = OLDVAR[name]; warn(ctx, n.line, `${name} (sintaxis antigua) → ${to}`, 'fixv:' + name, 'fix'); return to in CONSTS ? (typeof CONSTS[to] === 'function' ? CONSTS[to](ctx) : CONSTS[to]) : to === 'bar_index' ? ctx.bar : null; }
+  if (Object.prototype.hasOwnProperty.call(NAMED, name) && !ctx.fns.has(name)) { warn(ctx, n.line, `Color «${name}» (sintaxis antigua) → color.${name}`, 'fixc:' + name, 'fix'); return CONSTS['color.' + name]; }
   if (ctx.fns.has(name)) throw new PineError(`«${name}» es una función; falta llamarla con ()`, n.line);
   throw new PineError(`Variable no definida «${name}»`, n.line);
 }
@@ -436,7 +456,9 @@ function evMem(n, env) {
     const full = parts.join('.');
     if (full in CONSTS) { const c = CONSTS[full]; return typeof c === 'function' ? c(ctx) : c; }
     if (CONST_DYN[full]) return CONST_DYN[full](ctx, env.frame.state(n));
+    if (ctx.enums && ctx.enums.has(parts[0]) && parts.length === 2) { const en = ctx.enums.get(parts[0]); if (!en.fields.some(f => f.name === parts[1])) throw new PineError(`El enum ${parts[0]} no tiene el valor «${parts[1]}»`, n.line); return full; }
     if (ENUM_NS.has(parts[0]) && parts.length === 2) return parts[1];
+    if (parts[0] === 'strategy' && parts.length >= 2) return full.replace(/^strategy\./, ''); // constantes de strategy (percent_of_equity, cash, direction.long…): sin efecto en un indicador
     if (KNOWN_ROOTS.has(parts[0])) { warn(ctx, n.line, `«${full}» no está soportado todavía: se usa na`, 'v:' + full, 'unsupported'); ctx.incomplete = true; return null; }
     throw new PineError(`Variable no definida «${parts[0]}»`, n.line);
   }
@@ -564,6 +586,7 @@ function exec(s, env) {
       o[s.target.prop] = val; return val;
     }
     case 'type': return null;
+    case 'enum': return null;
     case 'break': ctx.ctrl = 'break'; return null;
     case 'continue': ctx.ctrl = 'continue'; return null;
     case 'fn': return null; // ya registrada (hoisting)
@@ -592,16 +615,18 @@ function callUser(fnNode, call, env, recv) {
 const B = Object.create(null);
 const def = (name, sig, f, opt) => { B[name] = Object.assign({sig, f}, opt || {}); };
 function callBuiltin(b, name, n, env, recv) {
-  const ctx = env.ctx, sig = b.sig, vals = []; let pos = 0;
+  const ctx = env.ctx, sig = b.sig, vals = []; let pos = 0, transp;
   if (recv !== undefined) vals[pos++] = recv;
   for (const a of n.args) {
     const v = ev(a.e, env);
+    if (a.name === 'transp' && !name.startsWith('color.')) { transp = v; continue; } // sintaxis antigua: transp=NN en plot/fill/bgcolor/…
     if (a.name) {
       const ix = sig ? sig.indexOf(a.name) : -1;
       if (ix < 0) { if (!b.lenient) warn(ctx, n.line, `El parámetro «${a.name}» de ${name}() no está soportado; se ignora`, name + ':' + a.name); continue; }
       vals[ix] = v;
     } else vals[pos++] = v;
   }
+  if (transp !== undefined && !isna(transp) && sig) { sig.forEach((nm, i) => { if ((nm === 'color' || nm === 'textcolor' || nm === 'bgcolor') && vals[i] instanceof Col) vals[i] = new Col(vals[i].r, vals[i].g, vals[i].b, clamp(transp, 0, 100)); }); warn(ctx, n.line, 'transp=… (sintaxis antigua) → color.new(color, transp)', 'fixt', 'fix'); }
   return b.f(vals, {ctx, env, node: n, st: env.frame.state(n), line: n.line, name});
 }
 function evCall(n, env) {
@@ -616,9 +641,9 @@ function evCall(n, env) {
       return callUser(m, Object.assign({}, n, {args: n.args.slice(1)}), env, recv);
     }
     if (parts.length === 2 && parts[1] === 'new' && ctx.types.has(parts[0])) return newObj(ctx.types.get(parts[0]), n, env);
-    if (name === 'request.security') return evSecurity(n, env);
+    if (name === 'request.security' || (name === 'security' && parts.length === 1 && !ctx.fns.has('security'))) { if (name === 'security') (ctx.legacyUsed || (ctx.legacyUsed = new Map())).set('security', 'request.security'); return evSecurity(n, env); }
     let b = B[name]; if (!b && name.startsWith('array.new_')) b = B['array.new'];
-    if (!b && ctx.legacy && parts.length === 1) b = B['ta.' + name] || B['math.' + name] || B['str.' + name] || B[LEGACY[name]];
+    if (!b && parts.length === 1) b = B['ta.' + name] || B['math.' + name] || B['str.' + name] || B[LEGACY[name]];
     if (b) return callBuiltin(b, name, n, env);
     if (parts[0] === 'strategy') { warn(ctx, n.line, 'Las órdenes de «strategy.*» se ignoran: este script solo se muestra como indicador (el backtesting llega en la Fase 7)', 'strategy', 'unsupported'); ctx.incomplete = true; return null; }
     warn(ctx, n.line, `Función no soportada: ${name}() — devuelve na`, 'f:' + name, 'unsupported'); ctx.incomplete = true; return null;
@@ -780,6 +805,33 @@ def('ta.cum', ['source'], (a, c) => { const s = c.st; if (s.bar !== c.ctx.bar) {
 def('ta.stdev', ['source', 'length', 'biased'], (a, c) => { const v = varianceE(c.st, c.ctx.bar, a[0], LEN(a[1]), a[2] !== false); return isna(v) ? null : Math.sqrt(v); });
 def('ta.variance', ['source', 'length', 'biased'], (a, c) => varianceE(c.st, c.ctx.bar, a[0], LEN(a[1]), a[2] !== false));
 def('ta.dev', S1, (a, c) => { const len = LEN(a[1]), ma = sma(c.st, c.ctx.bar, a[0], len); if (isna(ma)) return null; let d = 0; for (let i = c.st.b.length - len; i < c.st.b.length; i++) d += Math.abs(c.st.b[i] - ma); return d / len; });
+const winOf = (c, a, len) => { const b = pushV(c.st, c.ctx.bar, a), w = b.length >= len ? b.slice(-len) : null; return w && !w.some(isna) ? w : null; };
+def('ta.range', S1, (a, c) => { const w = winOf(c, a[0], LEN(a[1])); return w ? Math.max(...w) - Math.min(...w) : null; });
+def('ta.max', ['source'], (a, c) => { const s = c.st; if (s.pb !== c.ctx.bar) { s.prevMax = s.mx; s.pb = c.ctx.bar; } if (!isna(a[0])) s.mx = isna(s.prevMax) ? a[0] : Math.max(s.prevMax, a[0]); return isna(s.mx) ? null : s.mx; });
+def('ta.min', ['source'], (a, c) => { const s = c.st; if (s.pb !== c.ctx.bar) { s.prevMin = s.mn; s.pb = c.ctx.bar; } if (!isna(a[0])) s.mn = isna(s.prevMin) ? a[0] : Math.min(s.prevMin, a[0]); return isna(s.mn) ? null : s.mn; });
+def('ta.mode', S1, (a, c) => { const w = winOf(c, a[0], LEN(a[1])); if (!w) return null; const cnt = new Map(); for (const v of w) cnt.set(v, (cnt.get(v) || 0) + 1); let best = null, bc = 0; for (const [v, k] of cnt) if (k > bc || (k === bc && v < best)) { best = v; bc = k; } return best; });
+def('ta.percentile_linear_interpolation', ['source', 'length', 'percentage'], (a, c) => { const w = winOf(c, a[0], LEN(a[1])); if (!w) return null; w.sort((x, y) => x - y); const k = (a[2] / 100) * (w.length - 1), f = Math.floor(k), t = Math.ceil(k); return w[f] + (w[t] - w[f]) * (k - f); });
+def('ta.percentile_nearest_rank', ['source', 'length', 'percentage'], (a, c) => { const w = winOf(c, a[0], LEN(a[1])); if (!w) return null; w.sort((x, y) => x - y); return w[Math.min(w.length - 1, Math.max(0, Math.ceil(a[2] / 100 * w.length) - 1))]; });
+def('ta.cmo', S1, (a, c) => { const len = LEN(a[1]), w = winOf(c, a[0], len + 1); if (!w) return null; let up = 0, dn = 0; for (let i = 1; i < w.length; i++) { const d = w[i] - w[i - 1]; if (d > 0) up += d; else dn -= d; } return up + dn === 0 ? 0 : 100 * (up - dn) / (up + dn); });
+def('ta.cog', S1, (a, c) => { const len = LEN(a[1]), w = winOf(c, a[0], len); if (!w) return null; let num = 0, den = 0; for (let i = 0; i < len; i++) { const v = w[len - 1 - i]; num += v * (i + 1); den += v; } return den === 0 ? null : -num / den; });
+def('ta.alma', ['series', 'length', 'offset', 'sigma', 'floor'], (a, c) => { const len = LEN(a[1]), w = winOf(c, a[0], len); if (!w) return null; const off = a[2] === undefined ? 0.85 : a[2], sg = a[3] === undefined ? 6 : a[3], m = Math.floor(off * (len - 1)), sd = len / sg; let num = 0, den = 0; for (let i = 0; i < len; i++) { const k = Math.exp(-((i - m) ** 2) / (2 * sd * sd)); num += k * w[i]; den += k; } return num / den; });
+def('ta.correlation', ['source1', 'source2', 'length'], (a, c) => { const len = LEN(a[2]), x = winOf({st: sub1(c.st, 'x'), ctx: c.ctx}, a[0], len), y = winOf({st: sub1(c.st, 'y'), ctx: c.ctx}, a[1], len); if (!x || !y) return null; const mx = x.reduce((p, q) => p + q, 0) / len, my = y.reduce((p, q) => p + q, 0) / len; let sxy = 0, sxx = 0, syy = 0; for (let i = 0; i < len; i++) { sxy += (x[i] - mx) * (y[i] - my); sxx += (x[i] - mx) ** 2; syy += (y[i] - my) ** 2; } return sxx === 0 || syy === 0 ? null : sxy / Math.sqrt(sxx * syy); });
+def('ta.tsi', ['source', 'short_length', 'long_length'], (a, c) => { const bar = c.ctx.bar, b = pushV(sub1(c.st, 'src'), bar, a[0]), ch = b.length > 1 && !isna(a[0]) && !isna(b[b.length - 2]) ? a[0] - b[b.length - 2] : null, sl = LEN(a[1]), ll = LEN(a[2]);
+  const n = ema(sub1(c.st, 'e2'), bar, ema(sub1(c.st, 'e1'), bar, ch, ll), sl), d = ema(sub1(c.st, 'f2'), bar, ema(sub1(c.st, 'f1'), bar, ch === null ? null : Math.abs(ch), ll), sl); return isna(n) || isna(d) || d === 0 ? null : 100 * n / d; });
+def('ta.sar', ['start', 'inc', 'max'], (a, c) => {
+  const ctx = c.ctx, bar = ctx.bar, k = ctx.candles[bar], s = c.st, st = a[0] === undefined ? 0.02 : a[0], inc = a[1] === undefined ? 0.02 : a[1], mx = a[2] === undefined ? 0.2 : a[2];
+  if (s.bar !== bar) { s.prev = s.cur ? Object.assign({}, s.cur) : null; s.bar = bar; }
+  const p = s.prev, pk = bar > 0 ? ctx.candles[bar - 1] : null; let cur;
+  if (!p) { if (!pk) { s.cur = null; return null; } const long = k.c >= pk.c; cur = {sar: long ? pk.l : pk.h, ep: long ? k.h : k.l, af: st, long}; }
+  else {
+    let sar = p.sar + p.af * (p.ep - p.sar), long = p.long, ep = p.ep, af = p.af;
+    const p2 = bar > 1 ? ctx.candles[bar - 2] : pk;
+    if (long) { sar = Math.min(sar, pk.l, p2.l); if (k.l < sar) { long = false; sar = ep; ep = k.l; af = st; } else if (k.h > ep) { ep = k.h; af = Math.min(mx, af + inc); } }
+    else { sar = Math.max(sar, pk.h, p2.h); if (k.h > sar) { long = true; sar = ep; ep = k.h; af = st; } else if (k.l < ep) { ep = k.l; af = Math.min(mx, af + inc); } }
+    cur = {sar, ep, af, long};
+  }
+  s.cur = cur; return cur.sar;
+});
 def('ta.median', S1, (a, c) => { const len = LEN(a[1]), b = pushV(c.st, c.ctx.bar, a[0]); if (b.length < len) return null; const w = b.slice(-len); if (w.some(isna)) return null; w.sort((x, y) => x - y); return len % 2 ? w[(len - 1) / 2] : (w[len / 2 - 1] + w[len / 2]) / 2; });
 def('ta.linreg', ['source', 'length', 'offset'], (a, c) => {
   const len = LEN(a[1]), b = pushV(c.st, c.ctx.bar, a[0]); if (b.length < len) return null; const w = b.slice(-len); if (w.some(isna)) return null;
@@ -811,7 +863,7 @@ def('na', ['x'], a => isna(a[0]));
 def('nz', ['source', 'replacement'], a => isna(a[0]) ? (a[1] === undefined ? 0 : a[1]) : a[0]);
 def('fixnan', ['source'], (a, c) => { if (!isna(a[0])) c.st.last = a[0]; return isna(a[0]) ? (c.st.last === undefined ? null : c.st.last) : a[0]; });
 def('iff', ['cond', 'then', 'else'], a => truthy(a[0]) ? a[1] : a[2]);
-for (const nm of ['alert', 'alertcondition', 'max_bars_back', 'log.info', 'log.warning', 'log.error', 'runtime.error']) def(nm, null, (a, c) => { if (nm === 'runtime.error') throw new PineError(String(a[0]), c.line); warn(c.ctx, c.line, `${nm}() se ignora (las alertas se configuran aparte en la plataforma)`, 'ign:' + nm, 'info'); return null; });
+for (const nm of ['alert', 'alertcondition', 'max_bars_back', 'log.info', 'log.warning', 'log.error', 'runtime.error']) def(nm, null, (a, c) => { if (nm === 'runtime.error') throw new PineError(String(a[0]), c.line); warn(c.ctx, c.line, `${nm}() se ignora (las alertas se configuran aparte en la plataforma)`, 'ign:' + nm, 'info'); return null; }, {lenient: true});
 
 /* math.* */
 const FINITE = v => Number.isFinite(v) ? v : null;
@@ -829,9 +881,21 @@ def('math.sum', S1, (a, c) => sumw(c.st, c.ctx.bar, a[0], LEN(a[1])));
 def('math.random', ['min', 'max', 'seed'], a => (a[0] === undefined ? 0 : a[0]) + Math.random() * ((a[1] === undefined ? 1 : a[1]) - (a[0] === undefined ? 0 : a[0])));
 
 /* str.* */
+let curMintick = 0.01; // se fija al empezar cada ejecución
+const tickDec = () => { const m = String(curMintick), i = m.indexOf('.'); if (/e-/.test(m)) return Math.min(10, +m.split('e-')[1]); return i < 0 ? 0 : Math.min(10, m.length - i - 1); };
+const group3 = t => t.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 const fmtNum = (x, f) => {
   if (isna(x)) return 'NaN';
-  if (typeof f === 'string' && /[#0]/.test(f)) { const d = (f.split('.')[1] || '').length; return f.includes('0') && !f.includes('#') ? x.toFixed(d) : String(+x.toFixed(d)); }
+  if (f === 'mintick' || f === 'price') return x.toFixed(tickDec());
+  if (f === 'percent') return (x * 100).toFixed(tickDec()) + '%';
+  if (f === 'volume') { const ax = Math.abs(x), r = (v, u) => String(+(v).toFixed(3)) + u; return ax >= 1e12 ? r(x / 1e12, 'T') : ax >= 1e9 ? r(x / 1e9, 'B') : ax >= 1e6 ? r(x / 1e6, 'M') : ax >= 1e3 ? r(x / 1e3, 'K') : String(+x.toFixed(3)); }
+  if (typeof f === 'string' && /[#0]/.test(f)) {
+    const m = /^([^#0,.]*)([#0,]*)(?:\.([#0]*))?(%?)(.*)$/.exec(f); if (!m) return String(+x.toFixed(10));
+    const [, pre, ip, dp = '', pc, suf] = m, v = pc ? x * 100 : x, mand = (dp.match(/0/g) || []).length;
+    let t = Math.abs(v).toFixed(dp.length); if (dp.length) { let [i, d] = t.split('.'); d = d.replace(/0+$/, ''); while (d.length < mand) d += '0'; t = d.length ? i + '.' + d : i; }
+    const minInt = (ip.match(/0/g) || []).length; let [i, d] = t.split('.'); if (i.length < minInt) i = i.padStart(minInt, '0'); if (ip.includes(',')) i = group3(i);
+    return (v < 0 && +t !== 0 ? '-' : '') + pre + i + (d !== undefined ? '.' + d : '') + (pc ? '%' : '') + suf;
+  }
   return String(+x.toFixed(10));
 };
 const toStr = (v, f) => typeof v === 'number' ? fmtNum(v, f) : isna(v) ? 'NaN' : v instanceof Col ? '#' + [v.r, v.g, v.b].map(x => x.toString(16).padStart(2, '0')).join('') : String(v);
@@ -841,6 +905,9 @@ def('str.length', ['string'], a => isna(a[0]) ? null : String(a[0]).length);
 def('str.upper', ['string'], a => String(a[0]).toUpperCase()); def('str.lower', ['string'], a => String(a[0]).toLowerCase());
 def('str.contains', ['source', 'str'], a => String(a[0]).includes(a[1])); def('str.startswith', ['source', 'str'], a => String(a[0]).startsWith(a[1])); def('str.endswith', ['source', 'str'], a => String(a[0]).endsWith(a[1]));
 def('str.substring', ['source', 'begin_pos', 'end_pos'], a => String(a[0]).substring(a[1], a[2] === undefined ? undefined : a[2]));
+def('str.pos', ['source', 'str'], a => { if (isna(a[0]) || isna(a[1])) return null; const i = String(a[0]).indexOf(a[1]); return i < 0 ? null : i; });
+def('str.repeat', ['source', 'repeat', 'separator'], a => { const n = Math.min(1000, Math.max(0, a[1] | 0)); return isna(a[0]) ? null : Array(n).fill(String(a[0])).join(a[2] === undefined ? '' : a[2]); });
+def('str.format_time', ['time', 'format', 'timezone'], a => { if (isna(a[0])) return null; const d = new Date(a[0]), z = x => String(x).padStart(2, '0'), f = a[1] === undefined ? 'yyyy-MM-dd\'T\'HH:mm:ssZ' : String(a[1]); return f.replace(/'([^']*)'|yyyy|yy|MM|dd|HH|hh|mm|ss|Z/g, (m, q) => q !== undefined ? q : m === 'yyyy' ? d.getUTCFullYear() : m === 'yy' ? z(d.getUTCFullYear() % 100) : m === 'MM' ? z(d.getUTCMonth() + 1) : m === 'dd' ? z(d.getUTCDate()) : m === 'HH' ? z(d.getUTCHours()) : m === 'hh' ? z(d.getUTCHours() % 12 || 12) : m === 'mm' ? z(d.getUTCMinutes()) : m === 'ss' ? z(d.getUTCSeconds()) : '+0000'); });
 def('str.replace_all', ['source', 'target', 'replacement'], a => String(a[0]).split(a[1]).join(a[2]));
 def('str.replace', ['source', 'target', 'replacement', 'occurrence'], a => String(a[0]).replace(a[1], () => a[2]));
 def('str.trim', ['source'], a => String(a[0]).trim());
@@ -852,6 +919,7 @@ const arrOf = (v, line) => { if (!Array.isArray(v)) throw new PineError('Se espe
 const ai = (arr, i, line) => { if (isna(i) || i < 0 || i >= arr.length) throw new PineError(`Índice ${i} fuera del array (tamaño ${arr.length})`, line); return Math.trunc(i); };
 const MAXARR = 100000;
 for (const t of ['float', 'int', 'bool', 'string', 'color']) def('array.new_' + t, ['size', 'initial_value'], (a, c) => { const n = a[0] || 0; if (n > MAXARR) throw new PineError('Array demasiado grande', c.line); return new Array(n).fill(a[1] === undefined ? null : a[1]); });
+for (const t of ['label', 'line', 'box', 'linefill', 'table', 'polyline']) def('array.new_' + t, ['size', 'initial_value'], (a, c) => new Array(Math.min(MAXARR, a[0] || 0)).fill(a[1] === undefined ? null : a[1]));
 def('array.new', ['size', 'initial_value'], (a, c) => { const n = a[0] || 0; if (n > MAXARR) throw new PineError('Array demasiado grande', c.line); return new Array(n).fill(a[1] === undefined ? null : a[1]); });
 def('array.from', null, a => a.slice());
 def('array.push', ['id', 'value'], (a, c) => { const r = arrOf(a[0], c.line); if (r.length >= MAXARR) throw new PineError('Array demasiado grande', c.line); r.push(a[1] === undefined ? null : a[1]); return null; });
@@ -874,6 +942,22 @@ def('array.max', ['id'], (a, c) => { const r = arrOf(a[0], c.line).filter(v => !
 def('array.min', ['id'], (a, c) => { const r = arrOf(a[0], c.line).filter(v => !isna(v)); return r.length ? Math.min(...r) : null; });
 def('array.reverse', ['id'], (a, c) => { arrOf(a[0], c.line).reverse(); return null; });
 def('array.sort', ['id', 'order'], (a, c) => { const r = arrOf(a[0], c.line), d = a[1] === 'descending' ? -1 : 1; r.sort((x, y) => d * (x < y ? -1 : x > y ? 1 : 0)); return null; });
+const nums = (a, c) => arrOf(a[0], c.line).filter(v => typeof v === 'number' && !isNaN(v));
+def('array.variance', ['id', 'biased'], (a, c) => { const r = nums(a, c); if (!r.length) return null; const m = r.reduce((x, y) => x + y, 0) / r.length, ss = r.reduce((x, y) => x + (y - m) ** 2, 0); return a[1] === false ? (r.length > 1 ? ss / (r.length - 1) : null) : ss / r.length; });
+def('array.stdev', ['id', 'biased'], (a, c) => { const v = B['array.variance'].f(a, c); return v === null ? null : Math.sqrt(v); });
+def('array.median', ['id'], (a, c) => { const r = nums(a, c).sort((x, y) => x - y); if (!r.length) return null; const m = r.length >> 1; return r.length % 2 ? r[m] : (r[m - 1] + r[m]) / 2; });
+def('array.mode', ['id'], (a, c) => { const r = nums(a, c), cnt = new Map(); for (const v of r) cnt.set(v, (cnt.get(v) || 0) + 1); let best = null, bc = 0; for (const [v, k] of cnt) if (k > bc || (k === bc && v < best)) { best = v; bc = k; } return best; });
+def('array.range', ['id'], (a, c) => { const r = nums(a, c); return r.length ? Math.max(...r) - Math.min(...r) : null; });
+def('array.percentile_linear_interpolation', ['id', 'percentage'], (a, c) => { const r = nums(a, c).sort((x, y) => x - y); if (!r.length) return null; const k = (a[1] / 100) * (r.length - 1), f = Math.floor(k), t = Math.ceil(k); return r[f] + (r[t] - r[f]) * (k - f); });
+def('array.percentile_nearest_rank', ['id', 'percentage'], (a, c) => { const r = nums(a, c).sort((x, y) => x - y); if (!r.length) return null; return r[Math.min(r.length - 1, Math.max(0, Math.ceil(a[1] / 100 * r.length) - 1))]; });
+def('array.percentrank', ['id', 'index'], (a, c) => { const r = arrOf(a[0], c.line), v = r[a[1]]; if (typeof v !== 'number') return null; return r.filter(x => typeof x === 'number' && x <= v).length / r.length * 100 - 100 / r.length; });
+def('array.covariance', ['id1', 'id2', 'biased'], (a, c) => { const x = arrOf(a[0], c.line), y = arrOf(a[1], c.line), n = Math.min(x.length, y.length); if (!n) return null; const mx = x.slice(0, n).reduce((p, q) => p + q, 0) / n, my = y.slice(0, n).reduce((p, q) => p + q, 0) / n; let s = 0; for (let i = 0; i < n; i++) s += (x[i] - mx) * (y[i] - my); return a[2] === false ? s / (n - 1) : s / n; });
+def('array.abs', ['id'], (a, c) => arrOf(a[0], c.line).map(v => typeof v === 'number' ? Math.abs(v) : v));
+def('array.lastindexof', ['id', 'value'], (a, c) => arrOf(a[0], c.line).lastIndexOf(a[1]));
+def('array.binary_search', ['id', 'val'], (a, c) => { const r = arrOf(a[0], c.line); let lo = 0, hi = r.length - 1; while (lo <= hi) { const m = (lo + hi) >> 1; if (r[m] === a[1]) return m; if (r[m] < a[1]) lo = m + 1; else hi = m - 1; } return -1; });
+def('array.binary_search_leftmost', ['id', 'val'], (a, c) => { const r = arrOf(a[0], c.line); let lo = 0, hi = r.length; while (lo < hi) { const m = (lo + hi) >> 1; if (r[m] < a[1]) lo = m + 1; else hi = m; } return lo; });
+def('array.binary_search_rightmost', ['id', 'val'], (a, c) => { const r = arrOf(a[0], c.line); let lo = 0, hi = r.length; while (lo < hi) { const m = (lo + hi) >> 1; if (r[m] <= a[1]) lo = m + 1; else hi = m; } return lo; });
+def('array.sort_indices', ['id', 'order'], (a, c) => { const r = arrOf(a[0], c.line), d = a[1] === 'descending' ? -1 : 1; return r.map((v, i) => i).sort((i, j) => d * (r[i] - r[j])); });
 def('array.copy', ['id'], (a, c) => arrOf(a[0], c.line).slice());
 def('array.slice', ['id', 'index_from', 'index_to'], (a, c) => arrOf(a[0], c.line).slice(a[1], a[2]));
 def('array.concat', ['id1', 'id2'], (a, c) => { arrOf(a[0], c.line).push(...arrOf(a[1], c.line)); return a[0]; });
@@ -882,6 +966,7 @@ def('array.join', ['id', 'separator'], (a, c) => arrOf(a[0], c.line).map(v => to
 
 /* map.* */
 def('map.new', null, () => ({_kind: 'map', m: new Map()}));
+def('map.put_all', ['id', 'id2'], (a, c) => { const m = a[0], o = a[1]; if (!m || !m.m || !o || !o.m) throw new PineError('Se esperaba un map', c.line); for (const [k, v] of o.m) m.m.set(k, v); return null; });
 def('map.put', ['id', 'key', 'value'], (a, c) => { const m = a[0]; if (!m || !m.m) throw new PineError('Se esperaba un map', c.line); const old = m.m.has(a[1]) ? m.m.get(a[1]) : null; m.m.set(a[1], a[2] === undefined ? null : a[2]); return old; });
 def('map.get', ['id', 'key'], (a, c) => { const m = a[0]; if (!m || !m.m) throw new PineError('Se esperaba un map', c.line); return m.m.has(a[1]) ? m.m.get(a[1]) : null; });
 def('map.contains', ['id', 'key'], a => !!(a[0] && a[0].m.has(a[1])));
@@ -899,6 +984,41 @@ def('color.from_gradient', ['value', 'bottom_value', 'top_value', 'bottom_color'
 });
 def('color.r', ['color'], a => a[0] ? a[0].r : null); def('color.g', ['color'], a => a[0] ? a[0].g : null); def('color.b', ['color'], a => a[0] ? a[0].b : null); def('color.t', ['color'], a => a[0] ? a[0].t : null);
 function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+/* time(timeframe, session, timezone) */
+function periodStart(t, tf) {
+  const m = /^(\d*)([A-Za-z]?)$/.exec(String(tf).trim()); if (!m) return null; const k = m[1] === '' ? 1 : +m[1], u = m[2];
+  if (u === '' || u === 'm') return Math.floor(t / (k * 6e4)) * k * 6e4;
+  if (u === 'h' || u === 'H') return Math.floor(t / (k * 36e5)) * k * 36e5;
+  if (u === 'D' || u === 'd') return Math.floor(t / (k * 864e5)) * k * 864e5;
+  if (u === 'W' || u === 'w') { const d = Math.floor(t / 864e5), w = Math.floor((d + 3) / (7 * k)); return (w * 7 * k - 3) * 864e5; }
+  if (u === 'M') { const d = new Date(t), mi = d.getUTCFullYear() * 12 + d.getUTCMonth(), b = Math.floor(mi / k) * k; return Date.UTC(Math.floor(b / 12), b % 12, 1); }
+  return null;
+}
+const tzFmt = new Map();
+function localParts(t, tz) { // hora local (min del día) y día de la semana (1=domingo) en una zona horaria
+  tz = String(tz || 'UTC'); let off = null; const m = /^(?:UTC|GMT)([+-])(\d{1,2})(?::?(\d{2}))?$/i.exec(tz);
+  if (/^(UTC|GMT|Etc\/UTC|Etc\/GMT|Z)$/i.test(tz)) off = 0; else if (m) off = (m[1] === '-' ? -1 : 1) * ((+m[2]) * 60 + (+(m[3] || 0)));
+  if (off !== null) { const d = new Date(t + off * 6e4); return {min: d.getUTCHours() * 60 + d.getUTCMinutes(), dow: d.getUTCDay() + 1}; }
+  let f = tzFmt.get(tz); if (!f) { try { f = new Intl.DateTimeFormat('en-US', {timeZone: tz, hourCycle: 'h23', hour: 'numeric', minute: 'numeric', weekday: 'short'}); } catch { f = null; } tzFmt.set(tz, f); }
+  if (!f) return null; const o = {}; for (const q of f.formatToParts(new Date(t))) o[q.type] = q.value;
+  return {min: (+o.hour % 24) * 60 + +o.minute, dow: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(o.weekday) + 1};
+}
+function inSession(t, sess, tz) {
+  const m = /^(\d{2})(\d{2})-(\d{2})(\d{2})(?::(\d+))?$/.exec(String(sess).replace(/\s/g, '')); if (!m) return undefined;
+  const a = +m[1] * 60 + +m[2], b = +m[3] * 60 + +m[4], days = m[5] || '1234567', lp = localParts(t, tz); if (!lp) return undefined;
+  if (a === b) return days.includes(String(lp.dow)); // 24 h
+  if (a < b) return lp.min >= a && lp.min < b && days.includes(String(lp.dow));
+  if (lp.min >= a) return days.includes(String(lp.dow));
+  if (lp.min < b) return days.includes(String(lp.dow === 1 ? 7 : lp.dow - 1)); // la parte posterior a medianoche pertenece al día en que empezó
+  return false;
+}
+def('time', ['timeframe', 'session', 'timezone'], (a, c) => {
+  const ctx = c.ctx, t = ctx.candles[ctx.bar].t, tf = isna(a[0]) || a[0] === '' ? tfPeriod(ctx.interval) : a[0];
+  const ps = periodStart(t, tf); if (ps === null) { warn(ctx, c.line, `time("${tf}") no soportado`, 'time:' + tf, 'unsupported'); ctx.incomplete = true; return null; }
+  if (!isna(a[1]) && a[1] !== '') { const ok = inSession(t, a[1], a[2]); if (ok === undefined) { warn(ctx, c.line, `Sesión «${a[1]}» o zona «${a[2]}» no reconocida: se trata como fuera de sesión`, 'sess:' + a[1], 'unsupported'); ctx.incomplete = true; return null; } if (!ok) return null; }
+  return ps;
+});
 
 /* timeframe.* y request.* */
 def('timeframe.in_seconds', ['timeframe'], (a, c) => { const m = TF_MIN[a[0] === undefined || a[0] === '' ? c.ctx.interval : a[0]] || (isNaN(+a[0]) ? null : +a[0]); return m ? m * 60 : null; });
@@ -975,8 +1095,19 @@ def('input.source', ['defval', 'title', 'tooltip', 'inline', 'group', 'display']
   if (defName || SRC_NAMES.includes(pick)) return seriesAt(c.ctx, pick, c.ctx.bar);
   return a[0];
 }, {lenient: true});
+def('ticker.heikinashi', ['symbol'], (a, c) => 'HA:' + (isna(a[0]) ? c.ctx.symbol : String(a[0])), {lenient: true});
+for (const nm of ['ticker.new', 'ticker.modify', 'ticker.standard', 'ticker.inherit']) def(nm, ['prefix', 'ticker', 'session'], (a, c) => nm === 'ticker.new' ? (isna(a[1]) ? null : String(a[1])) : (isna(a[0]) ? c.ctx.symbol : String(a[0])), {lenient: true});
+def('input.enum', ['defval', 'title', 'options', 'tooltip', 'inline', 'group', 'confirm', 'display'], (a, c) => {
+  const opts = Array.isArray(a[2]) ? a[2].map(String) : []; const d = isna(a[0]) ? (opts[0] || '') : String(a[0]);
+  return regInput(c, 'string', d, {title: a[1], tooltip: a[3], group: a[5], options: opts.length ? opts : null});
+}, {lenient: true});
+def('input.price', NUMSIG, numIn('float'), {lenient: true});
+def('timeframe.from_seconds', ['seconds'], a => { const m = a[0] / 60; if (isna(a[0])) return null; return m >= 43200 ? Math.round(m / 43200) + 'M' : m >= 10080 ? Math.round(m / 10080) + 'W' : m >= 1440 ? Math.round(m / 1440) + 'D' : String(Math.max(1, Math.round(m))); });
 def('input', ['defval', 'title', 'type', 'minval', 'maxval', 'step', 'tooltip', 'inline', 'group', 'confirm', 'options'], (a, c) => {
-  const d = a[0], t = typeof d === 'boolean' ? 'bool' : typeof d === 'number' ? (Number.isInteger(d) ? 'int' : 'float') : d instanceof Col ? 'color' : 'string';
+  const a0 = c.node.args[0] && !c.node.args[0].name ? c.node.args[0].e : (c.node.args.find(x => x.name === 'defval') || {}).e;
+  if (a[2] === 'source' || (a0 && a0.k === 'id' && SRC_NAMES.includes(a0.name) && !lookup(c.env, a0.name))) return B['input.source'].f([a[0], a[1], a[6], a[7], a[8]], c); // input(close, …): origen de datos, no un número
+  const d = a[0], t0 = typeof d === 'boolean' ? 'bool' : typeof d === 'number' ? (Number.isInteger(d) ? 'int' : 'float') : d instanceof Col ? 'color' : 'string';
+  const t = a[2] === 'int' || a[2] === 'float' || a[2] === 'bool' || a[2] === 'string' || a[2] === 'color' ? a[2] : a[2] === 'price' ? 'float' : a[2] === 'time' ? 'int' : t0;
   return regInput(c, t, d, {title: a[1], min: a[3], max: a[4], step: a[5], tooltip: a[6], group: a[8], options: Array.isArray(a[10]) ? a[10] : null});
 }, {lenient: true});
 
@@ -994,6 +1125,18 @@ def('plot', PLOT_SIG, (a, c) => {
   const col = a[2] === undefined ? DEFCOL : a[2]; p.values[ctx.bar] = nv(a[0]);
   p.ci[ctx.bar] = col === null ? -1 : (pal(ctx, col));
   return {_kind: 'plot', id: p.id};
+}, {lenient: true});
+const CANDLE_SIG = ['open', 'high', 'low', 'close', 'title', 'color', 'wickcolor', 'editable', 'show_last', 'bordercolor', 'display', 'format', 'precision', 'force_overlay'];
+def('plotcandle', CANDLE_SIG, (a, c) => {
+  const ctx = c.ctx, o = ctx.out; let p = c.st.p;
+  if (!p) { p = c.st.p = {id: o.candles.length, title: typeof a[4] === 'string' ? a[4] : 'Candle ' + (o.candles.length + 1), hidden: hidden(a[10]), bar: false, o: new Array(ctx.n).fill(null), h: new Array(ctx.n).fill(null), l: new Array(ctx.n).fill(null), c: new Array(ctx.n).fill(null), ci: new Array(ctx.n).fill(null), wci: new Array(ctx.n).fill(null), bci: new Array(ctx.n).fill(null)}; o.candles.push(p); }
+  const i = ctx.bar; p.o[i] = nv(a[0]); p.h[i] = nv(a[1]); p.l[i] = nv(a[2]); p.c[i] = nv(a[3]);
+  const col = a[5] === undefined ? DEFCOL : a[5]; p.ci[i] = col === null ? -1 : pal(ctx, col);
+  p.wci[i] = a[6] instanceof Col ? pal(ctx, a[6]) : p.ci[i]; p.bci[i] = a[9] instanceof Col ? pal(ctx, a[9]) : p.ci[i];
+  return null;
+}, {lenient: true});
+def('plotbar', ['open', 'high', 'low', 'close', 'title', 'color', 'editable', 'show_last', 'display', 'format', 'precision', 'force_overlay'], (a, c) => {
+  const r = B['plotcandle'].f([a[0], a[1], a[2], a[3], a[4], a[5], a[5], undefined, undefined, a[5], a[8]], c); if (c.st.p) c.st.p.bar = true; return r;
 }, {lenient: true});
 def('hline', ['price', 'title', 'color', 'linestyle', 'linewidth', 'editable', 'display'], (a, c) => {
   const o = c.ctx.out; let h = c.st.h;
@@ -1054,18 +1197,51 @@ def('box.new', ['left', 'top', 'right', 'bottom', 'border_color', 'border_width'
   const ctx = c.ctx, o = {_kind: 'box', l: nv(a[0]), t: nv(a[1]), r: nv(a[2]), b: nv(a[3]), bci: dcol(ctx, a[4], DEFCOL), bw: a[5] || 1, bstyle: String(a[6] || 'style_solid').replace(/^style_/, ''), extend: String(a[7] || 'none'), xloc: String(a[8] || 'bar_index'), fci: dcol(ctx, a[9], hexCol('2962FF1A')), text: a[10] === undefined ? '' : String(a[10]), tci: dcol(ctx, a[12], hexCol('FFFFFF'))};
   keepLimit(ctx, ctx.out.boxes, o, ctx.out.meta.maxBoxes || 50); return o;
 }, {lenient: true});
+def('linefill.new', ['line1', 'line2', 'color'], (a, c) => { const o = {_kind: 'linefill', l1: a[0], l2: a[1], ci: dcol(c.ctx, a[2], hexCol('2962FF4D'))}; c.ctx.out.linefills.push(o); if (c.ctx.out.linefills.length > 100) c.ctx.out.linefills.shift(); return o; }, {lenient: true});
+def('linefill.delete', ['id'], a => { if (a[0] && a[0]._kind === 'linefill') a[0].deleted = true; return null; });
+def('linefill.set_color', ['id', 'color'], (a, c) => { if (a[0] && a[0]._kind === 'linefill') a[0].ci = pal(c.ctx, a[1]); return null; });
+def('linefill.get_line1', ['id'], a => a[0] ? a[0].l1 : null); def('linefill.get_line2', ['id'], a => a[0] ? a[0].l2 : null);
+for (const kind of ['label', 'line', 'box']) def(kind + '.copy', ['id'], (a, c) => { const o = a[0]; if (!o || o._kind !== kind) return null; const n = Object.assign({}, o, {deleted: false}); const list = c.ctx.out[kind + 's']; keepLimit(c.ctx, list, n, list.length + 1 > 500 ? 500 : 500); return n; });
 function setters(kind, map) {
   for (const k in map) def(`${kind}.set_${k}`, ['id', 'a', 'b'], (a, c) => { const o = a[0]; if (o && o._kind === kind) map[k](o, a[1], a[2], c.ctx); return null; }, {lenient: true});
   def(`${kind}.delete`, ['id'], a => { if (a[0] && a[0]._kind === kind) a[0].deleted = true; return null; });
 }
 const ST = (st, p) => (o, v, _, ctx) => { o[p] = String(v).replace(/^style_/, ''); };
-setters('label', {x: (o, v) => { o.x = v; }, y: (o, v) => { o.y = nv(v); }, xy: (o, x, y) => { o.x = x; o.y = nv(y); }, text: (o, v) => { o.text = String(v); }, color: (o, v, _, ctx) => { o.ci = pal(ctx, v); }, textcolor: (o, v, _, ctx) => { o.tci = pal(ctx, v); }, style: ST(0, 'style'), size: (o, v) => { o.size = String(v); }, tooltip: () => {}, text_font_family: () => {}, textalign: () => {}});
-setters('line', {x1: (o, v) => { o.x1 = v; }, y1: (o, v) => { o.y1 = nv(v); }, x2: (o, v) => { o.x2 = v; }, y2: (o, v) => { o.y2 = nv(v); }, xy1: (o, x, y) => { o.x1 = x; o.y1 = nv(y); }, xy2: (o, x, y) => { o.x2 = x; o.y2 = nv(y); }, color: (o, v, _, ctx) => { o.ci = pal(ctx, v); }, width: (o, v) => { o.w = v; }, style: ST(0, 'style'), extend: (o, v) => { o.extend = String(v); }});
-setters('box', {left: (o, v) => { o.l = v; }, right: (o, v) => { o.r = v; }, top: (o, v) => { o.t = nv(v); }, bottom: (o, v) => { o.b = nv(v); }, lefttop: (o, l, t) => { o.l = l; o.t = nv(t); }, rightbottom: (o, r, b) => { o.r = r; o.b = nv(b); }, bgcolor: (o, v, _, ctx) => { o.fci = pal(ctx, v); }, border_color: (o, v, _, ctx) => { o.bci = pal(ctx, v); }, border_width: (o, v) => { o.bw = v; }, extend: (o, v) => { o.extend = String(v); }, text: (o, v) => { o.text = String(v); }, text_color: (o, v, _, ctx) => { o.tci = pal(ctx, v); }});
+setters('label', {xloc: (o, v) => { o.xloc = String(v); }, yloc: (o, v) => { o.yloc = String(v); }, point: (o, pt) => { if (pt && pt._kind === 'point') { o.x = pt.i !== null ? pt.i : pt.x; o.y = pt.p; } }, x: (o, v) => { o.x = v; }, y: (o, v) => { o.y = nv(v); }, xy: (o, x, y) => { o.x = x; o.y = nv(y); }, text: (o, v) => { o.text = String(v); }, color: (o, v, _, ctx) => { o.ci = pal(ctx, v); }, textcolor: (o, v, _, ctx) => { o.tci = pal(ctx, v); }, style: ST(0, 'style'), size: (o, v) => { o.size = String(v); }, tooltip: () => {}, text_font_family: () => {}, textalign: () => {}});
+setters('line', {xloc: (o, v) => { o.xloc = String(v); }, first_point: (o, pt) => { if (pt && pt._kind === 'point') { o.x1 = pt.i; o.y1 = pt.p; } }, second_point: (o, pt) => { if (pt && pt._kind === 'point') { o.x2 = pt.i; o.y2 = pt.p; } }, x1: (o, v) => { o.x1 = v; }, y1: (o, v) => { o.y1 = nv(v); }, x2: (o, v) => { o.x2 = v; }, y2: (o, v) => { o.y2 = nv(v); }, xy1: (o, x, y) => { o.x1 = x; o.y1 = nv(y); }, xy2: (o, x, y) => { o.x2 = x; o.y2 = nv(y); }, color: (o, v, _, ctx) => { o.ci = pal(ctx, v); }, width: (o, v) => { o.w = v; }, style: ST(0, 'style'), extend: (o, v) => { o.extend = String(v); }});
+setters('box', {xloc: (o, v) => { o.xloc = String(v); }, border_style: (o, v) => { o.bstyle = String(v).replace(/^style_/, ''); }, text_size: () => {}, text_halign: () => {}, text_valign: () => {}, text_wrap: () => {}, text_font_family: () => {}, left: (o, v) => { o.l = v; }, right: (o, v) => { o.r = v; }, top: (o, v) => { o.t = nv(v); }, bottom: (o, v) => { o.b = nv(v); }, lefttop: (o, l, t) => { o.l = l; o.t = nv(t); }, rightbottom: (o, r, b) => { o.r = r; o.b = nv(b); }, bgcolor: (o, v, _, ctx) => { o.fci = pal(ctx, v); }, border_color: (o, v, _, ctx) => { o.bci = pal(ctx, v); }, border_width: (o, v) => { o.bw = v; }, extend: (o, v) => { o.extend = String(v); }, text: (o, v) => { o.text = String(v); }, text_color: (o, v, _, ctx) => { o.tci = pal(ctx, v); }});
 const getter = (kind, p, name) => def(`${kind}.get_${name || p}`, ['id'], a => a[0] && a[0]._kind === kind && a[0][p] !== undefined ? a[0][p] : null);
 ['x', 'y', 'text'].forEach(p => getter('label', p)); [['x1'], ['y1'], ['x2'], ['y2']].forEach(([p]) => getter('line', p));
 [['l', 'left'], ['t', 'top'], ['r', 'right'], ['b', 'bottom']].forEach(([p, n]) => getter('box', p, n));
 def('line.get_price', ['id', 'x'], a => { const o = a[0]; if (!o || o.x2 === o.x1 || isna(a[1])) return null; return o.y1 + (o.y2 - o.y1) * (a[1] - o.x1) / (o.x2 - o.x1); });
+
+/* matrix */
+const mx = (a, line) => { if (!a || a._kind !== 'matrix') throw new PineError('Se esperaba una matrix', line); return a; };
+const MAXM = 250000;
+def('matrix.new', ['rows', 'columns', 'initial_value'], (a, c) => { const r = Math.max(0, a[0] | 0), cc = Math.max(0, a[1] | 0); if (r * cc > MAXM) throw new PineError('Matrix demasiado grande', c.line); return {_kind: 'matrix', r, c: cc, d: Array.from({length: r}, () => new Array(cc).fill(a[2] === undefined ? null : a[2]))}; }, {lenient: true});
+def('matrix.rows', ['id'], (a, c) => mx(a[0], c.line).r); def('matrix.columns', ['id'], (a, c) => mx(a[0], c.line).c); def('matrix.elements_count', ['id'], (a, c) => mx(a[0], c.line).r * a[0].c);
+const mchk = (m, i, j, line) => { if (!Number.isInteger(i) || !Number.isInteger(j) || i < 0 || j < 0 || i >= m.r || j >= m.c) throw new PineError(`Índice fuera de la matrix (${i}, ${j}) en una de ${m.r}×${m.c}`, line); };
+def('matrix.get', ['id', 'row', 'column'], (a, c) => { const m = mx(a[0], c.line); mchk(m, a[1], a[2], c.line); return m.d[a[1]][a[2]]; });
+def('matrix.set', ['id', 'row', 'column', 'value'], (a, c) => { const m = mx(a[0], c.line); mchk(m, a[1], a[2], c.line); m.d[a[1]][a[2]] = a[3] === undefined ? null : a[3]; return null; });
+def('matrix.fill', ['id', 'value'], (a, c) => { const m = mx(a[0], c.line); for (const r of m.d) r.fill(a[1]); return null; });
+def('matrix.copy', ['id'], (a, c) => { const m = mx(a[0], c.line); return {_kind: 'matrix', r: m.r, c: m.c, d: m.d.map(r => r.slice())}; });
+def('matrix.add_row', ['id', 'row', 'array_id'], (a, c) => { const m = mx(a[0], c.line), at = a[1] === undefined || a[1] === null ? m.r : a[1], src = Array.isArray(a[2]) ? a[2] : []; if (m.c === 0 && !src.length) { m.r++; m.d.splice(at, 0, []); return null; } if (m.r * (m.c || src.length) > MAXM) throw new PineError('Matrix demasiado grande', c.line); if (m.r === 0) m.c = src.length; m.d.splice(at, 0, Array.from({length: m.c}, (_, j) => src[j] === undefined ? null : src[j])); m.r++; return null; });
+def('matrix.add_col', ['id', 'column', 'array_id'], (a, c) => { const m = mx(a[0], c.line), at = a[1] === undefined || a[1] === null ? m.c : a[1], src = Array.isArray(a[2]) ? a[2] : []; if (m.r === 0) { m.r = src.length; m.d = Array.from({length: m.r}, () => []); } if (m.r * (m.c + 1) > MAXM) throw new PineError('Matrix demasiado grande', c.line); m.d.forEach((r, i) => r.splice(at, 0, src[i] === undefined ? null : src[i])); m.c++; return null; });
+def('matrix.remove_row', ['id', 'row'], (a, c) => { const m = mx(a[0], c.line), i = a[1] === undefined ? m.r - 1 : a[1]; if (i < 0 || i >= m.r) throw new PineError('Fila fuera de la matrix', c.line); const r = m.d.splice(i, 1)[0]; m.r--; return r; });
+def('matrix.remove_col', ['id', 'column'], (a, c) => { const m = mx(a[0], c.line), j = a[1] === undefined ? m.c - 1 : a[1]; if (j < 0 || j >= m.c) throw new PineError('Columna fuera de la matrix', c.line); const col = m.d.map(r => r.splice(j, 1)[0]); m.c--; return col; });
+def('matrix.row', ['id', 'row'], (a, c) => { const m = mx(a[0], c.line); mchk(m, a[1], 0, c.line); return m.d[a[1]].slice(); });
+def('matrix.col', ['id', 'column'], (a, c) => { const m = mx(a[0], c.line); mchk(m, 0, a[1], c.line); return m.d.map(r => r[a[1]]); });
+def('matrix.transpose', ['id'], (a, c) => { const m = mx(a[0], c.line); return {_kind: 'matrix', r: m.c, c: m.r, d: Array.from({length: m.c}, (_, j) => m.d.map(r => r[j]))}; });
+def('matrix.mult', ['id1', 'id2'], (a, c) => { const m = mx(a[0], c.line), o = a[1]; if (Array.isArray(o)) { if (o.length !== m.c) throw new PineError('Dimensiones incompatibles en matrix.mult', c.line); return m.d.map(r => r.reduce((s, v, j) => s + v * o[j], 0)); } if (typeof o === 'number') return {_kind: 'matrix', r: m.r, c: m.c, d: m.d.map(r => r.map(v => v * o))}; mx(o, c.line); if (o.r !== m.c) throw new PineError('Dimensiones incompatibles en matrix.mult', c.line); return {_kind: 'matrix', r: m.r, c: o.c, d: Array.from({length: m.r}, (_, i) => Array.from({length: o.c}, (_, j) => { let s = 0; for (let k = 0; k < m.c; k++) s += m.d[i][k] * o.d[k][j]; return s; }))}; });
+def('matrix.sum', ['id1', 'id2'], (a, c) => { const m = mx(a[0], c.line), o = a[1]; const g = (i, j) => typeof o === 'number' ? o : mx(o, c.line).d[i][j]; return {_kind: 'matrix', r: m.r, c: m.c, d: m.d.map((r, i) => r.map((v, j) => v + g(i, j)))}; });
+def('matrix.diff', ['id1', 'id2'], (a, c) => { const m = mx(a[0], c.line), o = a[1]; const g = (i, j) => typeof o === 'number' ? o : mx(o, c.line).d[i][j]; return {_kind: 'matrix', r: m.r, c: m.c, d: m.d.map((r, i) => r.map((v, j) => v - g(i, j)))}; });
+const mflat = (a, c) => mx(a[0], c.line).d.flat().filter(v => typeof v === 'number' && !isNaN(v));
+def('matrix.avg', ['id'], (a, c) => { const f = mflat(a, c); return f.length ? f.reduce((x, y) => x + y, 0) / f.length : null; });
+def('matrix.max', ['id'], (a, c) => { const f = mflat(a, c); return f.length ? Math.max(...f) : null; });
+def('matrix.min', ['id'], (a, c) => { const f = mflat(a, c); return f.length ? Math.min(...f) : null; });
+def('matrix.is_square', ['id'], (a, c) => mx(a[0], c.line).r === a[0].c);
+def('matrix.swap_rows', ['id', 'row1', 'row2'], (a, c) => { const m = mx(a[0], c.line); mchk(m, a[1], 0, c.line); mchk(m, a[2], 0, c.line); [m.d[a[1]], m.d[a[2]]] = [m.d[a[2]], m.d[a[1]]]; return null; });
+def('matrix.det', ['id'], (a, c) => { const m = mx(a[0], c.line); if (m.r !== m.c) throw new PineError('matrix.det necesita una matrix cuadrada', c.line); const d = m.d.map(r => r.slice()), n = m.r; let det = 1; for (let i = 0; i < n; i++) { let p = i; for (let k = i + 1; k < n; k++) if (Math.abs(d[k][i]) > Math.abs(d[p][i])) p = k; if (d[p][i] === 0) return 0; if (p !== i) { [d[p], d[i]] = [d[i], d[p]]; det = -det; } det *= d[i][i]; for (let k = i + 1; k < n; k++) { const f = d[k][i] / d[i][i]; for (let j = i; j < n; j++) d[k][j] -= f * d[i][j]; } } return det; });
 
 /* conversiones y tiempo */
 def('int', ['x'], a => isna(a[0]) ? null : Math.trunc(+a[0]));
@@ -1123,6 +1299,7 @@ function analyze(ast, ctx) {
     if (n.k === 'decl') declared.add(n.name); else if (n.k === 'tdecl') n.names.forEach(x => declared.add(x));
     else if (n.k === 'for') declared.add(n.v); else if (n.k === 'forin') { declared.add(n.v); if (n.idx) declared.add(n.idx); }
     else if (n.k === 'type') ctx.types.set(n.name, n);
+    else if (n.k === 'enum') (ctx.enums || (ctx.enums = new Map())).set(n.name, n);
     else if (n.k === 'fn') { if (n.method) { if (!ctx.methods.has(n.name)) ctx.methods.set(n.name, []); ctx.methods.get(n.name).push(n); } else ctx.fns.set(n.name, n); n.params.forEach(p => declared.add(p.name)); }
   });
   walk(ast, n => {
@@ -1131,7 +1308,7 @@ function analyze(ast, ctx) {
     if (!parts || declared.has(parts[0])) return;
     const name = parts.join('.');
     if ((parts.length === 1 && ctx.fns.has(name)) || B[name] || name.startsWith('array.new_') || (parts.length === 2 && parts[1] === 'new' && ctx.types.has(parts[0])) || (parts.length === 1 && ctx.methods.has(name))) return;
-    if (ctx.legacy && parts.length === 1 && (B['ta.' + name] || B['math.' + name] || B['str.' + name] || B[LEGACY[name]])) { const to = B['ta.' + name] ? 'ta.' + name : B['math.' + name] ? 'math.' + name : B['str.' + name] ? 'str.' + name : LEGACY[name]; if (to !== name) (ctx.legacyUsed || (ctx.legacyUsed = new Map())).set(name, to); return; }
+    if (parts.length === 1 && (B['ta.' + name] || B['math.' + name] || B['str.' + name] || B[LEGACY[name]])) { const to = B['ta.' + name] ? 'ta.' + name : B['math.' + name] ? 'math.' + name : B['str.' + name] ? 'str.' + name : LEGACY[name]; if (to !== name) (ctx.legacyUsed || (ctx.legacyUsed = new Map())).set(name, to); return; }
     if (parts[0] === 'strategy') { warn(ctx, n.line, 'Las órdenes de «strategy.*» se ignoran: este script solo se muestra como indicador (el backtesting llega en la Fase 7)', 'strategy', 'unsupported'); return; }
     warn(ctx, n.line, `Función no soportada: ${name}() — devuelve na`, 'f:' + name, 'unsupported');
   });
@@ -1155,7 +1332,7 @@ function loopProgram(ast, ctx) {
     for (const fr of ctx.frameList) for (const v of fr.vars.values()) v.hist[bar] = v.cur;
   }
 }
-const freshOut = name => ({meta: {kind: 'indicator', title: name || 'Script', overlay: false}, plots: [], hlines: [], fills: [], bgcolors: [], barcolors: [], shapes: [], labels: Object.assign([], {__n: 'l'}), lines: Object.assign([], {__n: 'n'}), boxes: Object.assign([], {__n: 'b'}), polylines: Object.assign([], {__n: 'p'}), tables: [], inputs: [], palette: [], _p: {}});
+const freshOut = name => ({meta: {kind: 'indicator', title: name || 'Script', overlay: false}, plots: [], hlines: [], fills: [], bgcolors: [], barcolors: [], shapes: [], labels: Object.assign([], {__n: 'l'}), lines: Object.assign([], {__n: 'n'}), boxes: Object.assign([], {__n: 'b'}), polylines: Object.assign([], {__n: 'p'}), tables: [], candles: [], linefills: [], inputs: [], palette: [], _p: {}});
 
 /* ───────────── request.security: otras temporalidades y símbolos ─────────────
    Pine recalcula TODO el script con los datos del otro símbolo/temporalidad. Aquí se hace igual: se ejecuta el script entero
@@ -1174,21 +1351,24 @@ function tfKey(tf, ctx) {
   if (u === 'M') return k === 1 ? '1M' : k === 3 ? '3M' : k === 12 ? '12M' : null;
   return null;
 }
+function toHA(cs) { const out = []; let po = null, pc = null; for (const k of cs) { const c = (k.o + k.h + k.l + k.c) / 4, o = po === null ? (k.o + k.c) / 2 : (po + pc) / 2; out.push({t: k.t, o, h: Math.max(k.h, o, c), l: Math.min(k.l, o, c), c, v: k.v}); po = o; pc = c; } return out; }
 function evSecurity(n, env) {
   const ctx = env.ctx, A = {}, names = ['symbol', 'timeframe', 'expression', 'gaps', 'lookahead', 'ignore_invalid_symbol', 'currency', 'calc_bars_count']; let pos = 0;
   for (const a of n.args) A[a.name || names[pos++]] = a;
   if (!A.symbol || !A.timeframe || !A.expression) throw new PineError('request.security() necesita símbolo, temporalidad y expresión', n.line);
   let sym = ev(A.symbol.e, env); const tf = ev(A.timeframe.e, env), look = A.lookahead ? ev(A.lookahead.e, env) : 'lookahead_off';
+  let ha = false; if (typeof sym === 'string' && sym.startsWith('HA:')) { ha = true; sym = sym.slice(3); }
   sym = isna(sym) || sym === '' ? ctx.symbol : String(sym).replace(/^[A-Za-z0-9_]+:/, '').toUpperCase();
   const tfk = tfKey(tf, ctx);
   if (!/^[A-Z0-9]{3,20}$/.test(sym) || !tfk) { if (!ctx.secondary) { warn(ctx, n.line, `request.security(${isna(sym) ? 'na' : sym}, ${tf}) no soportado: solo hay símbolos de Binance Spot y temporalidades de 1m a 12M`, 'sec:' + sym + tf, 'unsupported'); ctx.incomplete = true; } return null; }
-  const key = sym + '|' + tfk;
-  if (sym === ctx.symbol && tfk === ctx.interval) { const v = ev(A.expression.e, env); if (ctx.secondary) { let r = ctx.rec.get(n); if (!r) ctx.rec.set(n, r = []); r[ctx.bar] = v; } return v; }
+  const key = sym + '|' + tfk, same = sym === ctx.symbol && tfk === ctx.interval;
+  if (same && (!ha || ctx.secondary)) { const v = ev(A.expression.e, env); if (ctx.secondary) { let r = ctx.rec.get(n); if (!r) ctx.rec.set(n, r = []); r[ctx.bar] = v; } return v; }
   if (ctx.secondary) return null;
-  const data = ctx.opts.sec && ctx.opts.sec[key];
+  let data = same ? ctx.candles : ctx.opts.sec && ctx.opts.sec[key];
+  if (data && ha) { const hk = key + '|ha'; data = (ctx.haCache || (ctx.haCache = new Map())).get(hk) || (ctx.haCache.set(hk, toHA(data)), ctx.haCache.get(hk)); }
   if (!data) { (ctx.needs || (ctx.needs = new Map())).set(key, {symbol: sym, interval: tfk}); ctx.incomplete = true; return null; }
   if (!data.length) { warn(ctx, n.line, `No se pudieron obtener velas de ${sym} en ${tfk}: devuelve na`, 'secfail:' + key, 'unsupported'); ctx.incomplete = true; return null; }
-  let run = ctx.secRuns.get(key); if (!run) { run = runSecondary(ctx, sym, tfk, key, data); ctx.secRuns.set(key, run); }
+  const rk = ha ? key + '|ha' : key; let run = ctx.secRuns.get(rk); if (!run) { run = runSecondary(ctx, sym, tfk, rk, data); ctx.secRuns.set(rk, run); }
   const arr = run.rec.get(n); if (!arr) return null;
   const j = run.j[ctx.bar]; if (j < 0) return null;
   let v;
@@ -1197,7 +1377,7 @@ function evSecurity(n, env) {
   if (v === undefined) return null; return v instanceof Tup ? new Tup(v.a.slice()) : v;
 }
 function runSecondary(parent, sym, tfk, key, data) {
-  const c2 = {candles: data, n: data.length, bar: 0, steps: 0, deadline: parent.deadline, warnings: [], wkeys: new Set(), fns: parent.fns, types: parent.types, methods: parent.methods, frames: new Map(), frameList: [], depth: 0, ctrl: null,
+  const c2 = {candles: data, n: data.length, bar: 0, steps: 0, deadline: parent.deadline, warnings: [], wkeys: new Set(), fns: parent.fns, types: parent.types, enums: parent.enums, methods: parent.methods, frames: new Map(), frameList: [], depth: 0, ctrl: null,
     legacy: parent.legacy, incomplete: false, interval: tfk, symbol: sym, mintick: parent.mintick, ms: TFMS[tfk], opts: {inputs: parent.opts.inputs}, pal: new Map(), out: freshOut(), secondary: true, rec: new Map(), secRuns: new Map(), ast: parent.ast};
   loopProgram(parent.ast, c2);
   const j = new Int32Array(parent.n); let k = -1;
@@ -1210,12 +1390,13 @@ function run(code, candles, opts) {
   code = String(code || ''); if (code.length > 600000) return {ok: false, error: {msg: 'El script es demasiado grande', line: 0}};
   const san = sanitize(code); code = san.code;
   let ast; try { ast = parse(lex(code)); } catch (e) { if (e.pine) return {ok: false, error: {msg: e.message, line: e.line}}; throw e; }
+  curMintick = opts.mintick || 0.01;
   const n = candles.length, vm = /\/\/\s*@version\s*=\s*(\d+)/.exec(code), version = vm ? +vm[1] : 5;
   const iv = opts.interval || '1h', ms = (TF_MIN[iv] || (n > 1 ? (candles[n - 1].t - candles[0].t) / (n - 1) / 60000 : 60)) * 60000;
   const ctx = {candles, n, bar: 0, steps: 0, deadline: t0 + (opts.timeLimitMs || 8000), warnings: [], wkeys: new Set(), fns: new Map(), types: new Map(), methods: new Map(), frames: new Map(), frameList: [], depth: 0, ctrl: null,
     legacy: version < 5, incomplete: false, interval: iv, symbol: opts.symbol || 'BTCUSDT', mintick: opts.mintick || 0.01, ms, opts, pal: new Map(),
     out: {meta: {kind: 'indicator', title: opts.name || 'Script', overlay: false}, plots: [], hlines: [], fills: [], bgcolors: [], barcolors: [], shapes: [], labels: [], lines: [], boxes: [], inputs: [], palette: [], _p: {}}};
-  ctx.out.labels.__n = 'l'; ctx.out.lines.__n = 'n'; ctx.out.boxes.__n = 'b'; ctx.out.polylines = Object.assign([], {__n: 'p'}); ctx.out.tables = [];
+  ctx.out.labels.__n = 'l'; ctx.out.lines.__n = 'n'; ctx.out.boxes.__n = 'b'; ctx.out.polylines = Object.assign([], {__n: 'p'}); ctx.out.tables = []; ctx.out.candles = []; ctx.out.linefills = [];
   for (const f of san.fixes) ctx.warnings.push({line: f.line, level: 'fix', msg: 'Reparado automáticamente: ' + f.msg});
   if (version > 5) ctx.warnings.push({line: 0, level: 'info', msg: `Script de la versión ${version}: se interpreta con la sintaxis v5; si algo no coincide con TradingView, avísalo`});
   if (version < 5) ctx.warnings.push({line: 0, level: 'info', msg: `Script de la versión ${version}: se acepta la sintaxis antigua (study, sma, security…) sin prefijos; revisa el resultado`});
@@ -1235,7 +1416,8 @@ function run(code, candles, opts) {
   const boxes = o.boxes.filter(b => !b.deleted).map(b => ({l: xi(b.l, b.xloc), t: b.t, r: xi(b.r, b.xloc), b: b.b, extend: b.extend, bci: b.bci, bw: b.bw, bstyle: b.bstyle, fci: b.fci, text: b.text, tci: b.tci}));
   const polylines = o.polylines.filter(q => !q.deleted).map(q => ({pts: q.pts.map(pt => [pt.i !== null && q.xloc !== 'bar_time' ? pt.i : (pt.t !== null ? timeToIndex(ctx, pt.t) : pt.i), pt.p]), closed: q.closed, lci: q.lci, fci: q.fci, style: q.style, w: q.w}));
   const tables = o.tables.filter(t => !t.deleted).map(t => ({pos: t.pos, cols: t.cols, rows: t.rows, bci: t.bci, frame: t.frame, fw: t.fw, border: t.border, bw: t.bw, cells: [...t.cells.values()]}));
-  return {ok: true, version, meta: o.meta, polylines, tables, inputs: o.inputs, plots, hlines: o.hlines, fills, bgcolors: o.bgcolors, barcolors: o.barcolors, shapes: o.shapes, labels, lines, boxes, palette: o.palette,
+  const linefills = o.linefills.filter(f => !f.deleted && f.l1 && f.l2 && !f.l1.deleted && !f.l2.deleted).map(f => ({a: [f.l1.x1, f.l1.y1, f.l1.x2, f.l1.y2], b: [f.l2.x1, f.l2.y1, f.l2.x2, f.l2.y2], ci: f.ci}));
+  return {ok: true, version, meta: o.meta, polylines, tables, candles: o.candles, linefills, inputs: o.inputs, plots, hlines: o.hlines, fills, bgcolors: o.bgcolors, barcolors: o.barcolors, shapes: o.shapes, labels, lines, boxes, palette: o.palette,
     warnings: ctx.warnings, needs: ctx.needs ? [...ctx.needs.values()] : [], complete: !ctx.incomplete, stats: {bars: n, ms: Date.now() - t0, steps: ctx.steps}};
 }
 

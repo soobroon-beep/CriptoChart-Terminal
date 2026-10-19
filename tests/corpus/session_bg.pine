@@ -1,0 +1,20 @@
+//@version=5
+indicator("Sessions", overlay=true)
+sess = input.session("0800-1600", "Session")
+tz = input.string("UTC", "Timezone")
+inSess = not na(time(timeframe.period, sess, tz))
+newSess = inSess and not inSess[1]
+var float hi = na
+var float lo = na
+if newSess
+    hi := high
+    lo := low
+else if inSess
+    hi := math.max(hi, high)
+    lo := math.min(lo, low)
+bgcolor(inSess ? color.new(color.blue, 90) : na)
+plot(inSess ? hi : na, "High", color.green, style=plot.style_linebr)
+plot(inSess ? lo : na, "Low", color.red, style=plot.style_linebr)
+plotshape(newSess, "Open", shape.diamond, location.top, color.blue, size=size.tiny)
+dayChg = (close / ta.valuewhen(ta.change(time("D")) != 0, open, 0) - 1) * 100
+plot(dayChg, "Day %", display=display.data_window)

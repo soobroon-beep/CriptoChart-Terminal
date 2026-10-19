@@ -1,0 +1,24 @@
+//@version=5
+indicator("Auto Trendlines", overlay=true, max_lines_count=100)
+len = input.int(10, "Pivot length")
+var line upLine = na
+var line dnLine = na
+var float p1 = na
+var float p2 = na
+var int b1 = na
+var int b2 = na
+ph = ta.pivothigh(high, len, len)
+pl = ta.pivotlow(low, len, len)
+if not na(ph)
+    p2 := p1
+    b2 := b1
+    p1 := ph
+    b1 := bar_index - len
+    if not na(p2) and p1 < p2
+        line.delete(dnLine)
+        dnLine := line.new(b2, p2, b1, p1, extend=extend.right, color=color.red, width=2)
+if not na(pl)
+    if not na(upLine)
+        line.set_color(upLine, color.new(color.green, 60))
+    upLine := line.new(bar_index - len, pl, bar_index, pl + 0.0, extend=extend.right, color=color.green, width=2)
+alertcondition(not na(dnLine) and close > line.get_price(dnLine, bar_index), "Break", "Downtrend break")

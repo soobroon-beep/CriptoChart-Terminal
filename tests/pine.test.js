@@ -69,11 +69,11 @@ test('label.new / line.new / box.new con límite y delete', () => {
   assert.equal(r2.labels.length, 2); assert.equal(r2.labels[0].x, 2);
 });
 test('lo no soportado se avisa con su línea y marca el resultado como incompleto', () => {
-  const r = vals('t = matrix.new<float>(2, 2)\nx = ta.foo(close, 3)\nplot(x)\nstrategy.entry("L", strategy.long)', closes([1, 2, 3]));
+  const r = vals('t = request.financial("A", "B", "FY")\nx = ta.foo(close, 3)\nplot(x)\nstrategy.entry("L", strategy.long)', closes([1, 2, 3]));
   assert.equal(r.complete, false);
   const un = r.warnings.filter(w => w.level === 'unsupported').map(w => w.msg);
-  assert.ok(un.some(m => m.includes('matrix.new')) && un.some(m => m.includes('ta.foo')) && un.some(m => m.includes('strategy')), un.join(' | '));
-  assert.ok(r.warnings.find(w => w.msg.includes('matrix.new')).line === 3);
+  assert.ok(un.some(m => m.includes('request.financial')) && un.some(m => m.includes('ta.foo')) && un.some(m => m.includes('strategy')), un.join(' | '));
+  assert.ok(r.warnings.find(w => w.msg.includes('request.financial')).line === 3);
   assert.equal(r.plots[0].values[2], null);
   const ok = vals('plot(ta.sma(close,2))', closes([1, 2, 3])); assert.equal(ok.complete, true);
 });
@@ -85,7 +85,8 @@ test('errores de sintaxis y de ejecución dan línea; tipos y bibliotecas no sop
   let r = P.run(hdr + 'x = (1 + ', closes([1])); assert.equal(r.ok, false);
   r = P.run(hdr + 'plot(1)\nx = $', closes([1])); assert.equal(r.ok, false); assert.equal(r.error.line, 4);
   r = P.run(hdr + 'plot(noexiste)', closes([1])); assert.equal(r.ok, false); assert.match(r.error.msg, /noexiste/);
-  r = P.run(hdr + 'enum Color\n    red', closes([1])); assert.equal(r.ok, false); assert.match(r.error.msg, /enum/);
+  r = P.run(hdr + 'enum Color\n    red\n    blue = "Azul"\nc = Color.blue\nplot(c == Color.blue ? 1 : 0)', closes([1])); assert.ok(r.ok, JSON.stringify(r.error)); assert.equal(r.plots[0].values[0], 1);
+  r = P.run(hdr + 'enum Color\n    red\nplot(Color.verde == Color.red ? 1 : 0)', closes([1])); assert.equal(r.ok, false); assert.match(r.error.msg, /verde/);
   r = P.run(hdr + 'import a/b/1 as c', closes([1])); assert.equal(r.ok, false);
 });
 test('seguridad: sin acceso a JavaScript ni al prototipo; bucle infinito se corta por tiempo', () => {
@@ -136,4 +137,36 @@ test('tablas y polilíneas: se devuelven para dibujarlas', () => {
   const r = vals('var t = table.new(position.top_right, 2, 2, bgcolor=color.new(color.black, 20))\nif barstate.islast\n    table.cell(t, 0, 0, "hola", text_color=color.white)\n    table.cell(t, 1, 1, "x")\n    pts = array.new<chart.point>()\n    pts.push(chart.point.from_index(0, 1.0))\n    pts.push(chart.point.from_index(2, 3.0))\n    polyline.new(pts, line_color=color.red)', closes([1, 2, 3]));
   assert.equal(r.tables.length, 1); assert.equal(r.tables[0].pos, 'top_right'); assert.equal(r.tables[0].cells.length, 2); assert.equal(r.tables[0].cells[0].text, 'hola');
   assert.equal(r.polylines.length, 1); assert.deepEqual(r.polylines[0].pts, [[0, 1], [2, 3]]);
+});
+
+test('formatos de str.tostring: mintick, percent, volume y patrones', () => {
+  const r = vals('label.new(bar_index, 1.0, str.tostring(1234567.891, format.volume) + "|" + str.tostring(0.1234, format.percent) + "|" + str.tostring(1234.5, "#,###.0") + "|" + str.tostring(5, "000") + "|" + str.tostring(2.5, "0.000") + "|" + str.tostring(1500, format.volume))', closes([1]));
+  assert.equal(r.labels[0].text, '1.235M|12.34%|1,234.5|005|2.500|1.5K');
+});
+test('input(close) es un origen de datos, no un número fijo; input v4 con type', () => {
+  const r = P.run('//@version=4\nstudy("x")\ns = input(close, "S")\nn = input(3, "N", type=input.integer, minval=1)\nplot(s)\nplot(n)', closes([1, 2, 3]));
+  assert.ok(r.ok); assert.deepEqual(r.plots[0].values, [1, 2, 3]); assert.deepEqual(r.plots[1].values, [3, 3, 3]);
+  assert.equal(r.inputs.find(i => i.title === 'S').type, 'source');
+});
+test('reparaciones: colores y transp antiguos, números de línea pegados, comillas tipográficas', () => {
+  let r = P.run('//@version=3\nstudy("x")\nplot(close, color=blue, transp=50)', closes([1, 2]));
+  assert.ok(r.ok); assert.ok(r.warnings.filter(w => w.level === 'fix').length >= 2);
+  r = P.run('1 //@version=5\n2 indicator("x")\n3 plot(close)\n4 plot(open)', closes([1, 2]));
+  assert.ok(r.ok, JSON.stringify(r.error)); assert.equal(r.plots.length, 2); assert.ok(r.warnings.some(w => /números de línea/.test(w.msg)));
+  r = P.run('//@version=5\nindicator(“x”)\nplot(close)', closes([1])); assert.ok(r.ok);
+});
+test('matrix, enum, Heikin Ashi por ticker.heikinashi y time() con sesión', () => {
+  let r = vals('m = matrix.new<float>(2, 2, 1.0)\nm.set(0, 1, 5.0)\nt = m.transpose()\nplot(t.get(1, 0))\nplot(m.mult(t).get(0, 0))\nplot(m.rows() * 10 + m.columns())', closes([1]));
+  assert.deepEqual(r.plots.map(p => p.values[0]), [5, 26, 22]);
+  const cs = [{t: 0, o: 10, h: 12, l: 9, c: 11, v: 1}, {t: 36e5, o: 11, h: 14, l: 10, c: 13, v: 1}];
+  r = vals('x = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, close)\nplot(x)', cs, {interval: '1h', symbol: 'BTCUSDT'});
+  near(r.plots[0].values[0], (10 + 12 + 9 + 11) / 4); near(r.plots[0].values[1], (11 + 14 + 10 + 13) / 4);
+  const hrs = Array.from({length: 24}, (_, i) => ({t: Date.UTC(2024, 0, 3, i), o: 1, h: 2, l: 0, c: 1, v: 1}));
+  r = vals('plot(not na(time("60", "0800-1600", "UTC")) ? 1 : 0)', hrs, {interval: '1h'});
+  assert.deepEqual(r.plots[0].values.map((v, i) => [i, v]).filter(x => x[1]).map(x => x[0]), [8, 9, 10, 11, 12, 13, 14, 15]);
+});
+test('ta.sar, ta.tsi, ta.cmo y arrays estadísticos devuelven valores coherentes', () => {
+  const r = vals('plot(ta.sar(0.02, 0.02, 0.2))\nplot(ta.cmo(close, 3))\nvar a = array.new_float(0)\narray.push(a, close)\nplot(array.median(a))\nplot(array.stdev(a))', closes([1, 2, 3, 4, 5, 4, 3, 2]));
+  assert.ok(r.plots[0].values.slice(1).every(v => v !== null && v >= 0 && v < 10)); assert.equal(r.plots[1].values[3], 100); assert.equal(r.plots[2].values[7], 3);
+  near(r.plots[3].values[7], Math.sqrt([1, 2, 3, 4, 5, 4, 3, 2].reduce((s, v) => s + (v - 3) ** 2, 0) / 8));
 });

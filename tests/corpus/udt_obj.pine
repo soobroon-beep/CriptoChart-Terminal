@@ -1,0 +1,25 @@
+//@version=5
+indicator("Swing Boxes", overlay=true, max_boxes_count=100)
+type Zone
+    float top
+    float bot
+    int left
+    bool broken = false
+    box bx
+method update(Zone z) =>
+    if not z.broken and close > z.top
+        z.broken := true
+        z.bx.set_bgcolor(color.new(color.green, 85))
+    z
+var zones = array.new<Zone>()
+len = input.int(8, "Pivot length")
+ph = ta.pivothigh(high, len, len)
+if not na(ph)
+    top = ph
+    bot = ph - ta.atr(14)
+    b = box.new(bar_index - len, top, bar_index, bot, border_color=color.red, bgcolor=color.new(color.red, 85))
+    zones.push(Zone.new(top, bot, bar_index - len, false, b))
+for z in zones
+    z.update()
+    if not z.broken
+        z.bx.set_right(bar_index)

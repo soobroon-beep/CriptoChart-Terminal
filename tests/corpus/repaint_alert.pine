@@ -1,0 +1,16 @@
+//@version=5
+indicator("Alerts and Repaint", overlay=true)
+fastLen = input(12)
+slowLen = input(26)
+f = ta.ema(close, fastLen)
+s = ta.ema(close, slowLen)
+bull = ta.crossover(f, s) and barstate.isconfirmed
+bear = ta.crossunder(f, s) and barstate.isconfirmed
+plotshape(bull, "Bull", shape.labelup, location.belowbar, color.green, text="Buy", textcolor=color.white)
+plotshape(bear, "Bear", shape.labeldown, location.abovebar, color.red, text="Sell", textcolor=color.white)
+alertcondition(bull, title="Buy", message="Buy {{ticker}} at {{close}}")
+alertcondition(bear, title="Sell", message='Sell {{ticker}}')
+if bull
+    alert("Bullish cross", alert.freq_once_per_bar_close)
+log.info("hello {0}", close)
+barcolor(f > s ? color.green : color.red)

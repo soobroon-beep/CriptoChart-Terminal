@@ -1,0 +1,26 @@
+//@version=5
+indicator("Auto Fib Retracement", overlay=true, max_lines_count=50, max_labels_count=50)
+length = input.int(50, "Lookback", minval=5)
+showLabels = input.bool(true, "Labels")
+levels = array.from(0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0)
+colors = array.from(color.gray, color.red, color.orange, color.yellow, color.green, color.teal, color.blue)
+hi = ta.highest(high, length)
+lo = ta.lowest(low, length)
+hiBar = ta.highestbars(high, length)
+loBar = ta.lowestbars(low, length)
+var lines = array.new<line>()
+var labels = array.new<label>()
+if barstate.islast
+    for l in lines
+        line.delete(l)
+    for lb in labels
+        label.delete(lb)
+    array.clear(lines)
+    array.clear(labels)
+    up = loBar < hiBar
+    for i = 0 to array.size(levels) - 1
+        lv = array.get(levels, i)
+        price = up ? hi - (hi - lo) * lv : lo + (hi - lo) * lv
+        array.push(lines, line.new(bar_index - length, price, bar_index + 10, price, color=array.get(colors, i), style=line.style_dotted))
+        if showLabels
+            array.push(labels, label.new(bar_index + 10, price, str.tostring(lv, "#.###") + " (" + str.tostring(price, format.mintick) + ")", style=label.style_label_left, textcolor=color.white, color=color.new(array.get(colors, i), 30), size=size.small))

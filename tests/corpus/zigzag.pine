@@ -1,0 +1,21 @@
+//@version=5
+indicator("ZigZag Lines", overlay=true, max_lines_count=300)
+dev = input.float(3.0, "Deviation %", step=0.5)
+depth = input.int(10, "Depth")
+var float lastPivot = na
+var int lastIdx = na
+var int dir = 0
+var line zz = na
+ph = ta.pivothigh(high, depth, depth)
+pl = ta.pivotlow(low, depth, depth)
+if not na(ph) and dir <= 0 and (na(lastPivot) or (ph - lastPivot) / lastPivot * 100 >= dev)
+    line.new(lastIdx, lastPivot, bar_index - depth, ph, color=color.orange, width=2)
+    lastPivot := ph
+    lastIdx := bar_index - depth
+    dir := 1
+if not na(pl) and dir >= 0 and (na(lastPivot) or (lastPivot - pl) / lastPivot * 100 >= dev)
+    if not na(lastPivot)
+        line.new(lastIdx, lastPivot, bar_index - depth, pl, color=color.orange, width=2)
+    lastPivot := pl
+    lastIdx := bar_index - depth
+    dir := -1

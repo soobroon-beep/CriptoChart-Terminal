@@ -18,6 +18,7 @@
     const take = v => { if (!isn(v)) { if (v < mn) mn = v; if (v > mx) mx = v; } };
     for (const p of res.plots) { if (p.hidden) continue; for (let i = lo; i < hi; i++) take(at(p, i)); if (/histogram|columns|area/.test(p.style)) take(p.histbase || 0); }
     for (const h of res.hlines) if (!h.hidden) take(h.price);
+    for (const k of res.candles || []) { if (k.hidden) continue; for (let i = lo; i < hi; i++) { take(k.h[i]); take(k.l[i]); } }
     return Number.isFinite(mn) ? {min: mn, max: mx} : null;
   }
   /* Aporte al rango del precio (overlay=true): solo plots cuya escala se parece a la del precio */
@@ -56,6 +57,22 @@
         const c = f.cc !== undefined ? f.cc : f.ci[i]; if (c === null || c === undefined) continue;
         const a0 = val(f.a, i - 1), a1 = val(f.a, i), b0 = val(f.b, i - 1), b1 = val(f.b, i); if ([a0, a1, b0, b1].some(isn)) continue;
         g.fillStyle = col(c); g.beginPath(); g.moveTo(X(i - 1), Y(a0)); g.lineTo(X(i), Y(a1)); g.lineTo(X(i), Y(b1)); g.lineTo(X(i - 1), Y(b0)); g.closePath(); g.fill();
+      }
+    }
+    // relleno entre dos líneas (linefill)
+    for (const f of res.linefills || []) {
+      if ([...f.a, ...f.b].some(isn)) continue; g.fillStyle = col(f.ci) || 'rgba(41,98,255,.3)';
+      g.beginPath(); g.moveTo(X(f.a[0]), Y(f.a[1])); g.lineTo(X(f.a[2]), Y(f.a[3])); g.lineTo(X(f.b[2]), Y(f.b[3])); g.lineTo(X(f.b[0]), Y(f.b[1])); g.closePath(); g.fill();
+    }
+    // velas / barras del script (plotcandle, plotbar)
+    for (const k of res.candles || []) {
+      if (k.hidden) continue; const w = Math.max(1, Math.min(14, step * 0.7));
+      for (let i = Math.max(0, Math.floor(lo)); i < Math.min(candles.length, Math.ceil(hi)); i++) {
+        const j = i; if (isn(k.o[j]) || isn(k.h[j]) || isn(k.l[j]) || isn(k.c[j])) continue; const x = X(j); if (x < left - w || x > right + w) continue;
+        const c1 = col(k.ci[j]) || '#2962FF', cw = col(k.wci[j]) || c1, cb = col(k.bci[j]) || c1;
+        g.strokeStyle = cw; g.lineWidth = 1; g.beginPath(); g.moveTo(x, Y(k.h[j])); g.lineTo(x, Y(k.l[j])); g.stroke();
+        if (k.bar) { g.strokeStyle = c1; g.beginPath(); g.moveTo(x - w / 2, Y(k.o[j])); g.lineTo(x, Y(k.o[j])); g.moveTo(x, Y(k.c[j])); g.lineTo(x + w / 2, Y(k.c[j])); g.stroke(); continue; }
+        const y1 = Y(k.o[j]), y2 = Y(k.c[j]); g.fillStyle = c1; g.fillRect(x - w / 2, Math.min(y1, y2), w, Math.max(1, Math.abs(y2 - y1))); g.strokeStyle = cb; g.strokeRect(x - w / 2, Math.min(y1, y2), w, Math.max(1, Math.abs(y2 - y1)));
       }
     }
     // líneas horizontales
