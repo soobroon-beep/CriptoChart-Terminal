@@ -121,3 +121,39 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
 .setting-row.dim{opacity:.45}
 
 .pine-fix{margin-top:6px;padding:6px 8px;border-left:3px solid #26a69a;background:rgba(38,166,154,.08);border-radius:4px}
+
+/* Ventana de configuración (estilo TradingView) */
+.cfg-overlay{position:fixed;inset:0;z-index:200;background:rgba(3,7,14,.62);display:flex;align-items:center;justify-content:center;padding:12px}
+.cfg-dlg{width:min(600px,100%);max-height:min(88vh,860px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.55);color:var(--text)}
+.cfg-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px;font-size:16px}
+.cfg-x{background:none;border:0;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px}
+.cfg-tabs{display:flex;gap:18px;padding:0 16px;border-bottom:1px solid var(--line)}
+.cfg-tabs button{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:8px 0;font-size:14px;cursor:pointer}
+.cfg-tabs button.on{color:var(--text);border-color:var(--text)}
+.cfg-body{overflow:auto;padding:6px 16px 14px;flex:1;min-height:200px}
+.cfg-sec h4{margin:16px 0 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.cfg-row{display:flex;align-items:center;gap:10px;padding:6px 0;flex-wrap:wrap}
+.cfg-row.inline{gap:8px 14px}
+.cfg-cell{display:flex;align-items:center;gap:8px;min-width:0}
+.cfg-row:not(.inline):not(.sty) .cfg-cell:not(.cfg-bool){flex:1;justify-content:space-between}
+.cfg-lab{font-size:13.5px;line-height:1.25}
+.cfg-cell input[type=number],.cfg-cell input[type=text],.cfg-cell select{background:var(--raised);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:6px 8px;font-size:13px;min-width:0;max-width:220px}
+.cfg-cell input[type=number]{width:84px}
+.cfg-cell input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent);flex:none}
+.cfg-cell input[type=color]{width:30px;height:26px;padding:0;border:1px solid var(--line);border-radius:5px;background:none;flex:none}
+.cfg-op{width:64px;accent-color:var(--accent)}
+.cfg-dyn{font-size:11px;color:var(--muted);border:1px dashed var(--line);border-radius:5px;padding:2px 6px}
+.cfg-tip-btn{flex:none;width:16px;height:16px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);font:600 10px/14px system-ui;text-align:center;cursor:help;font-style:italic}
+.cfg-tip{margin:0 0 4px 0;padding:8px 10px;background:var(--raised);border-radius:6px;font-size:12px;color:var(--muted);white-space:pre-wrap}
+.cfg-row.sty{justify-content:space-between}
+.cfg-dash{color:var(--muted)}
+.cfg-empty{color:var(--muted);padding:24px 0;text-align:center}
+.cfg-foot{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--line)}
+.cfg-sp{flex:1}
+.cfg-btn{background:var(--raised);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 16px;font-size:13.5px;cursor:pointer}
+.cfg-btn.cfg-ok{background:var(--text);color:#0b1220;border-color:var(--text);font-weight:600}
+.cfg-btn.ghost{background:none}
+@media(max-width:640px){.cfg-overlay{align-items:flex-end;padding:0}.cfg-dlg{width:100%;max-height:92vh;border-radius:14px 14px 0 0}}
+.cfg-btn{flex:none;white-space:nowrap}.cfg-dlg input[type=color]{width:32px;height:26px;flex:none;padding:0}.cfg-dlg select{flex:none}
+.cfg-dlg input[type=datetime-local]{background:var(--raised);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:5px 8px;font-size:13px}
+.cfg-note{margin:0;padding:8px 16px;font-size:12px;color:var(--muted);background:var(--raised);border-bottom:1px solid var(--line)}

@@ -627,7 +627,8 @@ function callBuiltin(b, name, n, env, recv) {
     } else vals[pos++] = v;
   }
   if (transp !== undefined && !isna(transp) && sig) { sig.forEach((nm, i) => { if ((nm === 'color' || nm === 'textcolor' || nm === 'bgcolor') && vals[i] instanceof Col) vals[i] = new Col(vals[i].r, vals[i].g, vals[i].b, clamp(transp, 0, 100)); }); warn(ctx, n.line, 'transp=… (sintaxis antigua) → color.new(color, transp)', 'fixt', 'fix'); }
-  return b.f(vals, {ctx, env, node: n, st: env.frame.state(n), line: n.line, name});
+  const meta = sig && name.startsWith('input') ? {group: vals[sig.indexOf('group')], inline: vals[sig.indexOf('inline')], tooltip: vals[sig.indexOf('tooltip')], confirm: vals[sig.indexOf('confirm')]} : null;
+  return b.f(vals, {ctx, env, node: n, st: env.frame.state(n), line: n.line, name, meta});
 }
 function evCall(n, env) {
   const ctx = env.ctx, f = n.fn; let parts = null;
@@ -1060,34 +1061,38 @@ def('strategy', IND_SIG, setMeta('strategy'), {lenient: true});
 def('library', null, (a, c) => { throw new PineError('Las bibliotecas («library») no se pueden ejecutar en el gráfico', c.line); });
 
 const SRC_NAMES = ['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'volume'];
-function encodeIn(type, v) { return v instanceof Col ? '#' + [v.r, v.g, v.b].map(x => x.toString(16).padStart(2, '0')).join('') : v; }
+function encodeIn(type, v) { return v instanceof Col ? '#' + [v.r, v.g, v.b].map(x => x.toString(16).padStart(2, '0')).join('') + (v.t > 0 ? Math.round((1 - v.t / 100) * 255).toString(16).padStart(2, '0') : '') : v; }
 function regInput(c, type, defv, info) {
   const s = c.st, o = c.ctx.out;
   if (!s.reg) {
     const key = String(o.inputs.length), ov = c.ctx.opts.inputs ? c.ctx.opts.inputs[key] : undefined; let val = defv;
     if (ov !== undefined && ov !== null) {
       if (type === 'int') { val = Math.round(+ov); if (!Number.isFinite(val)) val = defv; }
-      else if (type === 'float') { val = +ov; if (!Number.isFinite(val)) val = defv; }
+      else if (type === 'float' || type === 'time') { val = +ov; if (!Number.isFinite(val)) val = defv; }
       else if (type === 'bool') val = ov === true || ov === 'true';
       else if (type === 'color') val = typeof ov === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(ov) ? hexCol(ov) : defv;
       else val = ov;
       if ((type === 'int' || type === 'float') && typeof val === 'number') { if (info.min != null && val < info.min) val = info.min; if (info.max != null && val > info.max) val = info.max; }
     }
-    s.val = val;
-    s.reg = Object.assign({key, title: info.title || ('Parámetro ' + (o.inputs.length + 1)), type, def: encodeIn(type, defv), value: encodeIn(type, val)}, info.min != null ? {min: info.min} : {}, info.max != null ? {max: info.max} : {}, info.step != null ? {step: info.step} : {}, info.options ? {options: info.options} : {}, info.group ? {group: info.group} : {}, info.tooltip ? {tooltip: info.tooltip} : {});
+    s.val = val; const mt = c.meta || {};
+    if (mt.group !== undefined && typeof mt.group === 'string' && !info.group) info.group = mt.group;
+    if (typeof mt.tooltip === 'string' && !info.tooltip) info.tooltip = mt.tooltip;
+    if (typeof mt.inline === 'string') info.inline = mt.inline;
+    s.reg = Object.assign({key, title: typeof info.title === 'string' ? info.title : '', type, def: encodeIn(type, defv), value: encodeIn(type, val)}, info.min != null ? {min: info.min} : {}, info.max != null ? {max: info.max} : {}, info.step != null ? {step: info.step} : {}, info.options ? {options: info.options} : {}, info.group ? {group: info.group} : {}, info.tooltip ? {tooltip: info.tooltip} : {}, info.inline ? {inline: info.inline} : {}, {order: o.inputs.length});
     o.inputs.push(s.reg);
   }
   return s.val;
 }
-const numIn = type => (a, c) => { const opt = Array.isArray(a[2]); return regInput(c, type, isna(a[0]) ? 0 : a[0], {title: a[1], options: opt ? a[2] : null, min: opt ? null : a[2], max: opt ? null : a[3], step: opt ? null : a[4], tooltip: a[5], group: a[7]}); };
+const optsOf = v => v instanceof Tup ? v.a.filter(x => !isna(x)) : Array.isArray(v) ? v : null;
+const numIn = type => (a, c) => { const optv = optsOf(a[10]) || optsOf(a[2]), opt = !!optv; return regInput(c, type, isna(a[0]) ? 0 : a[0], {title: a[1], options: optv, min: opt && optsOf(a[2]) ? null : a[2], max: opt ? null : a[3], step: opt ? null : a[4], tooltip: a[5], group: a[7]}); };
 const NUMSIG = ['defval', 'title', 'minval', 'maxval', 'step', 'tooltip', 'inline', 'group', 'confirm', 'display', 'options'];
 def('input.int', NUMSIG, numIn('int'), {lenient: true}); def('input.float', NUMSIG, numIn('float'), {lenient: true});
 def('input.bool', ['defval', 'title', 'tooltip', 'inline', 'group', 'confirm', 'display'], (a, c) => regInput(c, 'bool', a[0] === true, {title: a[1], tooltip: a[2], group: a[4]}), {lenient: true});
-const strIn = type => (a, c) => regInput(c, type, a[0] === undefined ? '' : a[0], {title: a[1], options: Array.isArray(a[2]) ? a[2] : null, tooltip: a[3], group: a[5]});
+const strIn = type => (a, c) => regInput(c, type, a[0] === undefined ? '' : a[0], {title: a[1], options: optsOf(a[2]), tooltip: a[3], group: a[5]});
 const STRSIG = ['defval', 'title', 'options', 'tooltip', 'inline', 'group', 'confirm', 'display'];
 for (const t of ['string', 'timeframe', 'symbol', 'session', 'text_area']) def('input.' + t, STRSIG, strIn(t === 'text_area' ? 'string' : t), {lenient: true});
 def('input.color', ['defval', 'title', 'tooltip', 'inline', 'group', 'confirm', 'display'], (a, c) => regInput(c, 'color', a[0] instanceof Col ? a[0] : hexCol('2962FF'), {title: a[1], tooltip: a[2], group: a[4]}), {lenient: true});
-def('input.time', ['defval', 'title', 'tooltip', 'inline', 'group', 'confirm', 'display'], (a, c) => regInput(c, 'float', a[0] || 0, {title: a[1], tooltip: a[2], group: a[4]}), {lenient: true});
+def('input.time', ['defval', 'title', 'tooltip', 'inline', 'group', 'confirm', 'display'], (a, c) => regInput(c, 'time', a[0] || 0, {title: a[1], tooltip: a[2], group: a[4]}), {lenient: true});
 def('input.source', ['defval', 'title', 'tooltip', 'inline', 'group', 'display'], (a, c) => {
   const arg = c.node.args[0] && !c.node.args[0].name ? c.node.args[0].e : (c.node.args.find(x => x.name === 'defval') || {}).e;
   const defName = arg && arg.k === 'id' && SRC_NAMES.includes(arg.name) ? arg.name : null;
@@ -1098,7 +1103,7 @@ def('input.source', ['defval', 'title', 'tooltip', 'inline', 'group', 'display']
 def('ticker.heikinashi', ['symbol'], (a, c) => 'HA:' + (isna(a[0]) ? c.ctx.symbol : String(a[0])), {lenient: true});
 for (const nm of ['ticker.new', 'ticker.modify', 'ticker.standard', 'ticker.inherit']) def(nm, ['prefix', 'ticker', 'session'], (a, c) => nm === 'ticker.new' ? (isna(a[1]) ? null : String(a[1])) : (isna(a[0]) ? c.ctx.symbol : String(a[0])), {lenient: true});
 def('input.enum', ['defval', 'title', 'options', 'tooltip', 'inline', 'group', 'confirm', 'display'], (a, c) => {
-  const opts = Array.isArray(a[2]) ? a[2].map(String) : []; const d = isna(a[0]) ? (opts[0] || '') : String(a[0]);
+  const opts = (optsOf(a[2]) || []).map(String); const d = isna(a[0]) ? (opts[0] || '') : String(a[0]);
   return regInput(c, 'string', d, {title: a[1], tooltip: a[3], group: a[5], options: opts.length ? opts : null});
 }, {lenient: true});
 def('input.price', NUMSIG, numIn('float'), {lenient: true});
@@ -1108,7 +1113,7 @@ def('input', ['defval', 'title', 'type', 'minval', 'maxval', 'step', 'tooltip', 
   if (a[2] === 'source' || (a0 && a0.k === 'id' && SRC_NAMES.includes(a0.name) && !lookup(c.env, a0.name))) return B['input.source'].f([a[0], a[1], a[6], a[7], a[8]], c); // input(close, …): origen de datos, no un número
   const d = a[0], t0 = typeof d === 'boolean' ? 'bool' : typeof d === 'number' ? (Number.isInteger(d) ? 'int' : 'float') : d instanceof Col ? 'color' : 'string';
   const t = a[2] === 'int' || a[2] === 'float' || a[2] === 'bool' || a[2] === 'string' || a[2] === 'color' ? a[2] : a[2] === 'price' ? 'float' : a[2] === 'time' ? 'int' : t0;
-  return regInput(c, t, d, {title: a[1], min: a[3], max: a[4], step: a[5], tooltip: a[6], group: a[8], options: Array.isArray(a[10]) ? a[10] : null});
+  return regInput(c, t, d, {title: a[1], min: a[3], max: a[4], step: a[5], tooltip: a[6], group: a[8], options: optsOf(a[10])});
 }, {lenient: true});
 
 /* ───────────── plot / hline / fill / bgcolor / formas ───────────── */

@@ -17,14 +17,15 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  light: false, drawings: {}, pine: [], novaSaved: null
+  light: false, drawings: {}, pine: [], novaSaved: null, novaParams: {}
 };
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
   if (!o.drawings || typeof o.drawings !== 'object' || Array.isArray(o.drawings)) o.drawings = {};
+  o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 60)) : {};
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
-  o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => ({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}})) : [];
+  o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => ({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {})) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
   if (typeof o.symbol !== 'string') o.symbol = o.symbols[0];
@@ -56,7 +57,7 @@ async function getJSON(url, signal) { const r = await fetch(url, {signal}); if (
 /* ───────── Variables de ejecución ───────── */
 let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null;
 let currentView = 'watchView', sheetMode = 'select', editMode = false;
-let pineRes = {}, pineBusy = {}, pineDirty = {}, pineLast = 0, pineTimer = 0, pineKey = '', pineDraft = {name: '', code: ''}, pineSetSid = null, pineWorker = null, pineNoWorker = false, pineSeq = 0;
+let pineLastMs = 0, pineRes = {}, pineBusy = {}, pineDirty = {}, pineLast = 0, pineTimer = 0, pineKey = '', pineDraft = {name: '', code: ''}, pineSetSid = null, pineWorker = null, pineNoWorker = false, pineSeq = 0;
 const pineJobs = new Map(), PINE_MAX = 6;
 let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null;
 let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
@@ -285,17 +286,66 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.stoch = I.stoch ? T.stoch(candles) : null;
   ind.atr = I.atr ? T.atr(candles, 14) : null;
   ind.obv = I.obv ? T.obv(candles) : null;
-  ind.trail = I.nnTrail ? T.smoothTrail(candles) : null;
-  ind.rev = I.nnRev ? T.reversalBands(candles) : null;
-  ind.sr = I.nnSR ? T.supportResistance(candles) : null;
-  ind.piv = I.nnPiv ? T.pivots(candles, 50) : null;
-  ind.liq = I.nnLiq ? T.liquidations(candles, iv) : null;
-  ind.vp = I.nnVP ? T.volumeProfile(candles) : null;
+  const NP = novaP;
+  ind.trail = I.nnTrail ? T.smoothTrail(candles, NP('trailLen'), NP('trailAtr'), NP('trailMult'), NP('trailSmooth')) : null;
+  ind.rev = I.nnRev ? T.reversalBands(candles, NP('revLen')) : null;
+  ind.sr = I.nnSR ? T.supportResistance(candles, {lookback: NP('srLookback'), retSince: NP('srSince'), retValid: NP('srLimit')}) : null;
+  ind.piv = I.nnPiv ? T.pivots(candles, NP('pivLen')) : null;
+  ind.liq = I.nnLiq ? T.liquidations(candles, iv, {lookback: NP('liqLookback')}) : null;
+  ind.vp = I.nnVP ? T.volumeProfile(candles, {rows: NP('vpRows'), lookback: NP('vpLookback'), hiThr: NP('vpHi'), loThr: NP('vpLo')}) : null;
+}
+// Parámetros de Nova Nexus editables (misma presentación que la ventana de TradingView: grupos, filas y ayudas)
+const NOVA_SCHEMA = [
+  {key: 'emaLen', title: 'EMA Periodos', type: 'int', def: 55, min: 2, max: 500, group: '☁️ EMA CLOUD'},
+  {key: 'emaMult', title: 'Multiplicador ATR', type: 'float', def: 0.6, min: 0.1, max: 10, step: 0.1, group: '☁️ EMA CLOUD'},
+  {key: 'trailLen', title: 'Longitud EMA Base', type: 'int', def: 30, min: 2, max: 500, group: '🧵 SMOOTH TRAIL'},
+  {key: 'trailAtr', title: 'ATR Length', type: 'int', def: 20, min: 1, max: 500, group: '🧵 SMOOTH TRAIL'},
+  {key: 'trailMult', title: 'Multiplicador ATR', type: 'float', def: 2, min: 0.1, max: 20, step: 0.1, group: '🧵 SMOOTH TRAIL'},
+  {key: 'trailSmooth', title: 'Suavizado', type: 'int', def: 2, min: 1, max: 50, group: '🧵 SMOOTH TRAIL'},
+  {key: 'pivLen', title: 'Pivot Length', type: 'int', def: 50, min: 2, max: 200, group: '📍 PIVOTS (High/Low & Missed)'},
+  {key: 'revLen', title: 'Length', type: 'int', def: 70, min: 2, max: 500, group: 'REVERSAL BANDS'},
+  {key: 'smcLen', title: 'Longitud del swing', type: 'int', def: 5, min: 2, max: 50, group: 'MARKET STRUCTURE'},
+  {key: 'smcWindow', title: 'Window', type: 'int', def: 500, min: 50, max: 1000, group: 'MARKET STRUCTURE', tooltip: 'Cantidad de velas recientes donde se busca la estructura.'},
+  {key: 'smcSwing', title: 'Swing', type: 'int', def: 100, min: 10, max: 500, group: 'MARKET STRUCTURE'},
+  {key: 'smcSweep', title: 'Build Sweep (x)', type: 'bool', def: true, group: 'MARKET STRUCTURE'},
+  {key: 'obLast', title: 'Show Last', type: 'int', def: 5, min: 1, max: 20, group: 'VOLUMETRIC ORDER BLOCKS'},
+  {key: 'obMiti', title: 'Mitigación', type: 'string', def: 'Close', options: ['Close', 'Wick', 'Avg'], group: 'VOLUMETRIC ORDER BLOCKS'},
+  {key: 'vpRows', title: 'Number of Rows', type: 'int', def: 25, min: 5, max: 100, group: 'Volume Profile'},
+  {key: 'vpLookback', title: 'Lookback Length', type: 'int', def: 200, min: 10, max: 1000, group: 'Volume Profile'},
+  {key: 'vpHi', title: 'High Traded Nodes Threshold %', type: 'float', def: 53, min: 0, max: 100, group: 'Volume Profile'},
+  {key: 'vpLo', title: 'Low Traded Nodes Threshold %', type: 'float', def: 37, min: 0, max: 100, group: 'Volume Profile'},
+  {key: 'liqLookback', title: 'Lookback Period', type: 'int', def: 40, min: 5, max: 500, group: 'LIQUIDATIONS'},
+  {key: 'srLookback', title: 'Lookback Range', type: 'int', def: 20, min: 2, max: 200, group: '🧱 Support and Resistance'},
+  {key: 'srSince', title: 'Bars Since Breakout', type: 'int', def: 2, min: 1, max: 50, group: '🧱 Support and Resistance'},
+  {key: 'srLimit', title: 'Retest Detection Limiter', type: 'int', def: 2, min: 1, max: 50, group: '🧱 Support and Resistance'},
+  {key: 'slMult', title: 'SL x ATR', type: 'float', def: 1, min: 0.1, max: 20, step: 0.1, group: '⚡ IA Signals — TP / SL'},
+  {key: 'tp1', title: 'TP1 x ATR', type: 'float', def: 1.5, min: 0.1, max: 50, step: 0.1, group: '⚡ IA Signals — TP / SL'},
+  {key: 'tp2', title: 'TP2 x ATR', type: 'float', def: 2.5, min: 0.1, max: 50, step: 0.1, group: '⚡ IA Signals — TP / SL'},
+  {key: 'tp3', title: 'TP3 x ATR', type: 'float', def: 4, min: 0.1, max: 50, step: 0.1, group: '⚡ IA Signals — TP / SL'},
+  {key: 'tpBars', title: 'Velas de vigencia TP / SL', type: 'int', def: 40, min: 5, max: 500, group: '⚡ IA Signals — TP / SL'},
+  {key: 'minScore', title: 'Score mínimo para mostrar señal', type: 'int', def: 1, min: 1, max: 5, group: '⚡ IA Signals — Score'},
+  {key: 'cooldown', title: 'Velas mínimas entre señales', type: 'int', def: 10, min: 0, max: 200, group: '⚡ IA Signals — Cooldown'},
+  {key: 'cdBoth', title: 'Cooldown compartido (BUY y SELL)', type: 'bool', def: false, group: '⚡ IA Signals — Cooldown'},
+  {key: 'rulesText', title: 'Texto de Reglas', type: 'string', def: '', group: '📋 REGLAS', tooltip: 'Una regla por línea separada con «|». Vacío = reglas por defecto.'}
+];
+const novaDef = k => { const e = NOVA_SCHEMA.find(x => x.key === k); return e ? e.def : undefined; };
+function novaP(k) { const v = state.novaParams && state.novaParams[k]; const d = novaDef(k); if (k === 'rulesText') return v ? String(v).split('|').map(x => '• ' + x.trim().replace(/^•\s*/, '')).join('\n') : undefined; return v === undefined ? d : v; }
+function openNovaDialog() {
+  const mods = NOVA_GROUPS.flatMap(([t, ks]) => ks.map(k => ({key: 'mod:' + k, title: novaTitle(k), type: 'bool', def: NOVA_DEFAULT.includes(k), value: !!state.indicators[k], group: '🧩 MÓDULOS (ON/OFF)', tooltip: novaDesc(k)})));
+  const params = NOVA_SCHEMA.map(e => Object.assign({}, e, {value: state.novaParams[e.key] !== undefined ? state.novaParams[e.key] : e.def}));
+  const values = {}; for (const i of mods.concat(params)) values[i.key] = i.value;
+  CCTSettings.open({title: 'Nova Nexus', tabs: ['in'], note: 'Estos son los parámetros que el indicador ya permite cambiar. Para tener TODOS los parámetros del Pine original, pega su código en «Scripts de Pine».', inputs: mods.concat(params), values, plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
+    const get = i => res.inputs[i.key] !== undefined ? res.inputs[i.key] : i.def;
+    for (const i of mods) { const k = i.key.slice(4); state.indicators[k] = !!get(i); }
+    state.novaSaved = null; const np = {}; for (const i of params) { const v = get(i); if (JSON.stringify(v) !== JSON.stringify(i.def)) np[i.key] = v; } state.novaParams = np;
+    save(); renderIndicators(); countIndicators(); calcNova(); calcExtra(); scheduleRender(); toast('Configuración aplicada');
+  }});
 }
 function calcNova() {
   const I = state.indicators;
   if (!window.NovaNexus || !candles.length || !(I.nnIa || I.nnEma || I.nnTp || I.nnRules || I.nnSmc || I.nnOb)) { ind.nn = null; return; }
-  try { ind.nn = NovaNexus.compute(candles, {smc: !!(I.nnSmc || I.nnOb)}); } catch (e) { ind.nn = null; console.warn('Nova Nexus:', e); }
+  const NP = novaP;
+  try { ind.nn = NovaNexus.compute(candles, {smc: !!(I.nnSmc || I.nnOb), emaLen: NP('emaLen'), emaMult: NP('emaMult'), minScore: NP('minScore'), cooldown: NP('cooldown'), cdBoth: NP('cdBoth'), slMult: NP('slMult'), tp1Mult: NP('tp1'), tp2Mult: NP('tp2'), tp3Mult: NP('tp3'), tpBars: NP('tpBars'), smcOpts: {mslen: NP('smcLen'), window: NP('smcWindow'), swingLimit: NP('smcSwing'), sweep: NP('smcSweep'), oblast: NP('obLast'), obmiti: NP('obMiti')}}); } catch (e) { ind.nn = null; console.warn('Nova Nexus:', e); }
 }
 const NN_KEYS = indicatorMeta.map(m => m[0]).filter(k => k.startsWith('nn')), novaOn = () => NN_KEYS.some(k => state.indicators[k]);
 const indicatorRows = () => indicatorMeta.filter(m => !m[0].startsWith('nn')).map(([key, title, desc]) =>
@@ -550,7 +600,7 @@ function render() {
   const n = candles.length; if (!n) { geo = null; return; }
 
   const pineKeyNow = `${state.symbol}|${state.interval}|${candles[0].t}`;
-  const pr = activePine().map(p => ({p, r: pineRes[p.sid]})).filter(x => x.r && x.r.ok && x.r._key === pineKeyNow);
+  const pr = activePine().filter(p => pineVisibleOn(p, state.interval)).map(p => ({p, r: pineStyled(pineRes[p.sid], p)})).filter(x => x.r && x.r.ok && x.r._key === pineKeyNow);
   const pOver = pr.filter(x => x.r.meta.overlay), pSub = pr.filter(x => !x.r.meta.overlay);
   const left = 6, right = 64, axisH = 22, plotTop = 6;
   const rsiH = state.indicators.rsi ? Math.round(Math.max(70, h * .18)) : 0, volH = state.indicators.volume ? Math.round(Math.max(40, h * .12)) : 0;
@@ -991,7 +1041,7 @@ function drawNovaSignals(nn, lo, hi, n) {
   }
 }
 function drawNovaRules() {
-  const txt = NovaNexus.defaults.rulesText.split('\n'), x2 = geo.left + geo.plotW - 4, small = geo.w < 480, y0 = geo.plotTop + (small ? 58 : 44);
+  const txt = (novaP('rulesText') || NovaNexus.defaults.rulesText).split('\n'), x2 = geo.left + geo.plotW - 4, small = geo.w < 480, y0 = geo.plotTop + (small ? 58 : 44);
   g.font = `${small ? 8 : 10}px system-ui`; const lh = small ? 11 : 14, wText = Math.max(...txt.map(t => g.measureText(t).width)) + 14, w = Math.max(wText, 70), x = x2 - w;
   g.save(); g.globalAlpha = .92;
   g.fillStyle = '#4361cf'; g.fillRect(x, y0, w, small ? 16 : 20);
@@ -1310,7 +1360,7 @@ function renderNovaSettings(list) {
 }
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-nova-set],[data-nova-tog],[data-nova-all]'); if (!t) return;
-  if (t.dataset.novaSet) { openSheet('novaSet'); return; }
+  if (t.dataset.novaSet) { openNovaDialog(); return; }
   if (t.dataset.novaTog) { novaToggleAll(!novaOn()); novaAfter(); return; }
   if (t.dataset.novaAll !== undefined) { if (t.dataset.novaAll === '1') { for (const k of NN_KEYS) state.indicators[k] = k !== 'nnLiqBars'; } else for (const k of NN_KEYS) state.indicators[k] = false; state.novaSaved = null; novaAfter(); }
 });
@@ -1362,14 +1412,49 @@ async function pineRunOne(p) {
   const code = (scripts.find(x => x.id === p.sid) || {}).code; if (!code || !candles.length) return;
   const key = `${state.symbol}|${state.interval}|${candles[0].t}`; pineBusy[p.sid] = true;
   const res = await pineRunFull(code, {inputs: p.inputs, interval: state.interval, symbol: state.symbol, name: pineName(p.sid), timeLimitMs: 12000});
-  pineBusy[p.sid] = false; res._key = key; pineRes[p.sid] = res;
+  pineBusy[p.sid] = false; res._key = key; pineRes[p.sid] = res; if (res.stats) pineLastMs = Math.max(pineLastMs * .5, res.stats.ms); // los scripts pesados se recalculan con menos frecuencia
   if (pineDirty[p.sid]) { pineDirty[p.sid] = false; pineKey = ''; schedulePine(); }
   if (currentView === 'indicatorView' || (sheetMode === 'indicators' && $('#sheet').classList.contains('open'))) { renderIndicators(); if (sheetMode === 'indicators') $('#sheetList').innerHTML = indicatorRows(); }
   scheduleRender();
 }
+// Estilo y visibilidad elegidos en la ventana de configuración (no obligan a recalcular el script)
+function pineVisibleOn(p, iv) {
+  const v = p.vis; if (!v) return true; const m = /^(\d+)([mhdwM])$/.exec(iv); if (!m) return true;
+  const o = v[m[2]]; if (!o) return true; if (o.on === false) return false;
+  const n = +m[1]; return !((o.min != null && n < o.min) || (o.max != null && n > o.max));
+}
+function pineStyled(res, p) {
+  if (!res || !res.ok || !p.style || !Object.keys(p.style).length) return res;
+  const sig = JSON.stringify(p.style); if (res._stSig === sig) return res._st;
+  const st = p.style, pal = res.palette.slice(), idxOf = c => { const k = CCTSettings.hexOf(c.color), a = ((c.op != null ? c.op : k.op) / 100).toFixed(3), col = `rgba(${parseInt(k.hex.slice(1, 3), 16)},${parseInt(k.hex.slice(3, 5), 16)},${parseInt(k.hex.slice(5, 7), 16)},${a})`; let i = pal.indexOf(col); if (i < 0) { pal.push(col); i = pal.length - 1; } return i; };
+  const out = Object.assign({}, res, {palette: pal});
+  out.plots = res.plots.map((pl, i) => { const o = (st.plots || {})[pl.id !== undefined ? pl.id : i]; if (!o) return pl; const q = Object.assign({}, pl); if (o.on === false) q.hidden = true; if (o.lw) q.lw = o.lw; if (o.color) { const ci = idxOf(o); if (pl.cc !== undefined) q.cc = ci; else q.ci = pl.ci.map(x => x === null ? null : ci); } return q; });
+  out.hlines = res.hlines.map((h, i) => { const o = (st.hlines || {})[i]; if (!o) return h; const q = Object.assign({}, h); if (o.on === false) q.hidden = true; if (o.color) q.ci = idxOf(o); return q; });
+  out.candles = (res.candles || []).map((k, i) => { const o = (st.plots || {})['c' + i]; return o && o.on === false ? Object.assign({}, k, {hidden: true}) : k; });
+  for (const k of ['labels', 'lines', 'boxes', 'tables', 'polylines', 'linefills']) if (st.objs && st.objs[k] && st.objs[k].on === false) out[k] = [];
+  if (st.shapes) out.shapes = res.shapes.filter((s2, i) => !(st.shapes[i] && st.shapes[i].on === false));
+  out.fills = res.fills; res._stSig = sig; res._st = out; return out;
+}
+function pineDialogData(p, r) {
+  const colorOf = ci => ci === null || ci === undefined || ci < 0 ? null : r.palette[ci];
+  const toHex = c => { const m = /rgba?\((\d+),(\d+),(\d+)(?:,([\d.]+))?/.exec(c || ''); return m ? '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join('') + (m[4] !== undefined && +m[4] < 1 ? Math.round(+m[4] * 255).toString(16).padStart(2, '0') : '') : '#2962ff'; };
+  const plots = r.plots.map((pl, i) => { const u = pl.cc !== undefined ? [pl.cc] : [...new Set((pl.ci || []).filter(x => x !== null))]; return {key: pl.id !== undefined ? pl.id : i, title: pl.title, color: toHex(colorOf(u[0])), dynamic: u.length > 1, lw: pl.lw || 2, canWidth: /line|step|cross|circles|area/.test(pl.style || 'line')}; })
+    .concat((r.candles || []).map((k, i) => ({key: 'c' + i, title: k.title, color: toHex(colorOf(k.ci.find(x => x !== null && x !== undefined))), dynamic: true, lw: 1, canWidth: false})));
+  const objects = [['labels', 'Etiquetas'], ['lines', 'Líneas'], ['boxes', 'Cajas'], ['polylines', 'Polilíneas'], ['linefills', 'Rellenos entre líneas'], ['tables', 'Tablas']].map(([key, label]) => ({key, label, count: (r[key] || []).length}));
+  return {title: pineName(p.sid), inputs: r.inputs, values: p.inputs || {}, plots, hlines: r.hlines.map((h, i) => ({key: i, title: h.title, price: h.price, color: toHex(colorOf(h.ci))})), objects, shapes: r.shapes.map((s2, i) => ({key: i, title: s2.title})), style: p.style || {}, vis: p.vis || {}};
+}
+function openPineDialog(sid) {
+  const p = state.pine.find(x => x.sid === sid), r = pineRes[sid];
+  if (!p) return; if (!r || !r.ok) { toast(r ? 'El script tiene errores: corrígelo para configurarlo' : 'Espera a que termine de calcularse'); return; }
+  CCTSettings.open(Object.assign(pineDialogData(p, r), {onApply: res => {
+    const inChanged = JSON.stringify(res.inputs) !== JSON.stringify(p.inputs || {});
+    p.inputs = res.inputs; p.style = res.style; p.vis = res.vis; if (!Object.keys(p.style).length) delete p.style; if (!Object.keys(p.vis).length) delete p.vis;
+    save(); if (inChanged) { pineKey = ''; schedulePine(); } renderIndicators(); scheduleRender(); toast('Configuración aplicada');
+  }}));
+}
 function schedulePine() {
   if (!candles.length || !activePine().length) return;
-  const key = `${state.symbol}|${state.interval}|${candles[0].t}|${candles.length}`, wait = key !== pineKey ? 0 : Math.max(0, 1500 - (Date.now() - pineLast));
+  const key = `${state.symbol}|${state.interval}|${candles[0].t}|${candles.length}`, wait = key !== pineKey ? 0 : Math.max(0, Math.max(1500, 6 * pineLastMs) - (Date.now() - pineLast));
   clearTimeout(pineTimer);
   pineTimer = setTimeout(() => { pineKey = key; pineLast = Date.now(); activePine().forEach(pineRunOne); }, wait);
 }
@@ -1449,7 +1534,7 @@ function renderPineSettings(list) {
     + `<div class="pine-actions"><button class="small-button" id="pineView">Ver código</button></div>`;
   $$('#sheetList .toggle[data-k]').forEach(b => b.onclick = () => { const on = b.dataset.on !== '1'; b.dataset.on = on ? 1 : 0; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
   const ap = $('#pineApply'); if (ap) ap.onclick = () => {
-    const o = {}; $$('#sheetList [data-k]').forEach(el => { const t = el.dataset.t; o[el.dataset.k] = t === 'bool' ? el.dataset.on === '1' : (t === 'int' || t === 'float') ? (el.value === '' ? null : +el.value) : el.value; });
+    const o = {}; $$('#sheetList [data-k]').forEach(el => { const t = el.dataset.t; o[el.dataset.k] = t === 'bool' ? el.dataset.on === '1' : (t === 'int' || t === 'float' || t === 'time') ? (el.value === '' ? null : +el.value) : el.value; });
     p.inputs = o; save(); pineKey = ''; schedulePine(); toast('Parámetros aplicados'); closeSheet();
   };
   const rs = $('#pineReset'); if (rs) rs.onclick = () => { p.inputs = {}; save(); pineKey = ''; schedulePine(); toast('Parámetros restablecidos'); closeSheet(); };
@@ -1459,7 +1544,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('[data-pine-new],[data-pine-set],[data-pine-del],[data-pine-tog],[data-pine-add]'); if (!t) return;
   const d = t.dataset;
   if (d.pineNew) { openSheet('pine'); return; }
-  if (d.pineSet) { pineSetSid = d.pineSet; openSheet('pineSet'); return; }
+  if (d.pineSet) { pineSetSid = d.pineSet; openPineDialog(d.pineSet); return; }
   if (d.pineAdd) {
     if (state.pine.some(p => p.sid === d.pineAdd)) { toast('Ya está en el gráfico'); return; }
     if (activePine().length >= PINE_MAX) { toast(`Máximo ${PINE_MAX} scripts activos`); return; }

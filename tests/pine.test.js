@@ -170,3 +170,12 @@ test('ta.sar, ta.tsi, ta.cmo y arrays estadísticos devuelven valores coherentes
   assert.ok(r.plots[0].values.slice(1).every(v => v !== null && v >= 0 && v < 10)); assert.equal(r.plots[1].values[3], 100); assert.equal(r.plots[2].values[7], 3);
   near(r.plots[3].values[7], Math.sqrt([1, 2, 3, 4, 5, 4, 3, 2].reduce((s, v) => s + (v - 3) ** 2, 0) / 8));
 });
+
+test('inputs: grupo, fila en línea, ayuda, opciones (tupla), color con opacidad y título vacío', () => {
+  const r = vals('a = input.int(5, "Largo", minval=1, group="Main", inline="x", tooltip="ayuda")\nb = input.bool(true, "", group="Main", inline="x")\nc = input.string("A", "Modo", options=["A", "B"], group="Otro")\nd = input.color(color.new(color.red, 50), "Color", group="Otro")\ne = input.int(3, "N", options=[1, 2, 3])\nf = input.time(timestamp(2023, 1, 1), "Desde")\nplot(a)', closes([1, 2]));
+  const by = t => r.inputs.find(i => i.title === t);
+  assert.equal(by('Largo').group, 'Main'); assert.equal(by('Largo').inline, 'x'); assert.equal(by('Largo').tooltip, 'ayuda');
+  assert.equal(r.inputs.find(i => i.type === 'bool').title, ''); assert.deepEqual(by('Modo').options, ['A', 'B']); assert.deepEqual(by('N').options, [1, 2, 3]);
+  assert.equal(by('Color').value, '#f2364580'); assert.equal(by('Desde').type, 'time');
+  const r2 = P.run(hdr + 'a = input.int(5, "Largo")\nplot(a)', closes([1]), {inputs: {0: 9}}); assert.equal(r2.plots[0].values[0], 9);
+});
