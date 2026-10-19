@@ -3,7 +3,7 @@
 (function (root) {
   'use strict';
   const isn = v => v === null || v === undefined || v !== v;
-  const fmtV = v => v == null ? '—' : Math.abs(v) >= 1000 ? v.toLocaleString('en-US', {maximumFractionDigits: 2}) : Math.abs(v) >= 1 ? v.toFixed(2) : Math.abs(v) === 0 ? '0' : v.toFixed(6);
+  const fmtV = (v, prec) => v == null ? '—' : (typeof prec === 'number' && prec >= 0) ? v.toLocaleString('en-US', {minimumFractionDigits: prec, maximumFractionDigits: prec}) : Math.abs(v) >= 1000 ? v.toLocaleString('en-US', {maximumFractionDigits: 2}) : Math.abs(v) >= 1 ? v.toFixed(2) : Math.abs(v) === 0 ? '0' : v.toFixed(6);
   const SIZE = {tiny: 3.5, small: 5, auto: 7, normal: 7, large: 10, huge: 13};
   const FONT = {tiny: 8, small: 9, auto: 11, normal: 11, large: 14, huge: 18};
   const DASH = {solid: [], dotted: [1.5, 3], dashed: [5, 4]};
@@ -38,7 +38,7 @@
     for (const p of res.plots) {
       if (p.hidden) continue; let v = null, j = Math.min(idx, p.values.length - 1);
       for (; j >= 0; j--) { v = at(p, j); if (!isn(v)) break; }
-      const c = isn(v) ? null : colOf(res, p, j - (p.offset || 0)); out.push({text: `${p.title} ${fmtV(v)}`, color: c === null || c < 0 ? res.palette[0] : res.palette[c]});
+      const c = isn(v) ? null : colOf(res, p, j - (p.offset || 0)); out.push({text: res._noVals ? p.title : `${p.title} ${fmtV(v, res._prec)}`, color: c === null || c < 0 ? res.palette[0] : res.palette[c]});
     }
     return out;
   }
@@ -85,6 +85,7 @@
     for (const p of res.plots) {
       if (p.hidden) continue; const lw = Math.min(4, Math.max(1, p.lw || 1)), st = p.style, base = Y(p.histbase || 0);
       const colAt = i => colOf(res, p, i - (p.offset || 0));
+      g.setLineDash(DASH[p.dash] || []);
       if (/histogram|columns/.test(st)) {
         const bw = Math.max(1, st === 'columns' ? step * .8 : Math.min(step * .5, Math.max(1.5, lw)));
         for (let i = lo; i < hi; i++) { const v = at(p, i), c = colAt(i); if (isn(v) || c === null || c < 0) continue; g.fillStyle = P[c]; const y = Y(v); g.fillRect(X(i) - bw / 2, Math.min(y, base), bw, Math.max(1, Math.abs(y - base))); }
@@ -95,6 +96,7 @@
         for (let i = Math.max(lo, 1); i < hi; i++) { const v0 = at(p, i - 1), v1 = at(p, i), c = colAt(i); if (isn(v0) || isn(v1) || c === null || c < 0) continue; g.fillStyle = P[c]; g.globalAlpha = .35; g.beginPath(); g.moveTo(X(i - 1), Y(v0)); g.lineTo(X(i), Y(v1)); g.lineTo(X(i), bottom); g.lineTo(X(i - 1), bottom); g.closePath(); g.fill(); g.globalAlpha = 1; }
         strokePlot(g, p, lo, hi, X, Y, colAt, P, lw, false);
       } else strokePlot(g, p, lo, hi, X, Y, colAt, P, lw, /step/.test(st));
+      g.setLineDash([]);
     }
     // formas
     for (const s of res.shapes) {

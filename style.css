@@ -157,3 +157,4 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
 .cfg-btn{flex:none;white-space:nowrap}.cfg-dlg input[type=color]{width:32px;height:26px;flex:none;padding:0}.cfg-dlg select{flex:none}
 .cfg-dlg input[type=datetime-local]{background:var(--raised);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:5px 8px;font-size:13px}
 .cfg-note{margin:0;padding:8px 16px;font-size:12px;color:var(--muted);background:var(--raised);border-bottom:1px solid var(--line)}
+.cfg-ctls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}.cfg-row.sty .cfg-cell.cfg-bool{flex:1 1 150px}.cfg-ctls select{max-width:120px;padding:4px 6px}

@@ -41,23 +41,41 @@
     return groupItems(cfg.inputs).map(g => `<section class="cfg-sec">${g.name ? `<h4>${esc(g.name)}</h4>` : ''}${g.rows.map(r => `<div class="cfg-row ${r.length > 1 ? 'inline' : ''}">${r.map(i => cell(i, vals[i.key])).join('')}</div>`).join('')}</section>`).join('');
   }
 
+  const TYPES = [['line', 'Línea'], ['stepline', 'Escalón'], ['linebr', 'Línea con saltos'], ['histogram', 'Histograma'], ['columns', 'Columnas'], ['area', 'Área'], ['circles', 'Círculos'], ['cross', 'Cruces']];
+  const DASHES = [['solid', 'Continua'], ['dashed', 'Rayas'], ['dotted', 'Puntos']];
+  const SIZES = [['tiny', 'Diminuto'], ['small', 'Pequeño'], ['normal', 'Normal'], ['large', 'Grande'], ['huge', 'Enorme'], ['auto', 'Auto']];
+  const sel = (key, prop, opts, cur, title) => `<select data-sk="${key}" data-sp="${prop}" title="${title}">${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
   function styleTab(cfg, st) {
-    const out = [], row = (key, label, extra, on) => `<div class="cfg-row sty"><div class="cfg-cell cfg-bool"><input type="checkbox" data-sk="${key}" data-sp="on" ${on !== false ? 'checked' : ''} id="s_${key}"><label for="s_${key}" class="cfg-lab">${esc(label)}</label></div>${extra}</div>`;
-    const colorCtl = (key, hex, op, dyn) => dyn ? '<span class="cfg-dyn" title="El script cambia este color según las condiciones">color dinámico</span>' : `<input type="color" data-sk="${key}" data-sp="color" value="${hex}"><input type="range" min="0" max="100" step="5" data-sk="${key}" data-sp="op" value="${op}" class="cfg-op" title="Opacidad ${op}%">`;
-    const widthCtl = (key, w) => `<select data-sk="${key}" data-sp="lw" title="Grosor">${[1, 2, 3, 4].map(n => `<option value="${n}" ${+w === n ? 'selected' : ''}>${n} px</option>`).join('')}</select>`;
+    const out = [], g = (grp, key) => ((st[grp] || {})[key]) || {};
+    const row = (key, label, ctls, on) => `<div class="cfg-row sty"><div class="cfg-cell cfg-bool"><input type="checkbox" data-sk="${key}" data-sp="on" ${on !== false ? 'checked' : ''} id="s_${key}"><label for="s_${key}" class="cfg-lab">${esc(label)}</label></div><div class="cfg-ctls">${ctls}</div></div>`;
+    const colorCtl = (key, hex, op, dyn, prop = 'color', tip = 'Color') => (dyn ? '<span class="cfg-dyn" title="El script cambia este color según las condiciones; si eliges uno aquí, reemplaza todos">dinámico</span>' : '') + `<input type="color" data-sk="${key}" data-sp="${prop}" value="${hex}" title="${tip}">` + (prop === 'color' ? `<input type="range" min="0" max="100" step="5" data-sk="${key}" data-sp="op" value="${op}" class="cfg-op" title="Opacidad ${op}%">` : '');
+    const widthCtl = (key, w) => sel(key, 'lw', [1, 2, 3, 4, 5, 6].map(n => [n, n + ' px']), w, 'Grosor');
     if (cfg.plots.length) {
       out.push('<section class="cfg-sec"><h4>Líneas y gráficos</h4>');
-      for (const p of cfg.plots) { const o = (st.plots || {})[p.key] || {}, c = hexOf(o.color || p.color); out.push(row('plots.' + p.key, p.title, (p.dynamic && !o.color ? colorCtl('plots.' + p.key, c.hex, c.op, true) : colorCtl('plots.' + p.key, c.hex, o.op != null ? o.op : c.op, false)) + (p.canWidth ? widthCtl('plots.' + p.key, o.lw || p.lw) : ''), o.on)); }
+      for (const p of cfg.plots) { const k = 'plots.' + p.key, o = g('plots', p.key), c = hexOf(o.color || p.color); out.push(row(k, p.title, colorCtl(k, c.hex, o.op != null ? o.op : c.op, p.dynamic && !o.color) + sel(k, 'type', TYPES, o.type || p.type, 'Tipo de gráfico') + sel(k, 'dash', DASHES, o.dash || p.dash, 'Estilo de línea') + widthCtl(k, o.lw || p.lw), o.on)); }
+      out.push('</section>');
+    }
+    if (cfg.fills && cfg.fills.length) {
+      out.push('<section class="cfg-sec"><h4>Rellenos</h4>');
+      for (const f of cfg.fills) { const k = 'fills.' + f.key, o = g('fills', f.key), c = hexOf(o.color || f.color); out.push(row(k, f.title, colorCtl(k, c.hex, o.op != null ? o.op : c.op, f.dynamic && !o.color), o.on)); }
       out.push('</section>');
     }
     if (cfg.hlines.length) {
       out.push('<section class="cfg-sec"><h4>Líneas horizontales</h4>');
-      for (const h of cfg.hlines) { const o = (st.hlines || {})[h.key] || {}, c = hexOf(o.color || h.color); out.push(row('hlines.' + h.key, h.title || ('Nivel ' + h.price), colorCtl('hlines.' + h.key, c.hex, o.op != null ? o.op : c.op, false), o.on)); }
+      for (const h of cfg.hlines) { const k = 'hlines.' + h.key, o = g('hlines', h.key), c = hexOf(o.color || h.color); out.push(row(k, h.title || ('Nivel ' + h.price), colorCtl(k, c.hex, o.op != null ? o.op : c.op, false) + sel(k, 'dash', DASHES, o.dash || h.dash, 'Estilo de línea') + widthCtl(k, o.lw || h.lw), o.on)); }
+      out.push('</section>');
+    }
+    if (cfg.shapes.length) {
+      out.push('<section class="cfg-sec"><h4>Formas y marcas</h4>');
+      for (const x of cfg.shapes) { const k = 'shapes.' + x.key, o = g('shapes', x.key), c = hexOf(o.color || x.color), t = hexOf(o.tcolor || x.tcolor); out.push(row(k, x.title || 'Forma ' + x.key, colorCtl(k, c.hex, 100, false, 'color', 'Color de la forma').replace(/<input type="range"[^>]*>/, '') + colorCtl(k, t.hex, 100, false, 'tcolor', 'Color del texto') + sel(k, 'size', SIZES, o.size || x.size, 'Tamaño'), o.on)); }
       out.push('</section>');
     }
     const objs = cfg.objects.filter(x => x.count > 0);
-    if (objs.length) { out.push('<section class="cfg-sec"><h4>Objetos dibujados por el script</h4>'); for (const x of objs) out.push(row('objs.' + x.key, `${x.label} (${x.count})`, '', (st.objs || {})[x.key])); out.push('</section>'); }
-    if (cfg.shapes.length) { out.push('<section class="cfg-sec"><h4>Formas y marcas</h4>'); for (const x of cfg.shapes) out.push(row('shapes.' + x.key, x.title || 'Forma ' + x.key, '', (st.shapes || {})[x.key])); out.push('</section>'); }
+    if (objs.length) { out.push('<section class="cfg-sec"><h4>Objetos dibujados por el script</h4>'); for (const x of objs) out.push(row('objs.' + x.key, `${x.label} (${x.count})`, '', (st.objs || {})[x.key] && st.objs[x.key].on)); out.push('</section>'); }
+    if (cfg.plots.length || cfg.hlines.length) {
+      const G = g('general', 'g');
+      out.push(`<section class="cfg-sec"><h4>Escala y leyenda</h4><div class="cfg-row sty"><label class="cfg-lab">Precisión (decimales)</label><div class="cfg-ctls"><select data-sk="general.g" data-sp="prec"><option value="">Por defecto</option>${[0, 1, 2, 3, 4, 5, 6, 7, 8].map(n => `<option value="${n}" ${G.prec === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div><div class="cfg-row sty"><div class="cfg-cell cfg-bool"><input type="checkbox" id="s_vals" data-sk="general.g" data-sp="vals" ${G.vals !== false ? 'checked' : ''}><label for="s_vals" class="cfg-lab">Mostrar valores en la leyenda</label></div></div></section>`);
+    }
     return out.length ? out.join('') : '<p class="cfg-empty">Este script no dibuja nada que se pueda ajustar aquí.</p>';
   }
 
@@ -90,10 +108,16 @@
         else if (ty === 'color') { const c = hexOf(vals[k]); const hex = t.dataset.part === 'c' ? t.value : c.hex, op = t.dataset.part === 'o' ? +t.value : c.op; vals[k] = joinHex(hex, op); if (t.dataset.part === 'o') t.title = 'Opacidad ' + op + '%'; }
         else vals[k] = t.value;
       } else if (t.dataset.sk !== undefined) { // estilo
-        const p = t.dataset.sp, path = t.dataset.sk;
-        if (p === 'on') setPath(path, 'on', t.checked); else if (p === 'lw') setPath(path, 'lw', +t.value);
-        else if (p === 'color') { const [g, k] = path.split('.'); const cur = (st[g] || {})[k] || {}; setPath(path, 'color', joinHex(t.value, cur.op != null ? cur.op : 100)); setPath(path, 'op', cur.op != null ? cur.op : 100); }
-        else if (p === 'op') { const [g, k] = path.split('.'); const cur = ((st[g] || {})[k] || {}), base = hexOf(cur.color || (cfg._basecolor && cfg._basecolor[path]) || el.querySelector(`[data-sk="${path}"][data-sp="color"]`).value); setPath(path, 'op', +t.value); setPath(path, 'color', joinHex(el.querySelector(`[data-sk="${path}"][data-sp="color"]`).value, +t.value)); t.title = 'Opacidad ' + t.value + '%'; void base; }
+        const pr = t.dataset.sp, path = t.dataset.sk;
+        if (pr === 'on' || pr === 'vals') setPath(path, pr, t.checked);
+        else if (pr === 'lw') setPath(path, 'lw', +t.value);
+        else if (pr === 'prec') { const [gp, ky] = path.split('.'); st[gp] = st[gp] || {}; st[gp][ky] = st[gp][ky] || {}; if (t.value === '') delete st[gp][ky].prec; else st[gp][ky].prec = +t.value; }
+        else if (pr === 'type' || pr === 'dash' || pr === 'size') setPath(path, pr, t.value);
+        else if (pr === 'tcolor') setPath(path, 'tcolor', t.value);
+        else if (pr === 'color' || pr === 'op') {
+          const cEl = el.querySelector(`[data-sk="${path}"][data-sp="color"]`), oEl = el.querySelector(`[data-sk="${path}"][data-sp="op"]`), op = oEl ? +oEl.value : 100;
+          setPath(path, 'color', joinHex(cEl.value, op)); setPath(path, 'op', op); if (pr === 'op') t.title = 'Opacidad ' + t.value + '%';
+        }
       } else if (t.dataset.vu !== undefined) { // visibilidad
         const u = t.dataset.vu, p = t.dataset.vp; vis[u] = vis[u] || {}; vis[u][p] = p === 'on' ? t.checked : +t.value;
       }

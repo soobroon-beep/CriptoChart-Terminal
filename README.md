@@ -54,3 +54,6 @@ En **Indicadores → Mis indicadores** aparece **Nova Nexus como un solo indicad
 - **Order Blocks**: volumétricos, con actividad de compra/venta y % de volumen (últimos 5).
 
 Los módulos SMC están apagados por defecto. Los perfiles Mobile/Cloud/SMC del Pine todavía no existen aquí. Los parámetros de cada módulo están fijos en los valores por defecto del Pine y se usa el tema Default.
+
+### Estilo completo (como TradingView)
+La pestaña **Estilo** de cada indicador permite cambiar, por elemento: visibilidad, color y opacidad (también sustituir colores dinámicos), tipo de gráfico (línea, escalón, histograma, columnas, área, círculos, cruces), estilo de línea, grosor, rellenos, líneas horizontales, formas (color, texto, tamaño), fondo/velas coloreadas, y la precisión/valores de la leyenda.
