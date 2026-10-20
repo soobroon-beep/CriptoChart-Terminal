@@ -2021,6 +2021,45 @@ async function initCloud() {
   } catch { syncStatus = 'No se pudo contactar con el servicio de cuentas.'; renderAccount(); }
 }
 
+/* ───────── Ancho de los paneles laterales (solo escritorio): arrastrar, doble clic para ocultar ───────── */
+(function layoutSplit() {
+  const main = document.querySelector('main'), KEY = 'cct_layout_v1', LIM = {wl: [230, 520, 270], side: [260, 680, 310]};
+  let L = {}; try { L = JSON.parse(lsGet(KEY) || '{}') || {}; } catch {}
+  const wide = () => window.innerWidth;
+  const apply = () => {
+    const mx = k => Math.min(LIM[k][1], Math.max(LIM[k][0], wide() * (k === 'wl' ? .4 : .45)));
+    for (const [k, v] of [['wl', '--wl-w'], ['side', '--side-w']]) {
+      const off = L[k + 'Off'], w = L[k] ? Math.min(mx(k), Math.max(LIM[k][0], L[k])) : null;
+      document.body.classList.toggle(k + '-off', !!off);
+      if (off) main.style.setProperty(v, '0px'); else if (w) main.style.setProperty(v, w + 'px'); else main.style.removeProperty(v);
+    }
+    const sl = document.getElementById('splitL'), sr = document.getElementById('splitR');
+    sl.classList.toggle('collapsed', !!L.wlOff); sr.classList.toggle('collapsed', !!L.sideOff);
+    document.getElementById('splitLBtn').textContent = L.wlOff ? '›' : '‹'; document.getElementById('splitRBtn').textContent = L.sideOff ? '‹' : '›';
+    scheduleRender();
+  };
+  const store = () => { try { localStorage.setItem(KEY, JSON.stringify(L)); } catch {} };
+  const curW = k => { const el = document.getElementById(k === 'wl' ? 'watchView' : (document.body.dataset.side || 'indicatorView')); return Math.round(el.getBoundingClientRect().width) || LIM[k][2]; };
+  const bind = (id, k) => {
+    const el = document.getElementById(id);
+    el.addEventListener('pointerdown', e => {
+      if (e.target.closest('.split-btn') || !isDesktop()) return; e.preventDefault();
+      const x0 = e.clientX, w0 = L[k + 'Off'] ? 0 : curW(k); el.setPointerCapture(e.pointerId); el.classList.add('drag');
+      const mv = ev => { const d = ev.clientX - x0, w = k === 'wl' ? w0 + d : w0 - d; if (w < 90) { L[k + 'Off'] = true; } else { L[k + 'Off'] = false; L[k] = Math.round(Math.min(LIM[k][1], Math.max(LIM[k][0], w))); } apply(); };
+      const up = () => { el.classList.remove('drag'); el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); store(); };
+      el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    });
+    const toggle = () => { L[k + 'Off'] = !L[k + 'Off']; store(); apply(); };
+    el.addEventListener('dblclick', e => { if (!e.target.closest('.split-btn')) toggle(); });
+    el.querySelector('.split-btn').addEventListener('click', toggle);
+  };
+  bind('splitL', 'wl'); bind('splitR', 'side');
+  // al cambiar de panel derecho (indicadores / alertas / ajustes) se mantiene el ancho; si estaba oculto, se muestra al elegir una pestaña
+  document.querySelectorAll('.side-tabs button').forEach(b => b.addEventListener('click', () => { if (L.sideOff) { L.sideOff = false; store(); apply(); } }));
+  window.addEventListener('resize', () => { if (isDesktop()) apply(); });
+  apply();
+})();
+
 /* ───────── Arranque ───────── */
 renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); updateDrawUI(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
 if (isDesktop()) onLayoutChange();

@@ -75,3 +75,6 @@ Con la sesión iniciada, el seguimiento, los indicadores activos y sus ajustes (
 
 ### Paneles de los indicadores Pine
 Cada script Pine tiene un selector **Panel** (en *Mis indicadores*): automático (según el script), **sobre el gráfico**, **arriba** o **abajo** (panel propio con su escala). Se guarda por script y se sincroniza con la cuenta. Los indicadores comunes (RSI, MACD, etc.) siguen en sus paneles inferiores.
+
+### Ancho de los paneles laterales (escritorio)
+Arrastra el borde entre *Seguimiento* y el gráfico, o entre el gráfico y *Indicadores/Alertas/Ajustes*, para ensanchar o estrechar los paneles; doble clic (o el botón ‹ ›) los oculta/muestra para dar todo el ancho al gráfico. Se recuerda en este dispositivo.

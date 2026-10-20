@@ -63,7 +63,7 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   .side-tabs button{background:none;border:0;color:var(--muted);font-size:12px;font-weight:700;padding:7px 14px;border-radius:7px}
   .side-tabs button.active{background:var(--raised);color:var(--accent)}
   .connection{font-size:11px}
-  main{display:grid;grid-template-columns:minmax(270px,19vw) minmax(0,1fr) minmax(310px,22vw);grid-template-areas:"watch chart side";min-height:0}
+  main{--wl-w:max(270px,19vw);--side-w:max(310px,22vw);position:relative;display:grid;grid-template-columns:var(--wl-w) minmax(0,1fr) var(--side-w);grid-template-areas:"watch chart side";min-height:0}
   .bottom-nav{display:none}
   .view{height:100%;min-height:0}
   #watchView{display:block!important;grid-area:watch;border-right:1px solid var(--line);padding:18px 16px 20px}
@@ -176,3 +176,15 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
 .rep-tbl{overflow-x:auto}.rep-tbl table{width:100%;border-collapse:collapse;font-size:12px}.rep-tbl th{text-align:left;color:var(--muted);font-weight:600;padding:6px 4px;border-bottom:1px solid var(--line)}.rep-tbl td{padding:7px 4px;border-bottom:1px solid var(--line);vertical-align:top}.rep-tbl td small{display:block;color:var(--muted);font-size:10px}.rep-note{font-size:12px;line-height:1.7;color:var(--muted)}.rep-note b{color:var(--text)}
 .rep-ctl{display:flex;gap:6px;padding:8px 14px;flex-wrap:wrap;border-bottom:1px solid var(--line)}.rep-ctl select{background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:8px;color:var(--text);font-size:13px;flex:1 1 90px;min-width:0}.rep-ctl .small-button{flex:0 0 auto}
 .pane-sel{display:block;margin-top:8px;background:var(--raised);border:1px solid var(--line);border-radius:8px;color:var(--text);font-size:12px;padding:6px 8px;max-width:100%}
+
+.splitter{display:none}
+@media(min-width:1024px){
+  .splitter{display:block;position:absolute;top:0;bottom:0;width:9px;z-index:4;cursor:col-resize;touch-action:none}
+  .splitter::after{content:'';position:absolute;left:4px;top:0;bottom:0;width:1px;background:transparent;transition:background .15s}
+  .splitter:hover::after,.splitter.drag::after{background:var(--accent);width:2px;left:3px}
+  #splitL{left:calc(var(--wl-w) - 4px)}#splitR{right:calc(var(--side-w) - 4px)}
+  .split-btn{position:absolute;top:50%;left:-3px;transform:translateY(-50%);width:16px;height:44px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:14px;line-height:1;opacity:0;transition:opacity .15s;cursor:pointer}
+  .splitter:hover .split-btn,.splitter.collapsed .split-btn{opacity:1}
+  body.wl-off #watchView,body.side-off #indicatorView,body.side-off #settingsView,body.side-off #alertsView{display:none!important}
+  body.wl-off #splitL{left:0}body.side-off #splitR{right:0}
+}
