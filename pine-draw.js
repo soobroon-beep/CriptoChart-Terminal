@@ -140,8 +140,19 @@
       if (pl.fci !== null && pl.fci !== undefined && P[pl.fci]) { g.fillStyle = P[pl.fci]; g.fill(); }
       g.strokeStyle = col(pl.lci) || '#2962FF'; g.lineWidth = Math.min(4, pl.w || 1); g.setLineDash(DASH[pl.style] || []); g.stroke(); g.setLineDash([]);
     }
+    if (res.strategy && o.overlay) drawTrades(g, res.strategy, o);
     g.restore();
     drawTables(g, res, o);
+  }
+  // operaciones del backtest: triángulos de entrada (▲ largo / ▼ corto) y marcas de salida (verde ganadora / roja perdedora)
+  function drawTrades(g, st, o) {
+    const {X, Y, lo, hi, candles} = o; g.save(); g.font = '9px system-ui'; g.textAlign = 'center';
+    for (const m of st.marks) {
+      if (m.bar < lo - 1 || m.bar > hi) continue; const x = X(m.bar), y = Y(m.price), up = m.dir === 1;
+      if (m.kind === 'entry') { g.fillStyle = up ? '#26a69a' : '#ef5350'; g.beginPath(); if (up) { g.moveTo(x, y + 2); g.lineTo(x - 5, y + 11); g.lineTo(x + 5, y + 11); } else { g.moveTo(x, y - 2); g.lineTo(x - 5, y - 11); g.lineTo(x + 5, y - 11); } g.closePath(); g.fill(); g.fillText(String(m.id).slice(0, 8), x, up ? y + 21 : y - 14); }
+      else { g.strokeStyle = g.fillStyle = m.profit >= 0 ? '#26a69a' : '#ef5350'; g.beginPath(); g.arc(x, y, 3.5, 0, 6.2832); g.fill(); }
+    }
+    g.restore();
   }
   // tablas del script: se anclan a una esquina del gráfico (Pine las dibuja en la pantalla, no en el precio)
   function drawTables(g, res, o) {
@@ -205,5 +216,5 @@
     if (st === 'down' || st === 'up') { g.beginPath(); if (st === 'down') { g.moveTo(x - 4, by + h); g.lineTo(x + 4, by + h); g.lineTo(x, by + h + 5); } else { g.moveTo(x - 4, by); g.lineTo(x + 4, by); g.lineTo(x, by - 5); } g.closePath(); g.fill(); }
     g.fillStyle = fg || '#fff'; g.textAlign = 'left'; lines.forEach((t, k) => g.fillText(t, bx + pad, by + pad + fs - 2 + k * (fs + 2)));
   }
-  root.CCTPineDraw = {draw, range, contrib, legend, fmtV};
+  root.CCTPineDraw = {draw, range, drawTrades, contrib, legend, fmtV};
 })(typeof self !== 'undefined' ? self : this);

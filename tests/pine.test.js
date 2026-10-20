@@ -189,3 +189,53 @@ test('alertcondition y alert() se registran con sus barras y mensajes', () => {
   assert.ok(al.bars.length >= 4); assert.match(al.msgs[al.bars[al.bars.length - 1]], /^bajista \d+$/);
   assert.ok(!r.warnings.some(w => /alert/.test(w.msg)));
 });
+
+/* ───── Backtesting (strategy.*) ───── */
+const bars = arr => arr.map((x, i) => ({t: i * 36e5, o: x[0], h: x[1], l: x[2], c: x[3], v: 10}));
+const strat = (head, body, cs, opts) => { const r = P.run('//@version=5\nstrategy("t", ' + head + ')\n' + body, cs, opts || {}); assert.ok(r.ok, JSON.stringify(r.error)); return r; };
+test('strategy: entrada de mercado en la apertura siguiente y salida por límite', () => {
+  const cs = bars([[100, 101, 99, 100], [100, 101, 99, 100], [100, 106, 99, 105], [105, 106, 94, 95]]);
+  const r = strat('initial_capital=1000, default_qty_type=strategy.fixed, default_qty_value=2', 'if bar_index == 1\n    strategy.entry("L", strategy.long)\nstrategy.exit("X", "L", limit=105, stop=95)\n', cs);
+  const t = r.strategy.trades[0]; assert.deepEqual([t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7], t[8]], ['L', 1, 2, 100, 2, 105, 2, 10, 'X']);
+  assert.equal(r.strategy.stats.net, 10); assert.equal(r.strategy.stats.equity, 1010); assert.equal(r.strategy.equity[3], 1010);
+});
+test('strategy: si stop y objetivo caben en la misma vela gana el más cercano en la ruta O→H→L→C', () => {
+  // apertura 100 más cerca de la máxima (103) que de la mínima (90): ruta O→H→L→C → el objetivo (103) llega antes que el stop (92)
+  const cs = bars([[100, 101, 99, 100], [100, 101, 99, 100], [100, 103, 90, 95]]);
+  const r = strat('initial_capital=1000, default_qty_value=1', 'if bar_index == 1\n    strategy.entry("L", strategy.long)\nstrategy.exit("X", "L", limit=103, stop=92)\n', cs);
+  assert.equal(r.strategy.trades[0][5], 103);
+  const cs2 = bars([[100, 108, 99, 100], [100, 108, 99, 100], [100, 101, 90, 95]]); // mínima más cerca → O→L→H→C: el stop llega antes
+  const r2 = strat('initial_capital=1000, default_qty_value=1', 'if bar_index == 1\n    strategy.entry("L", strategy.long)\nstrategy.exit("X", "L", limit=108, stop=92)\n', cs2);
+  assert.equal(r2.strategy.trades[0][5], 92);
+});
+test('strategy: cortos, inversión de posición y comisión porcentual', () => {
+  const cs = bars([[100, 101, 99, 100], [100, 101, 99, 100], [100, 101, 99, 100], [110, 111, 109, 110], [90, 91, 89, 90], [90, 91, 89, 90]]);
+  const r = strat('initial_capital=10000, default_qty_value=10, commission_type=strategy.commission.percent, commission_value=0.1',
+    'if bar_index == 1\n    strategy.entry("L", strategy.long)\nif bar_index == 2\n    strategy.entry("S", strategy.short)\nif bar_index == 3\n    strategy.close_all()\n', cs);
+  const s = r.strategy;
+  assert.equal(s.trades.length, 2); assert.equal(s.trades[0][8], 'Inversión: S'); assert.equal(s.trades[0][5], 110); assert.equal(s.trades[1][1], -1);
+  // largo: (110-100)*10 = 100 - comisión (100*10*0.1% + 110*10*0.1%) = 100 - 2.1 ; corto: entra 110, sale 90 → +200 - (1.1 + 0.9)
+  near(s.trades[0][7], 100 - 2.1, 1e-9); near(s.trades[1][7], 200 - 2.0, 1e-9); near(s.stats.net, 100 - 2.1 + 200 - 2.0, 1e-9);
+});
+test('strategy: percent_of_equity, pyramiding y estadísticas', () => {
+  const cs = bars([[100, 101, 99, 100], [100, 101, 99, 100], [100, 101, 99, 100], [100, 101, 99, 100], [100, 101, 99, 100]]);
+  const r = strat('initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=50, pyramiding=2',
+    'if bar_index == 0\n    strategy.entry("A", strategy.long)\nif bar_index == 1\n    strategy.entry("B", strategy.long)\nif bar_index == 2\n    strategy.entry("C", strategy.long)\nplot(strategy.opentrades)\nplot(strategy.position_size)\n', cs);
+  assert.deepEqual(r.plots[0].values, [0, 1, 2, 2, 2]); near(r.plots[1].values[4], 10, 1e-9); assert.equal(r.strategy.open.length, 2);
+});
+test('strategy: variables y trailing stop', () => {
+  const cs = bars([[100, 101, 99, 100], [100, 101, 99, 100], [100, 110, 100, 109], [109, 120, 108, 119], [119, 119, 110, 111]]);
+  const r = strat('initial_capital=1000, default_qty_value=1', 'if bar_index == 1\n    strategy.entry("L", strategy.long)\nstrategy.exit("T", "L", trail_points=500, trail_offset=500)\n', cs, {mintick: 0.01});
+  // activa en +5.00 (105), el extremo sube a 120 y el stop (offset 5.00) = 115 → sale en 115 en la vela 4
+  assert.equal(r.strategy.trades[0][5], 115);
+});
+test('strategy en indicador: aviso y sin broker', () => {
+  const r = P.run('//@version=5\nindicator("t")\nstrategy.entry("L", strategy.long)\nplot(close)', bars([[1, 2, 0, 1], [1, 2, 0, 1]]), {});
+  assert.ok(r.ok && !r.strategy && r.warnings.some(w => /strategy\(/.test(w.msg)));
+});
+test('strategy: sintaxis antigua con when= y dirección booleana, y position_size[1]', () => {
+  const cs = bars([[100, 101, 99, 100], [100, 101, 99, 100], [100, 101, 99, 101], [101, 102, 100, 102], [102, 103, 101, 103]]);
+  const r = P.run('//@version=4\nstrategy("old", overlay=true, initial_capital=100, default_qty_value=1)\nstrategy.entry("L", strategy.long, when = bar_index == 1)\nstrategy.close("L", when = bar_index == 3)\nplot(strategy.position_size[1])', cs, {});
+  assert.ok(r.ok, JSON.stringify(r.error)); assert.equal(r.strategy.trades.length, 1); assert.equal(r.strategy.trades[0][3], 100); assert.equal(r.strategy.trades[0][5], 102);
+  assert.deepEqual(r.plots[0].values.map(v => v || 0), [0, 0, 0, 1, 1]);
+});

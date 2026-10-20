@@ -404,7 +404,7 @@ const CONSTS = Object.assign(Object.create(null), {
   'display.none': 0, 'display.pane': 1, 'display.data_window': 2, 'display.price_scale': 4, 'display.status_line': 8, 'display.all': 15, 'display.pine_screener': 16,
   'dayofweek.sunday': 1, 'dayofweek.monday': 2, 'dayofweek.tuesday': 3, 'dayofweek.wednesday': 4, 'dayofweek.thursday': 5, 'dayofweek.friday': 6, 'dayofweek.saturday': 7,
   'input.integer': 'int', 'input.float': 'float', 'input.bool': 'bool', 'input.string': 'string', 'input.source': 'source', 'input.resolution': 'timeframe', 'input.timeframe': 'timeframe', 'input.session': 'session', 'input.symbol': 'symbol', 'input.color': 'color', 'input.price': 'price', 'input.time': 'time', 'input.text_area': 'text_area',
-  'strategy.long': 'long', 'strategy.short': 'short', 'strategy.position_size': 0, 'strategy.equity': 0, 'strategy.netprofit': 0, 'strategy.opentrades': 0, 'strategy.closedtrades': 0
+  'strategy.long': 'long', 'strategy.short': 'short'
 });
 for (const k in NAMED) CONSTS['color.' + k] = hexCol(NAMED[k]);
 const CONST_DYN = Object.create(null); // series “variables” de ta.* con estado propio (ver builtins)
@@ -1056,13 +1056,11 @@ function setMeta(kind) {
     const m = c.ctx.out.meta; m.kind = kind; if (typeof a[0] === 'string') m.title = a[0]; if (typeof a[1] === 'string') m.short = a[1];
     m.overlay = a[2] === true; if (a[10]) m.maxLines = Math.min(500, a[10]); if (a[11]) m.maxLabels = Math.min(500, a[11]); if (a[12]) m.maxBoxes = Math.min(500, a[12]); if (a[16]) m.maxPolylines = Math.min(100, a[16]);
     if (typeof a[7] === 'string' && a[7] !== '') warn(c.ctx, c.line, `El parámetro timeframe de ${kind}() se ignora (el script se calcula en la temporalidad del gráfico)`, 'ind-tf', 'unsupported');
-    if (kind === 'strategy') warn(c.ctx, c.line, 'Es una «strategy»: aquí se dibuja como indicador y las órdenes se ignoran (el backtesting llega en la Fase 7)', 'strategy-meta', 'info');
     return null;
   };
 }
 def('indicator', IND_SIG, setMeta('indicator'), {lenient: true});
 def('study', IND_SIG, setMeta('indicator'), {lenient: true});
-def('strategy', IND_SIG, setMeta('strategy'), {lenient: true});
 def('library', null, (a, c) => { throw new PineError('Las bibliotecas («library») no se pueden ejecutar en el gráfico', c.line); });
 
 const SRC_NAMES = ['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'volume'];
@@ -1332,13 +1330,209 @@ function timeToIndex(ctx, t) {
 }
 function uniform(arr) { let u; for (const x of arr) { if (x === null) continue; if (u === undefined) u = x; else if (x !== u) return undefined; } return u; }
 
+/* ───────────── Estrategias: simulador de órdenes (backtesting) ─────────────
+   Reglas (documentadas en el README; no se promete equivalencia exacta con TradingView):
+   · Una orden de mercado puesta en la vela i se ejecuta en la apertura de la vela i+1 (o al cierre de i con process_orders_on_close).
+   · Órdenes límite/stop se ejecutan dentro de la vela siguiendo la ruta O→H→L→C (si la máxima está más cerca de la apertura) u O→L→H→C.
+   · Comisión (percent / cash_per_order / cash_per_contract) y deslizamiento (ticks) en cada ejecución. Sin margen ni liquidaciones.
+   · Solo velas históricas: calc_on_every_tick / calc_on_order_fills no se simulan. */
+class Broker {
+  constructor(ctx, p) {
+    this.ctx = ctx; this.init = p.init; this.qtyType = p.qtyType; this.qtyVal = p.qtyVal; this.pyr = Math.max(1, p.pyramiding | 0);
+    this.commType = p.commType; this.commVal = p.commVal; this.slip = p.slip; this.onClose = !!p.onClose; this.tick = ctx.mintick || 0.01;
+    this.title = p.title; this.currency = p.currency;
+    this.open = []; this.closed = []; this.orders = []; this.marks = []; this.equity = []; this.net = 0; this.openComm = 0; this.nid = 0;
+    this.peak = p.init; this.maxDD = 0; this.maxDDpct = 0; this.maxRun = 0; this.cur = null; this.lastEq = p.init;
+  }
+  get pos() { let s = 0; for (const t of this.open) s += t.dir * t.qty; return s; }
+  get avg() { let q = 0, v = 0; for (const t of this.open) { q += t.qty; v += t.qty * t.entry; } return q ? v / q : null; }
+  openProfit(px) { let s = 0; for (const t of this.open) s += t.dir * (px - t.entry) * t.qty; return s; }
+  get eq() { const px = this.cur ? this.cur.c : 0; return this.init + this.net + this.openProfit(px) - this.openComm; }
+  comm(price, qty) { return this.commType === 'percent' ? price * qty * this.commVal / 100 : this.commType === 'cash_per_order' ? this.commVal : this.commType === 'cash_per_contract' ? this.commVal * qty : 0; }
+  defQty(price) {
+    const eq = Math.max(0, this.init + this.net - this.openComm);
+    return this.qtyType === 'cash' ? this.qtyVal / price : this.qtyType === 'percent_of_equity' ? eq * this.qtyVal / 100 / price : this.qtyVal;
+  }
+  place(o) { // reemplaza una orden pendiente con el mismo tipo e id
+    const i = this.orders.findIndex(x => x.type === o.type && x.id === o.id && x.from === o.from);
+    o.seq = i >= 0 ? this.orders[i].seq : ++this.nid; o.bar = this.ctx.bar;
+    if (i >= 0) this.orders[i] = o; else this.orders.push(o);
+  }
+  cancel(id) { this.orders = this.orders.filter(o => o.id !== id); }
+  fill(price, dir) { return price + dir * this.slip * this.tick; }
+  closeQty(t, qty, price, bar, exitId) { // cierra (parte de) una operación abierta
+    qty = Math.min(qty, t.qty); const gross = t.dir * (price - t.entry) * qty, cIn = t.comm * qty / t.qty, cOut = this.comm(price, qty);
+    this.closed.push({id: t.id, dir: t.dir, qty, entry: t.entry, entryBar: t.bar, exit: price, exitBar: bar, exitId: exitId || '', profit: gross - cIn - cOut, comm: cIn + cOut, runup: t.runup, dd: t.dd});
+    this.net += gross - cIn - cOut; this.openComm -= cIn; t.comm -= cIn; t.qty -= qty;
+    this.marks.push({bar, price, kind: 'exit', dir: -t.dir, id: exitId || t.id, profit: gross - cIn - cOut});
+    if (t.qty <= 1e-12) this.open.splice(this.open.indexOf(t), 1);
+  }
+  openTrade(o, price, bar) {
+    let qty = o.qty != null ? o.qty : this.defQty(price); if (!(qty > 0) || !isFinite(qty)) return;
+    const c = this.comm(price, qty);
+    this.open.push({id: o.id, dir: o.dir, qty, entry: price, bar, comm: c, runup: 0, dd: 0}); this.openComm += c;
+    this.marks.push({bar, price, kind: 'entry', dir: o.dir, id: o.id, qty});
+    for (const x of this.orders) if (x.type === 'exit' && x.pendRel && (!x.from || x.from === o.id)) { const L = o.dir === 1; if (x.rel.profit !== null && x.limit === null) x.limit = price + (L ? 1 : -1) * x.rel.profit * this.tick; if (x.rel.loss !== null && x.stop === null) x.stop = price - (L ? 1 : -1) * x.rel.loss * this.tick; x.pendRel = false; }
+  }
+  exec(o, price, bar) { // ejecuta una orden ya disparada al precio dado
+    if (o.type === 'close') { for (const t of this.open.filter(x => x.id === o.id)) this.closeQty(t, o.qtyPct != null ? t.qty * o.qtyPct / 100 : (o.qty != null ? o.qty : t.qty), this.fill(price, -t.dir), bar, o.comment || o.id); this.orders = this.orders.filter(x => x !== o); return; }
+    if (o.type === 'closeall') { for (const t of [...this.open]) this.closeQty(t, t.qty, this.fill(price, -t.dir), bar, o.comment || 'Cerrar todo'); this.orders = this.orders.filter(x => x !== o); return; }
+    if (o.type === 'exit') {
+      const ts = this.open.filter(t => !o.from || t.id === o.from); if (!ts.length) return;
+      for (const t of ts) this.closeQty(t, o.qtyPct != null ? t.qty * o.qtyPct / 100 : (o.qty != null ? Math.min(o.qty, t.qty) : t.qty), this.fill(price, -t.dir), bar, o.comment || o.id);
+      this.orders = this.orders.filter(x => x !== o); return;
+    }
+    // entry / order
+    const p = this.fill(price, o.dir); this.orders = this.orders.filter(x => x !== o);
+    const opp = this.open.filter(t => t.dir === -o.dir);
+    if (o.type === 'entry') {
+      if (opp.length) { for (const t of [...opp]) this.closeQty(t, t.qty, p, bar, 'Inversión: ' + o.id); }
+      else if (this.open.length >= this.pyr || this.open.some(t => t.id === o.id && this.pyr === 1)) return;
+      this.openTrade(o, p, bar);
+    } else { // strategy.order: neteo FIFO
+      let q = o.qty != null ? o.qty : this.defQty(p);
+      for (const t of [...opp]) { if (q <= 0) break; const c = Math.min(q, t.qty); this.closeQty(t, c, p, bar, o.id); q -= c; }
+      if (q > 1e-12) this.openTrade(Object.assign({}, o, {qty: q}), p, bar);
+    }
+  }
+  // instante (0..3) y precio en que la ruta de la vela alcanza un nivel; test indica la condición de disparo
+  hit(k, level, test) {
+    if (test(k.o)) return {t: 0, px: k.o};
+    const hf = Math.abs(k.h - k.o) <= Math.abs(k.l - k.o), pts = hf ? [k.o, k.h, k.l, k.c] : [k.o, k.l, k.h, k.c];
+    for (let i = 0; i < 3; i++) { const a = pts[i], b = pts[i + 1]; if ((a - level) * (b - level) <= 0 && a !== b) return {t: i + (level - a) / (b - a), px: level}; if (a === level) return {t: i, px: level}; }
+    return null;
+  }
+  trig(o, k) { // → {t, px} | null
+    const L = o.limit, S = o.stop, long = o.type === 'exit' ? o.exitDir === 1 : o.dir === 1;
+    if (o.type === 'exit') { // exitDir: dirección de la posición que se cierra
+      const best = [];
+      const tgt = o.limit != null ? this.hit(k, o.limit, x => long ? x >= o.limit : x <= o.limit) : null;
+      let stp = o.stop != null ? this.hit(k, o.stop, x => long ? x <= o.stop : x >= o.stop) : null;
+      if (tgt) best.push(tgt); if (stp) best.push(stp);
+      if (o.trail) { const tr = this.trailLevel(o, k, long); if (tr) best.push(tr); }
+      if (!best.length) return null; best.sort((a, b) => a.t - b.t); return best[0];
+    }
+    if (L == null && S == null) return {t: 0, px: k.o};
+    if (S != null && L != null) { const h = this.hit(k, S, x => o.dir === 1 ? x >= S : x <= S); if (!h) return null; const ok = o.dir === 1 ? k.l <= L || h.px <= L : k.h >= L || h.px >= L; return ok ? {t: h.t, px: o.dir === 1 ? Math.min(L, Math.max(h.px, S)) : Math.max(L, Math.min(h.px, S))} : null; }
+    if (S != null) return this.hit(k, S, x => o.dir === 1 ? x >= S : x <= S);
+    const h = this.hit(k, L, x => o.dir === 1 ? x <= L : x >= L); return h ? {t: h.t, px: o.dir === 1 ? Math.min(h.px, L) : Math.max(h.px, L)} : null;
+  }
+  trailLevel(o, k, long) { // stop dinámico (aproximado): sigue el extremo favorable y se evalúa según la ruta de la vela
+    const tr = o.trail, ent = (this.open.find(t => !o.from || t.id === o.from) || {}).entry; if (ent == null) return null;
+    const act = tr.price != null ? tr.price : ent + (long ? 1 : -1) * (tr.points || 0) * this.tick, off = (tr.offset || 0) * this.tick, s = long ? 1 : -1;
+    const fav = long ? k.h : k.l, adv = long ? k.l : k.h, hf = Math.abs(k.h - k.o) <= Math.abs(k.l - k.o), favFirst = long ? hf : !hf;
+    const beyond = (x, lvl) => long ? x <= lvl : x >= lvl, prev = tr.ext != null;
+    if (!prev && !(long ? fav >= act : fav <= act)) return null;
+    const base = prev ? tr.ext : act, newExt = long ? Math.max(base, fav) : Math.min(base, fav), lvl0 = base - s * off, lvl1 = newExt - s * off;
+    let hit = null;
+    if (prev && beyond(k.o, lvl0)) hit = {t: 0, px: k.o};
+    else if (prev && !favFirst && beyond(adv, lvl0)) hit = {t: 1, px: lvl0};
+    else if (favFirst && beyond(adv, lvl1)) hit = {t: 1.5, px: lvl1};
+    else if (!favFirst && beyond(k.c, lvl1)) hit = {t: 2.5, px: lvl1};
+    if (!hit) tr.ext = newExt; return hit;
+  }
+  beginBar(bar, k) { // al abrir la vela: se ejecutan las órdenes puestas en la vela anterior
+    this.cur = k;
+    for (const o of [...this.orders]) if (o.type !== 'exit' && o.limit == null && o.stop == null && this.orders.includes(o)) { if (o.bar < bar || o.bar === bar && false) this.exec(o, k.o, bar); }
+    this.stepTriggers(bar, k);
+  }
+  stepTriggers(bar, k) {
+    for (let guard = 0; guard < 60; guard++) {
+      let best = null;
+      for (const o of this.orders) {
+        if (o.type === 'close' || o.type === 'closeall') continue;
+        if (o.type === 'exit') { const ts = this.open.filter(t => !o.from || t.id === o.from); if (!ts.length) continue; o.exitDir = ts[0].dir; }
+        else if (o.bar >= bar && !(o.fresh === false)) continue; // las órdenes nuevas actúan desde la vela siguiente
+        const r = this.trig(o, k); if (r && (!best || r.t < best.r.t || (r.t === best.r.t && o.seq < best.o.seq))) best = {o, r};
+      }
+      if (!best) break; this.exec(best.o, best.r.px, bar);
+    }
+    // exits huérfanos: sin operación abierta ni entrada pendiente con ese id
+    this.orders = this.orders.filter(o => o.type !== 'exit' || this.open.some(t => !o.from || t.id === o.from) || this.orders.some(e => e.type !== 'exit' && e.id === o.from));
+  }
+  endBar(bar, k) { // tras ejecutar el script
+    this.cur = k;
+    if (this.onClose) { for (const o of [...this.orders]) if ((o.type !== 'exit') && o.limit == null && o.stop == null && o.bar === bar) this.exec(o, k.c, bar); }
+    for (const t of this.open) { const pl = t.dir * (k.c - t.entry) * t.qty; t.runup = Math.max(t.runup, t.dir * ((t.dir === 1 ? k.h : k.l) - t.entry) * t.qty); t.dd = Math.min(t.dd, t.dir * ((t.dir === 1 ? k.l : k.h) - t.entry) * t.qty); void pl; }
+    const e = this.eq; this.equity[bar] = e; this.lastEq = e; if (e > this.peak) this.peak = e;
+    const dd = this.peak - e; if (dd > this.maxDD) { this.maxDD = dd; this.maxDDpct = this.peak > 0 ? dd / this.peak * 100 : 0; }
+    if (e - this.init > this.maxRun) this.maxRun = e - this.init;
+  }
+  stats(cs) {
+    const all = this.closed, W = all.filter(t => t.profit > 0), Ls = all.filter(t => t.profit < 0), gp = W.reduce((s, t) => s + t.profit, 0), gl = Ls.reduce((s, t) => s + t.profit, 0);
+    const lastC = cs[cs.length - 1].c, op = this.openProfit(lastC), n = all.length;
+    return {init: this.init, net: this.net, netPct: this.net / this.init * 100, openProfit: op, equity: this.init + this.net + op - this.openComm, grossProfit: gp, grossLoss: gl, profitFactor: gl < 0 ? gp / -gl : (gp > 0 ? Infinity : null),
+      trades: n, wins: W.length, losses: Ls.length, winRate: n ? W.length / n * 100 : null, avgTrade: n ? this.net / n : null, avgWin: W.length ? gp / W.length : null, avgLoss: Ls.length ? gl / Ls.length : null,
+      largestWin: W.length ? Math.max(...W.map(t => t.profit)) : null, largestLoss: Ls.length ? Math.min(...Ls.map(t => t.profit)) : null, longs: all.filter(t => t.dir === 1).length, shorts: all.filter(t => t.dir === -1).length,
+      maxDD: this.maxDD, maxDDpct: this.maxDDpct, openTrades: this.open.length, commission: all.reduce((s, t) => s + t.comm, 0) + this.openComm, buyHoldPct: (lastC / cs[0].o - 1) * 100,
+      avgBars: n ? all.reduce((s, t) => s + (t.exitBar - t.entryBar), 0) / n : null};
+  }
+  result(cs) {
+    const tr = this.closed.slice(-500).map(t => [t.id, t.dir, t.qty, t.entry, t.entryBar, t.exit, t.exitBar, t.profit, t.exitId]);
+    const op = this.open.map(t => [t.id, t.dir, t.qty, t.entry, t.bar, null, null, t.dir * (cs[cs.length - 1].c - t.entry) * t.qty, '']);
+    return {title: this.title, currency: this.currency, params: {qtyType: this.qtyType, qtyVal: this.qtyVal, pyramiding: this.pyr, commType: this.commType, commVal: this.commVal, slippage: this.slip, onClose: this.onClose},
+      stats: this.stats(cs), trades: tr, open: op, equity: this.equity.map(v => v === undefined ? null : Math.round(v * 1e6) / 1e6), marks: this.marks.slice(-1500), tradesTotal: this.closed.length};
+  }
+}
+const dirOf = d => d === false || String(d).replace(/^strategy\./, '') === 'short' ? -1 : 1;
+const whenOk = (a, i) => a[i] === undefined || truthy(a[i]);
+const STRAT_SIG = ['title', 'shorttitle', 'overlay', 'format', 'precision', 'scale', 'pyramiding', 'calc_on_order_fills', 'calc_on_every_tick', 'max_bars_back', 'backtest_fill_limits_assumption', 'default_qty_type', 'default_qty_value', 'initial_capital', 'currency', 'slippage', 'commission_type', 'commission_value', 'process_orders_on_close', 'close_entries_rule', 'margin_long', 'margin_short', 'explicit_plot_zorder', 'max_lines_count', 'max_labels_count', 'max_boxes_count', 'max_polylines_count', 'risk_free_rate', 'use_bar_magnifier', 'fill_orders_on_standard_ohlc', 'calc_bars_count', 'dynamic_requests', 'behind_chart'];
+const SI = Object.fromEntries(STRAT_SIG.map((k, i) => [k, i]));
+def('strategy', STRAT_SIG, (a, c) => {
+  const ctx = c.ctx, m = ctx.out.meta; m.kind = 'strategy'; if (typeof a[0] === 'string') m.title = a[0]; if (typeof a[1] === 'string') m.short = a[1]; m.overlay = a[2] === true;
+  if (ctx.secondary || ctx.broker) return null;
+  const g = k => a[SI[k]], ty = String(g('default_qty_type') || 'fixed').replace(/^strategy\./, ''), ct = String(g('commission_type') || 'percent').replace(/^strategy\.commission\./, '').replace(/^commission\./, '');
+  if (g('calc_on_every_tick') === true) warn(ctx, c.line, 'calc_on_every_tick no se simula: el backtest usa solo velas cerradas', 'st-tick', 'info');
+  if (g('margin_long') > 0 || g('margin_short') > 0) warn(ctx, c.line, 'Margen y liquidaciones no se simulan en el backtest', 'st-margin', 'info');
+  ctx.broker = new Broker(ctx, {title: m.title, init: g('initial_capital') > 0 ? g('initial_capital') : 1000000, qtyType: ['cash', 'percent_of_equity'].includes(ty) ? ty : 'fixed', qtyVal: g('default_qty_value') != null ? +g('default_qty_value') : 1, pyramiding: g('pyramiding') != null ? g('pyramiding') : 1,
+    commType: ['percent', 'cash_per_order', 'cash_per_contract'].includes(ct) ? ct : 'percent', commVal: +g('commission_value') || 0, slip: +g('slippage') || 0, onClose: g('process_orders_on_close') === true, currency: typeof g('currency') === 'string' ? g('currency') : 'USDT'});
+  return null;
+}, {lenient: true});
+const needB = (c, nm) => { const b = c.ctx.broker; if (!b && !c.ctx.secondary) warn(c.ctx, c.line, `${nm}() solo funciona en un script declarado con strategy(...)`, 'st-nb:' + nm, 'unsupported'); return b && !c.ctx.secondary ? b : null; };
+const tk = (c, v) => isna(v) ? null : v, tickN = (c, v) => isna(v) ? null : v * c.ctx.mintick;
+def('strategy.entry', ['id', 'direction', 'qty', 'limit', 'stop', 'oca_name', 'oca_type', 'comment', 'alert_message', 'disable_alert', 'when'], (a, c) => { const b = needB(c, 'strategy.entry'); if (b && whenOk(a, 10)) b.place({type: 'entry', id: String(a[0]), dir: dirOf(a[1]), qty: isna(a[2]) ? null : a[2], limit: tk(c, a[3]), stop: tk(c, a[4]), comment: a[7]}); return null; }, {lenient: true});
+def('strategy.order', ['id', 'direction', 'qty', 'limit', 'stop', 'oca_name', 'oca_type', 'comment', 'alert_message', 'disable_alert', 'when'], (a, c) => { const b = needB(c, 'strategy.order'); if (b && whenOk(a, 10)) b.place({type: 'order', id: String(a[0]), dir: dirOf(a[1]), qty: isna(a[2]) ? null : a[2], limit: tk(c, a[3]), stop: tk(c, a[4]), comment: a[7]}); return null; }, {lenient: true});
+def('strategy.close', ['id', 'comment', 'qty', 'qty_percent', 'alert_message', 'immediately', 'disable_alert', 'when'], (a, c) => { const b = needB(c, 'strategy.close'); if (b && whenOk(a, 7)) b.place({type: 'close', id: String(a[0]), qty: isna(a[2]) ? null : a[2], qtyPct: isna(a[3]) ? null : a[3], comment: a[1], limit: null, stop: null}); return null; }, {lenient: true});
+def('strategy.close_all', ['comment', 'alert_message', 'immediately', 'disable_alert', 'when'], (a, c) => { const b = needB(c, 'strategy.close_all'); if (b && whenOk(a, 4)) b.place({type: 'closeall', id: '*', comment: a[0], limit: null, stop: null}); return null; }, {lenient: true});
+def('strategy.exit', ['id', 'from_entry', 'qty', 'qty_percent', 'profit', 'limit', 'loss', 'stop', 'trail_price', 'trail_points', 'trail_offset', 'oca_name', 'comment', 'comment_profit', 'comment_loss', 'comment_trailing', 'alert_message', 'alert_profit', 'alert_loss', 'alert_trailing', 'disable_alert', 'when'], (a, c) => {
+  const b = needB(c, 'strategy.exit'); if (!b || !whenOk(a, 21)) return null; const from = isna(a[1]) ? '' : String(a[1]);
+  let limit = tk(c, a[5]), stop = tk(c, a[7]); const ent = b.open.find(t => !from || t.id === from), ref = ent ? ent.entry : (b.orders.find(o => o.type === 'entry' && (!from || o.id === from)) || {}).limit;
+  const long = ent ? ent.dir === 1 : ((b.orders.find(o => o.type === 'entry' && (!from || o.id === from)) || {dir: 1}).dir === 1);
+  const rel = {profit: isna(a[4]) ? null : a[4], loss: isna(a[6]) ? null : a[6]};
+  const o = {type: 'exit', id: String(a[0]), from, qty: isna(a[2]) ? null : a[2], qtyPct: isna(a[3]) ? null : a[3], limit, stop, comment: a[12], rel, trail: (!isna(a[8]) || !isna(a[9])) ? {price: isna(a[8]) ? null : a[8], points: isna(a[9]) ? null : a[9], offset: isna(a[10]) ? 0 : a[10], ext: null} : null};
+  if (ent) { // profit/loss en ticks, relativos al precio de entrada
+    if (rel.profit !== null && limit === null) o.limit = ent.entry + (long ? 1 : -1) * rel.profit * c.ctx.mintick;
+    if (rel.loss !== null && stop === null) o.stop = ent.entry - (long ? 1 : -1) * rel.loss * c.ctx.mintick;
+  } else { o.pendRel = true; }
+  const prev = b.orders.find(x => x.type === 'exit' && x.id === o.id && x.from === o.from); if (prev && prev.trail && o.trail && prev.trail.ext != null) o.trail.ext = prev.trail.ext;
+  if (!ent && (rel.profit !== null || rel.loss !== null)) { // entrada aún pendiente: se calcula con el precio de ejecución al activarse
+    const en = b.orders.find(x => x.type === 'entry' && (!from || x.id === from)); if (en && en.limit != null) { const L = en.dir === 1; if (rel.profit !== null && limit === null) o.limit = en.limit + (L ? 1 : -1) * rel.profit * c.ctx.mintick; if (rel.loss !== null && stop === null) o.stop = en.limit - (L ? 1 : -1) * rel.loss * c.ctx.mintick; }
+  }
+  b.place(o); return null;
+}, {lenient: true});
+def('strategy.cancel', ['id'], (a, c) => { const b = needB(c, 'strategy.cancel'); if (b) b.cancel(String(a[0])); return null; }, {lenient: true});
+def('strategy.cancel_all', [], (a, c) => { const b = needB(c, 'strategy.cancel_all'); if (b) b.orders = []; return null; }, {lenient: true});
+for (const nm of ['strategy.risk.allow_entry_in', 'strategy.risk.max_cons_loss_days', 'strategy.risk.max_drawdown', 'strategy.risk.max_intraday_filled_orders', 'strategy.risk.max_intraday_loss', 'strategy.risk.max_position_size']) def(nm, null, (a, c) => { warn(c.ctx, c.line, `${nm}() se ignora en el backtest`, 'ign:' + nm, 'info'); return null; }, {lenient: true});
+const ST_VARS = {position_size: b => b.pos, position_avg_price: b => b.avg, equity: b => b.eq, netprofit: b => b.net, openprofit: b => b.openProfit(b.cur ? b.cur.c : 0), initial_capital: b => b.init,
+  grossprofit: b => b.closed.reduce((s, t) => s + (t.profit > 0 ? t.profit : 0), 0), grossloss: b => b.closed.reduce((s, t) => s + (t.profit < 0 ? -t.profit : 0), 0),
+  closedtrades: b => b.closed.length, opentrades: b => b.open.length, wintrades: b => b.closed.filter(t => t.profit > 0).length, losstrades: b => b.closed.filter(t => t.profit < 0).length, eventrades: b => b.closed.filter(t => t.profit === 0).length,
+  max_drawdown: b => b.maxDD, max_runup: b => b.maxRun, position_entry_name: b => b.open.length ? b.open[b.open.length - 1].id : ''};
+for (const k in ST_VARS) CONSTS['strategy.' + k] = c => c.broker ? ST_VARS[k](c.broker) : (k === 'position_entry_name' ? '' : k === 'position_avg_price' ? null : 0);
+const trField = {entry_price: t => t.entry, exit_price: t => t.exit, entry_bar_index: t => t.entryBar, exit_bar_index: t => t.exitBar, size: t => t.dir * t.qty, profit: t => t.profit, commission: t => t.comm, entry_id: t => t.id, exit_id: t => t.exitId, entry_time: (t, c) => c.candles[t.entryBar].t, exit_time: (t, c) => c.candles[t.exitBar].t, max_runup: t => t.runup, max_drawdown: t => t.dd};
+for (const k in trField) {
+  def('strategy.closedtrades.' + k, ['trade_num'], (a, c) => { const b = c.ctx.broker; if (!b || isna(a[0])) return null; const t = b.closed[a[0]]; return t ? trField[k](t, c.ctx) : null; }, {lenient: true});
+  def('strategy.opentrades.' + k, ['trade_num'], (a, c) => { const b = c.ctx.broker; if (!b || isna(a[0])) return null; const t = b.open[a[0]]; if (!t) return null; return k === 'entry_price' ? t.entry : k === 'entry_bar_index' ? t.bar : k === 'size' ? t.dir * t.qty : k === 'entry_id' ? t.id : k === 'profit' ? t.dir * (b.cur.c - t.entry) * t.qty : k === 'entry_time' ? c.ctx.candles[t.bar].t : k === 'commission' ? t.comm : null; }, {lenient: true});
+}
+
 function loopProgram(ast, ctx) {
   const gframe = new Frame(); ctx.frameList.push(gframe); ctx.globalScope = {m: new Map(), up: null};
   const env = {ctx, scope: ctx.globalScope, frame: gframe};
   for (let bar = 0; bar < ctx.n; bar++) {
     ctx.bar = bar;
     for (const fr of ctx.frameList) for (const v of fr.vars.values()) if (!v.isVar) v.cur = null;
+    if (ctx.broker) ctx.broker.beginBar(bar, ctx.candles[bar]);
     execBlock(ast, env); ctx.ctrl = null;
+    if (ctx.broker) ctx.broker.endBar(bar, ctx.candles[bar]);
     for (const fr of ctx.frameList) for (const v of fr.vars.values()) v.hist[bar] = v.cur;
   }
 }
@@ -1427,7 +1621,7 @@ function run(code, candles, opts) {
   const polylines = o.polylines.filter(q => !q.deleted).map(q => ({pts: q.pts.map(pt => [pt.i !== null && q.xloc !== 'bar_time' ? pt.i : (pt.t !== null ? timeToIndex(ctx, pt.t) : pt.i), pt.p]), closed: q.closed, lci: q.lci, fci: q.fci, style: q.style, w: q.w}));
   const tables = o.tables.filter(t => !t.deleted).map(t => ({pos: t.pos, cols: t.cols, rows: t.rows, bci: t.bci, frame: t.frame, fw: t.fw, border: t.border, bw: t.bw, cells: [...t.cells.values()]}));
   const linefills = o.linefills.filter(f => !f.deleted && f.l1 && f.l2 && !f.l1.deleted && !f.l2.deleted).map(f => ({a: [f.l1.x1, f.l1.y1, f.l1.x2, f.l1.y2], b: [f.l2.x1, f.l2.y1, f.l2.x2, f.l2.y2], ci: f.ci}));
-  return {ok: true, version, meta: o.meta, polylines, tables, candles: o.candles, linefills, inputs: o.inputs, plots, hlines: o.hlines, fills, bgcolors: o.bgcolors, barcolors: o.barcolors, shapes: o.shapes, alerts: (o.alerts || []).map(s => ({kind: s.kind, title: s.title, message: s.message, bars: s.bars, msgs: s.msgs})), labels, lines, boxes, palette: o.palette,
+  return {ok: true, version, meta: o.meta, polylines, tables, candles: o.candles, linefills, inputs: o.inputs, plots, hlines: o.hlines, fills, bgcolors: o.bgcolors, barcolors: o.barcolors, shapes: o.shapes, strategy: ctx.broker ? ctx.broker.result(ctx.candles) : null, alerts: (o.alerts || []).map(s => ({kind: s.kind, title: s.title, message: s.message, bars: s.bars, msgs: s.msgs})), labels, lines, boxes, palette: o.palette,
     warnings: ctx.warnings, needs: ctx.needs ? [...ctx.needs.values()] : [], complete: !ctx.incomplete, stats: {bars: n, ms: Date.now() - t0, steps: ctx.steps}};
 }
 
