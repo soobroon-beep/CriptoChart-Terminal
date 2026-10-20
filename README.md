@@ -72,3 +72,6 @@ Reglas de simulación: mercado → apertura de la vela siguiente; límites/stops
 
 ### Sincronización entre dispositivos (cuenta de Google)
 Con la sesión iniciada, el seguimiento, los indicadores activos y sus ajustes (entradas, estilo, visibilidad), Nova Nexus, dibujos, temas y alertas viajan en un documento de Firestore, y los scripts Pine guardados en otro; los cambios se reciben en vivo en el otro dispositivo. Los scripts guardados antes de iniciar sesión se suben a la cuenta la primera vez. El estado de la cuenta muestra cuántos scripts/alertas hay sincronizados y, si Firestore no está listo, qué revisar en Firebase Console. `tests/e2e/sync-two-devices.js` simula dos dispositivos con un Firestore falso (requiere `playwright-core` y Chromium).
+
+### Paneles de los indicadores Pine
+Cada script Pine tiene un selector **Panel** (en *Mis indicadores*): automático (según el script), **sobre el gráfico**, **arriba** o **abajo** (panel propio con su escala). Se guarda por script y se sincroniza con la cuenta. Los indicadores comunes (RSI, MACD, etc.) siguen en sus paneles inferiores.

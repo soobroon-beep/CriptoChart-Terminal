@@ -35,7 +35,7 @@ function merge(s) {
   if (!o.drawings || typeof o.drawings !== 'object' || Array.isArray(o.drawings)) o.drawings = {};
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 60)) : {};
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
-  o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {})) : [];
+  o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {})) : [];
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
@@ -599,6 +599,7 @@ const indicatorRows = () => { document.body.dataset.indtab = indTab; return indT
   ? indicatorMeta.filter(m => !m[0].startsWith('nn')).map(([key, title, desc]) =>
     `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div>`).join('')
   : novaCard() + pineSection()); };
+document.addEventListener('change', e => { const s = e.target.closest('[data-pine-pane]'); if (!s) return; const p = state.pine.find(x => x.sid === s.dataset.pinePane); if (!p) return; if (s.value) p.pane = s.value; else delete p.pane; save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); scheduleRender(); });
 document.addEventListener('click', e => { const t = e.target.closest('[data-indtab]'); if (!t) return; indTab = t.dataset.indtab; renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); });
 function renderIndicators() { $('#indicatorList').innerHTML = indicatorRows(); }
 function countIndicators() { const n = Object.entries(state.indicators).filter(([k, v]) => v && !k.startsWith('nn')).length + (novaOn() ? 1 : 0); $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
@@ -851,12 +852,13 @@ function render() {
 
   const pineKeyNow = `${state.symbol}|${state.interval}|${candles[0].t}`;
   const pr = activePine().filter(p => pineVisibleOn(p, state.interval)).map(p => ({p, r: pineStyled(pineRes[p.sid], p)})).filter(x => x.r && x.r.ok && x.r._key === pineKeyNow);
-  const pOver = pr.filter(x => x.r.meta.overlay), pSub = pr.filter(x => !x.r.meta.overlay);
-  const left = 6, right = 64, axisH = 22, plotTop = 6;
+  const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
+  const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
+  const left = 6, right = 64, axisH = 22, top0 = 6;
   const rsiH = state.indicators.rsi ? Math.round(Math.max(70, h * .18)) : 0, volH = state.indicators.volume ? Math.round(Math.max(40, h * .12)) : 0;
   const panelKeys = [...PANELS.filter(k => state.indicators[k] && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
   const panelBudget = Math.max(0, h * .58 - rsiH - volH);
-  const panelH = panelKeys.length ? Math.round(Math.max(40, Math.min(clamp(h * .16, 52, 110), panelBudget / panelKeys.length))) : 0, extraH = panelH * panelKeys.length;
+  const nPanels = panelKeys.length + pTop.length, panelH = nPanels ? Math.round(Math.max(40, Math.min(clamp(h * .16, 52, 110), panelBudget / nPanels))) : 0, extraH = panelH * panelKeys.length, topH = panelH * pTop.length, plotTop = top0 + topH;
   const vpOn = !!(state.indicators.nnVP && ind.vp), gutter = vpOn ? clamp(Math.round((w - left - right) * .4), 110, 300) : 0; // margen derecho para el perfil
   const plotH = Math.max(80, h - axisH - rsiH - volH - extraH - plotTop), plotW = w - left - right - gutter;
   const count = clamp(visible, 15, 400);
@@ -883,6 +885,7 @@ function render() {
   if (nn && state.indicators.nnEma) for (let i = lo; i < hi; i++) { const a = nn.emaTop[i], b = nn.emaBot[i]; if (Number.isFinite(a) && a > max) max = a; if (Number.isFinite(b) && b < min) min = b; }
   const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * .08; min -= pad; max += pad;
   if (priceMan) { min = priceMan.min; max = priceMan.max; }
+  { const lb = document.querySelector('.chart-label'); if (lb) lb.style.top = (topH + 8) + 'px'; } // la leyenda del precio baja si hay paneles arriba
   geo = {w, h, left, right, gutter, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
 
   // cuadrícula y escala de precios
@@ -897,7 +900,7 @@ function render() {
   g.fillStyle = text; g.textAlign = 'center';
   for (let i = Math.ceil(lo / stride) * stride; i < hi; i += stride) {
     const xx = X(i); if (xx < left + 14 || xx > w - right - 14) continue;
-    g.strokeStyle = line; g.beginPath(); g.moveTo(xx, plotTop); g.lineTo(xx, plotTop + plotH + volH + rsiH + extraH); g.stroke();
+    g.strokeStyle = line; g.beginPath(); g.moveTo(xx, top0); g.lineTo(xx, plotTop + plotH + volH + rsiH + extraH); g.stroke();
     g.fillText(timeLabel(candles[i].t, i > 0 ? candles[i - 1].t : null), xx, h - 7);
   }
   g.textAlign = 'left';
@@ -930,7 +933,7 @@ function render() {
     g.stroke(); g.setLineDash([]);
   }
   for (const {r} of pOver) CCTPineDraw.draw(g, r, {X, Y, lo, hi, left, right: left + plotW, top: plotTop, bottom: plotTop + plotH, step, candles, overlay: true});
-  for (const {r} of pSub) if (r.strategy) CCTPineDraw.drawTrades(g, r.strategy, {X, Y, lo, hi, candles}); // estrategias con panel propio: las operaciones se marcan igual sobre el precio
+  for (const {r} of pSub.concat(pTop)) if (r.strategy) CCTPineDraw.drawTrades(g, r.strategy, {X, Y, lo, hi, candles}); // estrategias con panel propio: las operaciones se marcan igual sobre el precio
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailLine(ind.trail, lo, hi);
   if (state.indicators.nnSR && ind.sr) drawNovaSRLabels(ind.sr, lo, hi);
   // cruces EMA 20 / EMA 50
@@ -993,6 +996,8 @@ function render() {
     g.stroke();
   }
   panelKeys.forEach((k, idx) => k.startsWith('pine:') ? drawPinePane(pr.find(x => 'pine:' + x.p.sid === k), geo.extraTop + idx * panelH, panelH, lo, hi, {left, w, right, line, text, step, plotW}) : drawSubPanel(k, geo.extraTop + idx * panelH, panelH, lo, hi, {left, w, right, line, text}));
+  pTop.forEach((x, idx) => drawPinePane(x, top0 + idx * panelH, panelH, lo, hi, {left, w, right, line, text, step, plotW}));
+  if (pTop.length) { g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, plotTop); g.lineTo(w - right + 2, plotTop); g.stroke(); }
   if (vpOn) drawNovaVP(ind.vp, fg);
   if (state.indicators.nnLiq && ind.liq) drawNovaLiqTable(fg);
   if (nn && state.indicators.nnRules) drawNovaRules();
@@ -1003,7 +1008,7 @@ function render() {
     const i = clamp(Math.round(IDX(cross.x)), 0, n - 1), c = candles[i]; shown = c;
     const cx = X(i), cy = clamp(cross.y, plotTop, plotTop + plotH);
     g.strokeStyle = fg; g.globalAlpha = .55; g.lineWidth = 1; g.setLineDash([4, 4]);
-    g.beginPath(); g.moveTo(cx, plotTop); g.lineTo(cx, h - axisH); g.moveTo(left, cy); g.lineTo(w - right + 2, cy); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+    g.beginPath(); g.moveTo(cx, top0); g.lineTo(cx, h - axisH); g.moveTo(left, cy); g.lineTo(w - right + 2, cy); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
     g.fillStyle = fg; g.fillRect(w - right + 2, cy - 9, right - 3, 18); g.fillStyle = bg; g.fillText(fmt(PRICE(cy)), w - right + 5, cy + 3.5);
     const tl = new Date(c.t).toLocaleString('es', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
     const tw = g.measureText(tl).width + 12, tx = clamp(cx - tw / 2, left, w - right - tw);
@@ -1716,7 +1721,7 @@ function pineSection() {
     if (!p.on) st = 'Apagado'; else if (!r) st = 'Calculando…';
     else if (!r.ok) st = `<span class="pine-err">Error${r.error.line ? ' · línea ' + r.error.line : ''}: ${esc(r.error.msg)}</span>`;
     else { const u = r.warnings.filter(w => w.level === 'unsupported').length; st = `${r.plots.length} plot${r.plots.length === 1 ? '' : 's'} · ` + (u ? `<span class="pine-warn">⚠ ${u} aviso${u > 1 ? 's' : ''} de no soportado</span>` : r.warnings.length ? `${r.warnings.length} aviso${r.warnings.length > 1 ? 's' : ''}` : 'sin avisos') + (r.meta.overlay ? '' : ' · panel propio') + (r.strategy ? ` · <b class="${r.strategy.stats.net >= 0 ? 'positive' : 'negative'}">Estrategia ${r.strategy.stats.net >= 0 ? '+' : ''}${r.strategy.stats.netPct.toFixed(2)}% · ${r.strategy.tradesTotal} ops</b>` : ''); }
-    return `<div class="setting-row pine-row"><div><b>${esc(s.name)}</b><small>${st}</small></div><div class="script-btns">${r && r.ok && r.strategy ? `<button class="small-button" data-pine-rep="${p.sid}" aria-label="Informe">📊</button>` : ''}<button class="small-button" data-pine-set="${p.sid}" aria-label="Ajustes">⚙</button><button class="small-button danger" data-pine-del="${p.sid}" aria-label="Quitar">✕</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${p.on}" aria-label="Activar"></button></div></div>`;
+    return `<div class="setting-row pine-row"><div><b>${esc(s.name)}</b><small>${st}</small>${r && r.ok ? `<select class="pane-sel" data-pine-pane="${p.sid}" aria-label="Panel"><option value="" ${!p.pane ? 'selected' : ''}>Panel: automático (${r.meta.overlay ? 'sobre el gráfico' : 'abajo'})</option><option value="main" ${p.pane === 'main' ? 'selected' : ''}>Panel: sobre el gráfico</option><option value="top" ${p.pane === 'top' ? 'selected' : ''}>Panel: arriba (propio)</option><option value="bottom" ${p.pane === 'bottom' ? 'selected' : ''}>Panel: abajo (propio)</option></select>` : ''}</div><div class="script-btns">${r && r.ok && r.strategy ? `<button class="small-button" data-pine-rep="${p.sid}" aria-label="Informe">📊</button>` : ''}<button class="small-button" data-pine-set="${p.sid}" aria-label="Ajustes">⚙</button><button class="small-button danger" data-pine-del="${p.sid}" aria-label="Quitar">✕</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${p.on}" aria-label="Activar"></button></div></div>`;
   }).join('');
   return `<div class="pine-head"><b>Scripts de Pine</b><small>Pega código de TradingView: se interpreta aquí y se dibuja en el gráfico</small></div>${rows}<div class="setting-row"><button class="primary" data-pine-new="1">＋ Pegar / convertir Pine</button></div>`;
 }
