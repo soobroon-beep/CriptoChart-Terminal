@@ -68,9 +68,11 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   .view{height:100%;min-height:0}
   #watchView{display:block!important;grid-area:watch;border-right:1px solid var(--line);padding:18px 16px 20px}
   #chartView{display:flex!important;grid-area:chart;min-width:0}
-  #indicatorView,#settingsView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
+  #indicatorView,#settingsView,#alertsView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
   body:not([data-side]) #indicatorView,body[data-side="indicatorView"] #indicatorView{display:block}
   body[data-side="settingsView"] #settingsView{display:block}
+  body[data-side="alertsView"] #alertsView{display:block}
+  body[data-side="alertsView"] #indicatorView{display:none}
   body[data-side="settingsView"] #indicatorView{display:none}
   #goChart{display:none}
   h1{font-size:21px}
@@ -166,3 +168,5 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
 @media(min-width:1024px){#settingsBtn{display:none}}
 @media(max-width:480px){.brand small i{display:none}.account-btn{padding:6px 9px!important;font-size:11px!important;white-space:nowrap}.connection{font-size:9px}.top-actions{gap:5px}.brand strong{font-size:13px}.icon-btn{padding:7px 9px}}
 @media(max-width:480px){.connection{font-size:0}.connection::first-letter{font-size:14px}}
+
+.alert-form{display:grid;gap:8px;margin-bottom:18px}.alert-form select,.alert-form input{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px;color:var(--text);font-size:14px;width:100%}.alert-btns{display:flex;gap:6px;flex-shrink:0}.alert-row.dim{opacity:.65}

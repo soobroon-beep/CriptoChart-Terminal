@@ -17,7 +17,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  light: false, drawings: {}, pine: [], novaSaved: null, novaParams: {}
+  light: false, drawings: {}, pine: [], novaSaved: null, novaParams: {}, alerts: []
 };
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
@@ -26,6 +26,7 @@ function merge(s) {
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 60)) : {};
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => ({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {})) : [];
+  o.alerts = Array.isArray(o.alerts) ? o.alerts.filter(a => a && typeof a.id === 'string' && /^[A-Z0-9]{3,20}$/.test(a.symbol) && Number.isFinite(a.price) && a.price > 0 && (a.dir === 'up' || a.dir === 'down')).slice(0, 50).map(a => ({id: a.id, symbol: a.symbol, price: a.price, dir: a.dir, on: a.on !== false, note: String(a.note || '').slice(0, 80), created: +a.created || 0, firedAt: +a.firedAt || 0, firedPrice: Number.isFinite(a.firedPrice) ? a.firedPrice : null})) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
   if (typeof o.symbol !== 'string') o.symbol = o.symbols[0];
@@ -73,7 +74,7 @@ function setSide(id) {
 }
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
-    if (id === 'indicatorView' || id === 'settingsView') { setSide(id); return; }
+    if (id === 'indicatorView' || id === 'settingsView' || id === 'alertsView') { setSide(id); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
     id = 'chartView';
   }
   currentView = id;
@@ -83,6 +84,7 @@ function switchView(id) {
   if (id !== 'chartView') document.body.classList.remove('expanded');
   if (id === 'chartView') requestAnimationFrame(() => { if (!candles.length) loadCandles(); render(); });
   if (id === 'watchView') renderWatch();
+  if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); }
   if (isDesktop()) renderWatch();
   syncFullscreenLabel();
 }
@@ -133,12 +135,64 @@ async function fetchTicker() {
     catch { data = await getJSON(`${API}/ticker/24hr`); } // por si algún símbolo añadido a mano no existe
     for (const t of data) tickers[t.symbol] = t;
     updateStatus(true, 'Binance en línea');
-    renderWatch(); updateChartHeader();
+    renderWatch(); updateChartHeader(); checkAlertsPoll();
   } catch {
     updateStatus(false, 'Sin conexión'); renderWatch();
     if (!candles.length) setFeedback('No hay datos. Revisa tu conexión o posibles restricciones de Binance en tu país.');
   }
 }
+
+
+/* ───────── Alertas de precio ───────── */
+const alertPrice = {}; // último precio conocido por símbolo (para alertas fuera del seguimiento)
+function alertBeep() { try { const A = window.AudioContext || window.webkitAudioContext, c = new A(), o = c.createOscillator(), g = c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.setValueAtTime(.2, c.currentTime); g.gain.exponentialRampToValueAtTime(.001, c.currentTime + .6); o.start(); o.stop(c.currentTime + .6); } catch {} }
+function fireAlert(a, price) {
+  a.on = false; a.firedAt = Date.now(); a.firedPrice = price;
+  const msg = `${base(a.symbol)} ${a.dir === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`;
+  toast('🔔 ' + msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
+  try { if (window.Notification && Notification.permission === 'granted') new Notification('CryptoChart · Alerta', {body: msg}); } catch {}
+}
+function checkAlerts(sym, price) {
+  if (!Number.isFinite(price)) return;
+  alertPrice[sym] = price; let hit = false;
+  for (const a of state.alerts) if (a.on && a.symbol === sym && (a.dir === 'up' ? price >= a.price : price <= a.price)) { fireAlert(a, price); hit = true; }
+  if (hit) { save(); renderAlerts(); }
+}
+async function checkAlertsPoll() {
+  const syms = [...new Set(state.alerts.filter(a => a.on).map(a => a.symbol))]; if (!syms.length) return;
+  try {
+    const data = await getJSON(`${API}/ticker/price?symbols=${encodeURIComponent(JSON.stringify(syms))}`);
+    for (const t of data) checkAlerts(t.symbol, +t.price);
+  } catch {}
+  if (currentView === 'alertsView') renderAlerts();
+}
+function curPrice(sym) { const t = tickers[sym]; return Number.isFinite(+t?.lastPrice) && t ? +t.lastPrice : alertPrice[sym]; }
+function renderAlerts() {
+  const el = $('#alertList'); if (!el) return;
+  const act = state.alerts.filter(a => a.on), done = state.alerts.filter(a => !a.on);
+  const row = a => { const p = curPrice(a.symbol), dist = Number.isFinite(p) ? ((a.price - p) / p * 100) : NaN;
+    return `<div class="setting-row alert-row ${a.on ? '' : 'dim'}"><div><b>${esc(base(a.symbol))} ${a.dir === 'up' ? '≥' : '≤'} ${fmt(a.price)}</b><small>${a.on ? `Ahora ${fmt(p)}${Number.isFinite(dist) ? ` · a ${Math.abs(dist).toFixed(2)}%` : ''}` : `Se disparó ${new Date(a.firedAt).toLocaleString()} a ${fmt(a.firedPrice)}`}${a.note ? ' · ' + esc(a.note) : ''}</small></div><div class="alert-btns">${a.on ? '' : `<button class="small-button" data-al-re="${a.id}">Reactivar</button>`}<button class="small-button" data-al-del="${a.id}" aria-label="Eliminar">✕</button></div></div>`; };
+  el.innerHTML = (act.length ? `<div class="section-label">ACTIVAS (${act.length})</div>` + act.map(row).join('') : '<div class="soon"><div class="soon-ic">◔</div><b>Sin alertas activas</b><small>Crea una abajo y te avisaremos cuando el precio llegue.</small></div>') + (done.length ? `<div class="section-label">DISPARADAS</div>` + done.map(row).join('') : '');
+  const sel = $('#alSym'); if (sel && !sel.dataset.ready) { sel.dataset.ready = 1; sel.innerHTML = state.symbols.map(s => `<option value="${s}">${esc(base(s))}/USDT</option>`).join(''); }
+  if (sel) { const s = state.symbols; if ([...sel.options].map(o => o.value).join() !== s.join()) { const v = sel.value; sel.innerHTML = s.map(x => `<option value="${x}">${esc(base(x))}/USDT</option>`).join(''); if (s.includes(v)) sel.value = v; } }
+}
+$('#alAdd').onclick = async () => {
+  const sym = $('#alSym').value, price = parseFloat(String($('#alPrice').value).replace(',', '.')), note = $('#alNote').value.trim();
+  if (!sym || !(price > 0)) { toast('Escribe un precio válido'); return; }
+  let p = curPrice(sym);
+  if (!Number.isFinite(p)) { try { p = +(await getJSON(`${API}/ticker/price?symbol=${sym}`)).price; } catch {} }
+  if (!Number.isFinite(p)) { toast('No pude leer el precio actual; revisa tu conexión'); return; }
+  if (price === p) { toast('El precio ya está en ese nivel'); return; }
+  if (state.alerts.length >= 50) { toast('Máximo 50 alertas'); return; }
+  state.alerts.unshift({id: 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), symbol: sym, price, dir: price > p ? 'up' : 'down', on: true, note: note.slice(0, 80), created: Date.now(), firedAt: 0, firedPrice: null});
+  alertPrice[sym] = p; $('#alPrice').value = ''; $('#alNote').value = ''; save(); renderAlerts(); toast('Alerta creada');
+  try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
+};
+$('#alertsView').addEventListener('click', e => {
+  const d = e.target.closest('[data-al-del]'), r = e.target.closest('[data-al-re]');
+  if (d) { state.alerts = state.alerts.filter(a => a.id !== d.dataset.alDel); save(); renderAlerts(); }
+  if (r) { const a = state.alerts.find(x => x.id === r.dataset.alRe), p = curPrice(a?.symbol); if (a) { a.dir = Number.isFinite(p) ? (a.price > p ? 'up' : 'down') : a.dir; a.on = true; a.firedAt = 0; a.firedPrice = null; save(); renderAlerts(); checkAlertsPoll(); } }
+});
 
 /* ───────── Velas y datos en vivo ───────── */
 function setFeedback(t) { $('#chartFeedback').textContent = t; }
@@ -205,7 +259,7 @@ function applyKline(k) {
   if (k.t === last.t) candles[n - 1] = k;
   else if (k.t > last.t) { candles.push(k); if (pan > 0) pan += 1; }
   else return;
-  recalc(); updateChartHeader();
+  recalc(); updateChartHeader(); checkAlerts(state.symbol, k.c);
   if (currentView === 'chartView') scheduleRender();
 }
 document.addEventListener('visibilitychange', () => {
@@ -1677,9 +1731,10 @@ async function initCloud() {
 }
 
 /* ───────── Arranque ───────── */
-renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); updateDrawUI(); theme(); syncFullscreenLabel(); renderScripts();
+renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); updateDrawUI(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
 if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud();
 setInterval(fetchTicker, 30000);
+setInterval(() => { if (!document.hidden) checkAlertsPoll(); }, 10000);
 setInterval(() => { if (currentView === 'chartView' && !wsOpen && candles.length && !document.hidden) loadCandles(true); }, 20000);
 })();

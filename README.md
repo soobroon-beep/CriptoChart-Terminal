@@ -57,3 +57,6 @@ Los módulos SMC están apagados por defecto. Los perfiles Mobile/Cloud/SMC del 
 
 ### Estilo completo (como TradingView)
 La pestaña **Estilo** de cada indicador permite cambiar, por elemento: visibilidad, color y opacidad (también sustituir colores dinámicos), tipo de gráfico (línea, escalón, histograma, columnas, área, círculos, cruces), estilo de línea, grosor, rellenos, líneas horizontales, formas (color, texto, tamaño), fondo/velas coloreadas, y la precisión/valores de la leyenda.
+
+### Alertas de precio (móvil: pestaña Alertas · escritorio: panel derecho)
+Alertas "≥ / ≤" por activo con nota opcional. Se revisan con el WebSocket del gráfico y con sondeo cada 10 s mientras la app está abierta; al dispararse avisan con mensaje, sonido, vibración y notificación del sistema (si lo permites), y pasan a "Disparadas" (se pueden reactivar). Se guardan por dispositivo/cuenta. Solo análisis: no ejecutan órdenes. Aún no hay alertas desde indicadores Pine (`alertcondition` se ignora con aviso).
