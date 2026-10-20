@@ -179,3 +179,13 @@ test('inputs: grupo, fila en línea, ayuda, opciones (tupla), color con opacidad
   assert.equal(by('Color').value, '#f2364580'); assert.equal(by('Desde').type, 'time');
   const r2 = P.run(hdr + 'a = input.int(5, "Largo")\nplot(a)', closes([1]), {inputs: {0: 9}}); assert.equal(r2.plots[0].values[0], 9);
 });
+
+test('alertcondition y alert() se registran con sus barras y mensajes', () => {
+  const cs = []; let p = 100; for (let i = 0; i < 300; i++) { const o = p, c = p + Math.sin(i / 9) * 2; cs.push({t: i * 36e5, o, h: Math.max(o, c) + 1, l: Math.min(o, c) - 1, c, v: 10}); p = c; }
+  const r = P.run('//@version=5\nindicator("t")\na=ta.ema(close,5)\nb=ta.ema(close,20)\nalertcondition(ta.crossover(a,b),"Cruce alcista","EMA arriba")\nif ta.crossunder(a,b)\n    alert("bajista " + str.tostring(math.round(close)))\nplot(a,"a")\n', cs, {});
+  assert.ok(r.ok); assert.equal(r.alerts.length, 2);
+  const ac = r.alerts.find(x => x.kind === 'cond'), al = r.alerts.find(x => x.kind === 'call');
+  assert.equal(ac.title, 'Cruce alcista'); assert.ok(ac.bars.length >= 4); assert.equal(ac.message, 'EMA arriba');
+  assert.ok(al.bars.length >= 4); assert.match(al.msgs[al.bars[al.bars.length - 1]], /^bajista \d+$/);
+  assert.ok(!r.warnings.some(w => /alert/.test(w.msg)));
+});

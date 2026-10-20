@@ -19,6 +19,16 @@ const defaults = {
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
   light: false, drawings: {}, pine: [], novaSaved: null, novaParams: {}, alerts: []
 };
+function sanAlert(a) {
+  if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
+  const base0 = {id: a.id, symbol: a.symbol, on: a.on !== false, note: String(a.note || '').slice(0, 80), created: +a.created || 0, firedAt: +a.firedAt || 0};
+  if (a.kind === 'ind') {
+    if (!(a.interval in IV_MS) || !['pine', 'std', 'nova'].includes(a.src) || !a.spec || typeof a.spec !== 'object' || JSON.stringify(a.spec).length > 400) return null;
+    return Object.assign(base0, {kind: 'ind', interval: a.interval, src: a.src, sid: typeof a.sid === 'string' ? a.sid.slice(0, 40) : '', spec: JSON.parse(JSON.stringify(a.spec)), label: String(a.label || '').slice(0, 120), repeat: a.repeat === 'every' ? 'every' : 'once', lastBar: +a.lastBar || 0, firedInfo: String(a.firedInfo || '').slice(0, 200)});
+  }
+  if (!Number.isFinite(a.price) || !(a.price > 0) || (a.dir !== 'up' && a.dir !== 'down')) return null;
+  return Object.assign(base0, {price: a.price, dir: a.dir, firedPrice: Number.isFinite(a.firedPrice) ? a.firedPrice : null});
+}
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
@@ -26,7 +36,7 @@ function merge(s) {
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 60)) : {};
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => ({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {})) : [];
-  o.alerts = Array.isArray(o.alerts) ? o.alerts.filter(a => a && typeof a.id === 'string' && /^[A-Z0-9]{3,20}$/.test(a.symbol) && Number.isFinite(a.price) && a.price > 0 && (a.dir === 'up' || a.dir === 'down')).slice(0, 50).map(a => ({id: a.id, symbol: a.symbol, price: a.price, dir: a.dir, on: a.on !== false, note: String(a.note || '').slice(0, 80), created: +a.created || 0, firedAt: +a.firedAt || 0, firedPrice: Number.isFinite(a.firedPrice) ? a.firedPrice : null})) : [];
+  o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
   if (typeof o.symbol !== 'string') o.symbol = o.symbols[0];
@@ -155,11 +165,11 @@ function fireAlert(a, price) {
 function checkAlerts(sym, price) {
   if (!Number.isFinite(price)) return;
   alertPrice[sym] = price; let hit = false;
-  for (const a of state.alerts) if (a.on && a.symbol === sym && (a.dir === 'up' ? price >= a.price : price <= a.price)) { fireAlert(a, price); hit = true; }
+  for (const a of state.alerts) if (a.kind !== 'ind' && a.on && a.symbol === sym && (a.dir === 'up' ? price >= a.price : price <= a.price)) { fireAlert(a, price); hit = true; }
   if (hit) { save(); renderAlerts(); }
 }
 async function checkAlertsPoll() {
-  const syms = [...new Set(state.alerts.filter(a => a.on).map(a => a.symbol))]; if (!syms.length) return;
+  const syms = [...new Set(state.alerts.filter(a => a.kind !== 'ind' && a.on).map(a => a.symbol))]; if (!syms.length) return;
   try {
     const data = await getJSON(`${API}/ticker/price?symbols=${encodeURIComponent(JSON.stringify(syms))}`);
     for (const t of data) checkAlerts(t.symbol, +t.price);
@@ -170,12 +180,15 @@ function curPrice(sym) { const t = tickers[sym]; return Number.isFinite(+t?.last
 function renderAlerts() {
   const el = $('#alertList'); if (!el) return;
   const act = state.alerts.filter(a => a.on), done = state.alerts.filter(a => !a.on);
-  const row = a => { const p = curPrice(a.symbol), dist = Number.isFinite(p) ? ((a.price - p) / p * 100) : NaN;
+  const row = a => { if (a.kind === 'ind') { const missing = a.src === 'pine' && !scripts.some(s => s.id === a.sid);
+      return `<div class="setting-row alert-row ${a.on ? '' : 'dim'}"><div><b>${esc(a.label)}</b><small>${esc(base(a.symbol))} · ${a.interval} · ${a.repeat === 'every' ? 'cada vez' : 'una vez'}${missing ? ' · <span class="pine-err">el script ya no existe</span>' : ''}${a.firedAt ? ` · última: ${new Date(a.firedAt).toLocaleString()}${a.firedInfo ? ' (' + esc(a.firedInfo) + ')' : ''}` : ''}${a.note ? ' · ' + esc(a.note) : ''}</small></div><div class="alert-btns">${a.on ? '' : `<button class="small-button" data-al-re="${a.id}">Reactivar</button>`}<button class="small-button" data-al-del="${a.id}" aria-label="Eliminar">✕</button></div></div>`; }
+    const p = curPrice(a.symbol), dist = Number.isFinite(p) ? ((a.price - p) / p * 100) : NaN;
     return `<div class="setting-row alert-row ${a.on ? '' : 'dim'}"><div><b>${esc(base(a.symbol))} ${a.dir === 'up' ? '≥' : '≤'} ${fmt(a.price)}</b><small>${a.on ? `Ahora ${fmt(p)}${Number.isFinite(dist) ? ` · a ${Math.abs(dist).toFixed(2)}%` : ''}` : `Se disparó ${new Date(a.firedAt).toLocaleString()} a ${fmt(a.firedPrice)}`}${a.note ? ' · ' + esc(a.note) : ''}</small></div><div class="alert-btns">${a.on ? '' : `<button class="small-button" data-al-re="${a.id}">Reactivar</button>`}<button class="small-button" data-al-del="${a.id}" aria-label="Eliminar">✕</button></div></div>`; };
   el.innerHTML = (act.length ? `<div class="section-label">ACTIVAS (${act.length})</div>` + act.map(row).join('') : '<div class="soon"><div class="soon-ic">◔</div><b>Sin alertas activas</b><small>Crea una abajo y te avisaremos cuando el precio llegue.</small></div>') + (done.length ? `<div class="section-label">DISPARADAS</div>` + done.map(row).join('') : '');
   const sel = $('#alSym'); if (sel && !sel.dataset.ready) { sel.dataset.ready = 1; sel.innerHTML = state.symbols.map(s => `<option value="${s}">${esc(base(s))}/USDT</option>`).join(''); }
   if (sel) { const s = state.symbols; if ([...sel.options].map(o => o.value).join() !== s.join()) { const v = sel.value; sel.innerHTML = s.map(x => `<option value="${x}">${esc(base(x))}/USDT</option>`).join(''); if (s.includes(v)) sel.value = v; } }
 }
+$('#alInd').onclick = openIndAlertDialog;
 $('#alAdd').onclick = async () => {
   const sym = $('#alSym').value, price = parseFloat(String($('#alPrice').value).replace(',', '.')), note = $('#alNote').value.trim();
   if (!sym || !(price > 0)) { toast('Escribe un precio válido'); return; }
@@ -191,8 +204,185 @@ $('#alAdd').onclick = async () => {
 $('#alertsView').addEventListener('click', e => {
   const d = e.target.closest('[data-al-del]'), r = e.target.closest('[data-al-re]');
   if (d) { state.alerts = state.alerts.filter(a => a.id !== d.dataset.alDel); save(); renderAlerts(); }
-  if (r) { const a = state.alerts.find(x => x.id === r.dataset.alRe), p = curPrice(a?.symbol); if (a) { a.dir = Number.isFinite(p) ? (a.price > p ? 'up' : 'down') : a.dir; a.on = true; a.firedAt = 0; a.firedPrice = null; save(); renderAlerts(); checkAlertsPoll(); } }
+  if (r) { const a = state.alerts.find(x => x.id === r.dataset.alRe), p = curPrice(a?.symbol); if (a && a.kind === 'ind') { a.on = true; a.firedAt = 0; a.firedInfo = ''; lastClosedBar(a.symbol, a.interval).then(t => { if (t != null) a.lastBar = t; save(); renderAlerts(); }); } else if (a) { a.dir = Number.isFinite(p) ? (a.price > p ? 'up' : 'down') : a.dir; a.on = true; a.firedAt = 0; a.firedPrice = null; save(); renderAlerts(); checkAlertsPoll(); } }
 });
+
+/* ───────── Alertas con indicadores ─────────
+   Se evalúan sobre la ÚLTIMA VELA CERRADA (sin repintado) del símbolo y temporalidad elegidos, aunque no estén en el gráfico.
+   Fuentes: indicadores comunes, Nova Nexus (señales) y cualquier script Pine (alertcondition, alert(), formas y cruces de líneas). */
+const STD_CONDS = [
+  ['ema_x_up', 'EMA 20 cruza al alza la EMA 50'], ['ema_x_dn', 'EMA 20 cruza a la baja la EMA 50'],
+  ['px_ema20_up', 'Precio cruza al alza la EMA 20'], ['px_ema20_dn', 'Precio cruza a la baja la EMA 20'],
+  ['px_sma200_up', 'Precio cruza al alza la SMA 200'], ['px_sma200_dn', 'Precio cruza a la baja la SMA 200'],
+  ['rsi_up', 'RSI cruza al alza el nivel'], ['rsi_dn', 'RSI cruza a la baja el nivel'],
+  ['macd_up', 'MACD cruza al alza su señal'], ['macd_dn', 'MACD cruza a la baja su señal'],
+  ['bb_up', 'Cierre rompe por encima la banda superior de Bollinger'], ['bb_dn', 'Cierre rompe por debajo la banda inferior de Bollinger'],
+  ['st_up', 'Supertrend cambia a alcista'], ['st_dn', 'Supertrend cambia a bajista']
+];
+const crossUp = (a, b, k) => k > 0 && a[k] != null && b[k] != null && a[k - 1] != null && b[k - 1] != null && a[k - 1] <= b[k - 1] && a[k] > b[k];
+const crossDn = (a, b, k) => k > 0 && a[k] != null && b[k] != null && a[k - 1] != null && b[k - 1] != null && a[k - 1] >= b[k - 1] && a[k] < b[k];
+function stdHit(cs, k, spec) {
+  const c = cs.map(x => x.c), T = window.CCTIndicators, K = spec.k, flat = v => c.map(() => v);
+  if (K === 'ema_x_up' || K === 'ema_x_dn') { const a = ema(c, 20), b = ema(c, 50); return (K === 'ema_x_up' ? crossUp : crossDn)(a, b, k); }
+  if (K === 'px_ema20_up' || K === 'px_ema20_dn') return (K.endsWith('up') ? crossUp : crossDn)(c, ema(c, 20), k);
+  if (K === 'px_sma200_up' || K === 'px_sma200_dn') return (K.endsWith('up') ? crossUp : crossDn)(c, sma(c, 200), k);
+  if (K === 'rsi_up' || K === 'rsi_dn') { const r = rsi(c, 14), L = Number.isFinite(+spec.lvl) ? +spec.lvl : (K === 'rsi_up' ? 70 : 30); return (K === 'rsi_up' ? crossUp : crossDn)(r, flat(L), k); }
+  if (K === 'macd_up' || K === 'macd_dn') { if (!T) return false; const m = T.macd(c); return (K === 'macd_up' ? crossUp : crossDn)(m.macd || m.line, m.signal || m.sig, k); }
+  if (K === 'bb_up' || K === 'bb_dn') { const m = sma(c, 20), band = i => { if (i < 19 || m[i] == null) return null; let s = 0; for (let q = i - 19; q <= i; q++) { const d = c[q] - m[i]; s += d * d; } return Math.sqrt(s / 20) * 2; }, d1 = band(k), d0 = band(k - 1); if (d1 === null || d0 === null) return false; return K === 'bb_up' ? (c[k] > m[k] + d1 && c[k - 1] <= m[k - 1] + d0) : (c[k] < m[k] - d1 && c[k - 1] >= m[k - 1] - d0); } // primer cierre fuera de la banda
+  if (K === 'st_up' || K === 'st_dn') { if (!T) return false; const st = T.supertrend(cs, 10, 3), d = st && st.dir; if (!d || k < 1 || d[k] == null || d[k - 1] == null) return false; return K === 'st_up' ? (d[k] < 0 && d[k - 1] >= 0) : (d[k] > 0 && d[k - 1] <= 0); } // en Supertrend dir = -1 es tendencia alcista
+  return false;
+}
+function novaOpts() {
+  const I = state.indicators, NP = novaP;
+  return {smc: !!(I.nnSmc || I.nnOb), emaLen: NP('emaLen'), emaMult: NP('emaMult'), minScore: NP('minScore'), cooldown: NP('cooldown'), cdBoth: NP('cdBoth'), slMult: NP('slMult'), tp1Mult: NP('tp1'), tp2Mult: NP('tp2'), tp3Mult: NP('tp3'), tpBars: NP('tpBars'), smcOpts: {mslen: NP('smcLen'), window: NP('smcWindow'), swingLimit: NP('smcSwing'), sweep: NP('smcSweep'), oblast: NP('obLast'), obmiti: NP('obMiti')}};
+}
+function pineSeriesAt(res, s, cs, k) { // s: {p: idPlot} | {price:1} | {n: número}
+  if (s.price) return cs[k] ? cs[k].c : null;
+  if (s.n !== undefined) return +s.n;
+  const pl = res.plots.find(x => x.id === s.p); const v = pl && pl.values ? pl.values[k] : null; return v === undefined || v === null || Number.isNaN(v) ? null : v;
+}
+function pineHit(res, spec, cs, k) { // → {hit, msg}
+  if (spec.t === 'ac') {
+    const it = (res.alerts || []).find(x => x.kind === spec.kind && x.title === spec.title) || (res.alerts || [])[spec.i];
+    if (!it) return {hit: false}; const hit = it.bars.includes(k); return {hit, msg: hit ? (it.msgs[k] || it.message || it.title) : ''};
+  }
+  if (spec.t === 'sh') { const sh = res.shapes.find(x => x.title === spec.title && x.kind === spec.kind) || res.shapes[spec.i]; const hit = !!(sh && sh.pts.some(p => p[0] === k)); return {hit, msg: hit ? (sh.title || 'Señal') : ''}; }
+  if (spec.t === 'x') {
+    const A = i => pineSeriesAt(res, spec.a, cs, i), B = i => pineSeriesAt(res, spec.b, cs, i), a0 = A(k - 1), a1 = A(k), b0 = B(k - 1), b1 = B(k);
+    if ([a0, a1, b0, b1].some(v => v === null)) return {hit: false};
+    const hit = spec.dir === 'up' ? (a0 <= b0 && a1 > b1) : (a0 >= b0 && a1 < b1); return {hit, msg: ''};
+  }
+  return {hit: false};
+}
+function indSummary(a) { // texto legible de una alerta de indicador
+  return a.label || 'Indicador';
+}
+const alGroups = new Map(); let alBusy = false;
+function closedIdx(cs, lastClosedT) { for (let i = cs.length - 1; i >= 0; i--) if (cs[i].t === lastClosedT) return i; return -1; }
+function fireInd(a, info) {
+  a.firedAt = Date.now(); a.firedInfo = info; if (a.repeat === 'once') a.on = false;
+  const msg = `${base(a.symbol)} ${a.interval} · ${a.label}${info ? ' · ' + info : ''}${a.note ? ' · ' + a.note : ''}`;
+  toast('🔔 ' + msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
+  try { if (window.Notification && Notification.permission === 'granted') new Notification('CryptoChart · Alerta', {body: msg}); } catch {}
+}
+async function lastClosedBar(sym, itv) {
+  const raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${itv}&limit=2`), now = Date.now(), cl = raw.filter(d => d[6] < now);
+  return cl.length ? cl[cl.length - 1][0] : null;
+}
+async function indAlertTick(force) {
+  if (alBusy) return; const act = state.alerts.filter(a => a.kind === 'ind' && a.on); if (!act.length) return;
+  alBusy = true; let changed = false;
+  try {
+    const groups = new Map(); for (const a of act) { const key = a.symbol + '|' + a.interval; (groups.get(key) || groups.set(key, []).get(key)).push(a); }
+    for (const [key, list] of groups) {
+      const [sym, itv] = key.split('|'), g = alGroups.get(key) || {next: 0, at: 0}, now = Date.now();
+      if (!force && now < g.next && now - g.at < 300000) continue;
+      let lc; try { lc = await lastClosedBar(sym, itv); } catch { continue; }
+      if (lc === null) continue;
+      g.at = now; g.next = lc + 2 * IV_MS[itv] + 2000; alGroups.set(key, g);
+      const due = list.filter(a => a.lastBar < lc); if (!due.length) continue;
+      const cs = await pineSecCandles(sym, itv), k = closedIdx(cs, lc); if (k < 1) continue;
+      const runs = new Map(); let nova = null;
+      for (const a of due) {
+        const from = Math.max(1, k - 4), bars = []; for (let i = from; i <= k; i++) if (cs[i].t > a.lastBar) bars.push(i);
+        let hitInfo = null;
+        try {
+          if (a.src === 'std') { for (const i of bars) if (stdHit(cs, i, a.spec)) hitInfo = fmt(cs[i].c); }
+          else if (a.src === 'nova') {
+            if (!nova) nova = NovaNexus.compute(cs, novaOpts());
+            for (const i of bars) { const sg = nova.bySignal[i]; if (sg && (a.spec.side === 'any' || sg.side === a.spec.side) && sg.score >= (a.spec.minScore || 0)) hitInfo = `${sg.side === 'buy' ? 'COMPRA' : 'VENTA'} ★${sg.score} @ ${fmt(sg.price)}`; }
+          } else if (a.src === 'pine') {
+            const s = scripts.find(x => x.id === a.sid), p = state.pine.find(x => x.sid === a.sid);
+            if (s) {
+              if (!runs.has(a.sid)) runs.set(a.sid, await pineRunFull(s.code, {inputs: (p && p.inputs) || {}, interval: itv, symbol: sym, name: s.name, cs, timeLimitMs: 12000}));
+              const res = runs.get(a.sid);
+              if (res && res.ok) for (const i of bars) { const r = pineHit(res, a.spec, cs, i); if (r.hit) hitInfo = r.msg || ''; }
+            }
+          }
+        } catch (e) { console.warn('alerta', e); }
+        a.lastBar = lc; changed = true;
+        if (hitInfo !== null) fireInd(a, hitInfo);
+      }
+    }
+  } finally { alBusy = false; }
+  if (changed) { save(); renderAlerts(); }
+}
+window.CCTAlerts = {stdHit, pineHit, STD_CONDS}; // expuesto para pruebas
+setInterval(() => { if (!document.hidden) indAlertTick(); }, 15000);
+setTimeout(indAlertTick, 4000);
+
+/* Diálogo "Alerta con indicador" */
+function openIndAlertDialog() {
+  const pines = state.pine.filter(p => scripts.some(s => s.id === p.sid));
+  const el = document.createElement('div'); el.className = 'cfg-overlay';
+  const inds = [['std', 'Indicadores comunes (EMA, RSI, MACD…)'], ['nova', 'Nova Nexus (señales)']].concat(pines.map(p => ['pine:' + p.sid, 'Script: ' + pineName(p.sid)]));
+  el.innerHTML = `<div class="cfg-dlg" role="dialog" aria-modal="true" aria-label="Alerta con indicador"><div class="cfg-head"><strong>Alerta con indicador</strong><button class="cfg-x" aria-label="Cerrar">✕</button></div>
+    <div class="cfg-body"><div class="cfg-sec">
+      <label class="al-f">Indicador<select id="aiSrc">${inds.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label>
+      <label class="al-f">Condición<select id="aiCond"></select></label>
+      <div id="aiExtra"></div>
+      <label class="al-f">Activo<select id="aiSym">${state.symbols.map(s => `<option value="${s}" ${s === state.symbol ? 'selected' : ''}>${esc(base(s))}/USDT</option>`).join('')}</select></label>
+      <label class="al-f">Temporalidad<select id="aiTf">${INTERVALS.map(t => `<option ${t === state.interval ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label class="al-f">Frecuencia<select id="aiRep"><option value="once">Solo una vez</option><option value="every">Cada vez que ocurra (al cerrar la vela)</option></select></label>
+      <label class="al-f">Nota (opcional)<input id="aiNote" maxlength="80"></label>
+      <p class="cfg-note" id="aiHint">Se evalúa al cierre de cada vela, así evita falsas señales por repintado.</p>
+    </div></div>
+    <div class="cfg-foot"><span class="cfg-sp"></span><button class="cfg-btn" data-act="cancel">Cancelar</button><button class="cfg-btn cfg-ok" data-act="ok">Crear alerta</button></div></div>`;
+  document.body.appendChild(el);
+  const $e = s => el.querySelector(s), close = () => el.remove();
+  let opts = []; // [{v, label, spec}]
+  const fillCond = () => {
+    const src = $e('#aiSrc').value, extra = $e('#aiExtra'); extra.innerHTML = ''; opts = [];
+    if (src === 'std') opts = STD_CONDS.map(([k, l]) => ({label: l, spec: {k}}));
+    else if (src === 'nova') opts = [{label: 'Señal de COMPRA', spec: {side: 'buy'}}, {label: 'Señal de VENTA', spec: {side: 'sell'}}, {label: 'Cualquier señal', spec: {side: 'any'}}];
+    else {
+      const sid = src.slice(5), r = pineRes[sid];
+      if (!r || !r.ok) { $e('#aiCond').innerHTML = '<option value="">(abre el gráfico para que el script se calcule)</option>'; $e('#aiHint').textContent = 'El script aún no se ha calculado o tiene errores. Actívalo en el gráfico e inténtalo de nuevo.'; return; }
+      (r.alerts || []).forEach((x, i) => opts.push({label: (x.kind === 'cond' ? 'alertcondition: ' : 'alert(): ') + x.title + (x.message && x.kind === 'cond' ? ` — ${x.message.slice(0, 40)}` : ''), spec: {t: 'ac', kind: x.kind, title: x.title, i}}));
+      r.shapes.forEach((x, i) => { if (x.pts.length || true) opts.push({label: 'Señal/forma: ' + (x.title || 'sin título'), spec: {t: 'sh', kind: x.kind, title: x.title || '', i}}); });
+      opts.push({label: 'Cruce de líneas del indicador…', spec: {t: 'x'}, cross: true});
+      $e('#aiHint').textContent = `Condiciones leídas de este script: ${(r.alerts || []).length} alertcondition/alert(), ${r.shapes.length} forma(s) y cruces entre sus ${r.plots.length} línea(s).`;
+    }
+    $e('#aiCond').innerHTML = opts.map((o, i) => `<option value="${i}">${esc(o.label)}</option>`).join('');
+    condChange();
+  };
+  const condChange = () => {
+    const o = opts[+$e('#aiCond').value], extra = $e('#aiExtra'); extra.innerHTML = '';
+    if (!o) return;
+    if (o.spec.k === 'rsi_up' || o.spec.k === 'rsi_dn') extra.innerHTML = `<label class="al-f">Nivel RSI<input id="aiLvl" inputmode="decimal" value="${o.spec.k === 'rsi_up' ? 70 : 30}"></label>`;
+    if (o.spec.side) extra.innerHTML = `<label class="al-f">Puntuación mínima (★)<select id="aiScore">${[0, 2, 3, 4, 5].map(n => `<option value="${n}">${n ? '≥ ' + n : 'Cualquiera'}</option>`).join('')}</select></label>`;
+    if (o.cross) {
+      const r = pineRes[$e('#aiSrc').value.slice(5)], pl = r.plots.map(p => `<option value="p:${p.id}">${esc(p.title || 'Línea ' + p.id)}</option>`).join('');
+      extra.innerHTML = `<label class="al-f">Línea A<select id="aiA">${pl}<option value="price">Precio (cierre)</option></select></label><label class="al-f">Cruza<select id="aiDir"><option value="up">al alza</option><option value="dn">a la baja</option></select></label><label class="al-f">Línea B<select id="aiB"><option value="price">Precio (cierre)</option>${pl}<option value="n">Nivel fijo…</option></select></label><label class="al-f" id="aiNWrap" style="display:none">Nivel<input id="aiN" inputmode="decimal" placeholder="Ej. 50"></label>`;
+      const ab = $e('#aiB'); if (r.plots.length > 1) ab.value = 'p:' + r.plots[1].id; ab.onchange = () => { $e('#aiNWrap').style.display = ab.value === 'n' ? '' : 'none'; };
+    }
+  };
+  $e('#aiSrc').onchange = fillCond; $e('#aiCond').onchange = condChange; fillCond();
+  const ser = v => v === 'price' ? {price: 1} : v.startsWith('p:') ? {p: +v.slice(2)} : {n: parseFloat(String($e('#aiN').value).replace(',', '.'))};
+  el.addEventListener('click', async e => {
+    if (e.target === el || e.target.closest('.cfg-x') || e.target.closest('[data-act=cancel]')) return close();
+    if (!e.target.closest('[data-act=ok]')) return;
+    const src = $e('#aiSrc').value, o = opts[+$e('#aiCond').value]; if (!o) { toast('Elige una condición'); return; }
+    const spec = JSON.parse(JSON.stringify(o.spec)); let label = o.label, kind = src.startsWith('pine:') ? 'pine' : src;
+    if (spec.k === 'rsi_up' || spec.k === 'rsi_dn') { const L = parseFloat(String($e('#aiLvl').value).replace(',', '.')); if (!Number.isFinite(L)) { toast('Nivel de RSI inválido'); return; } spec.lvl = L; label += ' ' + L; }
+    if (spec.side) { spec.minScore = +$e('#aiScore').value; label += spec.minScore ? ` (★≥${spec.minScore})` : ''; label = 'Nova Nexus · ' + label; }
+    if (o.cross) {
+      spec.a = ser($e('#aiA').value); spec.b = ser($e('#aiB').value); spec.dir = $e('#aiDir').value;
+      if (spec.b.n !== undefined && !Number.isFinite(spec.b.n)) { toast('Escribe el nivel fijo'); return; }
+      const nm = s => s.price ? 'Precio' : s.n !== undefined ? String(s.n) : ((pineRes[src.slice(5)].plots.find(p => p.id === s.p) || {}).title || 'Línea');
+      label = `${nm(spec.a)} cruza ${spec.dir === 'up' ? 'al alza' : 'a la baja'} ${nm(spec.b)}`;
+    }
+    if (kind === 'pine') label = pineName(src.slice(5)) + ' · ' + label.replace(/^(alertcondition|alert\(\)|Señal\/forma): /, '').replace(/ — .*$/, '');
+    if (kind === 'std') label = 'Indicador · ' + label;
+    const sym = $e('#aiSym').value, itv = $e('#aiTf').value;
+    if (state.alerts.length >= 50) { toast('Máximo 50 alertas'); return; }
+    let lc; try { lc = await lastClosedBar(sym, itv); } catch {}
+    if (lc == null) { toast('No pude leer las velas; revisa tu conexión'); return; }
+    state.alerts.unshift({id: 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind: 'ind', src: kind, sid: kind === 'pine' ? src.slice(5) : '', spec, label, symbol: sym, interval: itv, repeat: $e('#aiRep').value, on: true, note: $e('#aiNote').value.trim().slice(0, 80), created: Date.now(), firedAt: 0, lastBar: lc, firedInfo: ''});
+    alGroups.delete(sym + '|' + itv); save(); renderAlerts(); close(); toast('Alerta con indicador creada');
+    try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
+  });
+}
 
 /* ───────── Velas y datos en vivo ───────── */
 function setFeedback(t) { $('#chartFeedback').textContent = t; }
@@ -1428,7 +1618,7 @@ document.addEventListener('click', e => {
 const activePine = () => state.pine.filter(p => p.on && scripts.some(s => s.id === p.sid));
 const pineName = sid => { const s = scripts.find(x => x.id === sid); return s ? s.name : 'Script'; };
 function pineInline(code, opts) {
-  try { return window.CCTPine ? CCTPine.run(code, candles, opts) : {ok: false, error: {msg: 'El motor de Pine no está disponible', line: 0}}; }
+  try { return window.CCTPine ? CCTPine.run(code, opts.cs || candles, opts) : {ok: false, error: {msg: 'El motor de Pine no está disponible', line: 0}}; }
   catch (e) { return {ok: false, error: {msg: String(e && e.message || e), line: 0}}; }
 }
 function pineRunRaw(code, opts) { // Worker aislado con tiempo límite; si no hay Worker, en línea (con el mismo límite interno)
@@ -1441,7 +1631,7 @@ function pineRunRaw(code, opts) { // Worker aislado con tiempo límite; si no ha
     }
     return new Promise(ok => {
       const id = ++pineSeq, t = setTimeout(() => { pineJobs.delete(id); try { pineWorker.terminate(); } catch {} pineWorker = null; ok({ok: false, error: {msg: 'El script tardó demasiado y se detuvo', line: 0}}); }, 30000);
-      pineJobs.set(id, {ok, t, code, opts}); pineWorker.postMessage({id, code, candles, opts});
+      pineJobs.set(id, {ok, t, code, opts}); { const o2 = Object.assign({}, opts); delete o2.cs; pineWorker.postMessage({id, code, candles: opts.cs || candles, opts: o2}); }
     });
   } catch { pineNoWorker = true; return Promise.resolve(pineInline(code, opts)); }
 }

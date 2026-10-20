@@ -60,3 +60,6 @@ La pestaña **Estilo** de cada indicador permite cambiar, por elemento: visibili
 
 ### Alertas de precio (móvil: pestaña Alertas · escritorio: panel derecho)
 Alertas "≥ / ≤" por activo con nota opcional. Se revisan con el WebSocket del gráfico y con sondeo cada 10 s mientras la app está abierta; al dispararse avisan con mensaje, sonido, vibración y notificación del sistema (si lo permites), y pasan a "Disparadas" (se pueden reactivar). Se guardan por dispositivo/cuenta. Solo análisis: no ejecutan órdenes. Aún no hay alertas desde indicadores Pine (`alertcondition` se ignora con aviso).
+
+### Alertas con indicadores
+Botón **ƒx Crear alerta con indicador** (pestaña Alertas). Fuentes: indicadores comunes (cruces EMA/precio, RSI con nivel, MACD, ruptura de Bollinger, cambio de Supertrend), señales de Nova Nexus (compra/venta, puntuación mínima) y **cualquier script Pine**: sus `alertcondition(...)` y `alert(...)` (con su mensaje), sus formas/señales (`plotshape`…) y cruces entre cualquiera de sus líneas, el precio o un nivel fijo. Se evalúan **al cierre de cada vela** (sin repintado) para el activo y temporalidad elegidos, aunque no estén en el gráfico; "una vez" o "cada vez". Solo mientras la app está abierta; no ejecutan órdenes.

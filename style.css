@@ -170,3 +170,4 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
 @media(max-width:480px){.connection{font-size:0}.connection::first-letter{font-size:14px}}
 
 .alert-form{display:grid;gap:8px;margin-bottom:18px}.alert-form select,.alert-form input{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px;color:var(--text);font-size:14px;width:100%}.alert-btns{display:flex;gap:6px;flex-shrink:0}.alert-row.dim{opacity:.65}
+.al-f{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted);margin-bottom:12px}.al-f select,.al-f input{background:var(--raised);border:1px solid var(--line);border-radius:9px;padding:11px;color:var(--text);font-size:14px;width:100%}
