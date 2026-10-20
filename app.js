@@ -35,7 +35,7 @@ function merge(s) {
   if (!o.drawings || typeof o.drawings !== 'object' || Array.isArray(o.drawings)) o.drawings = {};
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 60)) : {};
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
-  o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => ({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {})) : [];
+  o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {})) : [];
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
@@ -46,7 +46,7 @@ function merge(s) {
 const CFG = window.CCT_FIREBASE, cloudEnabled = !!(CFG && CFG.apiKey && CFG.projectId);
 const LASTUID = 'cct_last_uid', CLOUD_DOC = u => `users/${u}/data/cct_mobile`;
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
-let uid = cloudEnabled ? lsGet(LASTUID) : null, fbUser = null, auth = null, db = null, unsubCloud = null, pushTimer = 0, lastRemote = '', syncStatus = '';
+let uid = cloudEnabled ? lsGet(LASTUID) : null, fbUser = null, auth = null, db = null, unsubCloud = null, unsubScripts = null, pushTimer = 0, lastRemote = '', syncStatus = '';
 const storeKey = () => uid ? `${STORE}_${uid}` : STORE;
 const readLocal = key => { try { return JSON.parse(lsGet(key) || '{}'); } catch { return {}; } };
 let state = merge(readLocal(storeKey()));
@@ -1947,6 +1947,7 @@ async function signIn() {
 function signOut() { if (auth) auth.signOut(); }
 async function onUser(user) {
   if (unsubCloud) { unsubCloud(); unsubCloud = null; }
+  if (unsubScripts) { unsubScripts(); unsubScripts = null; }
   clearTimeout(pushTimer); fbUser = user;
   if (!user) {
     try { localStorage.removeItem(LASTUID); } catch {}
@@ -1954,6 +1955,7 @@ async function onUser(user) {
     syncStatus = ''; renderAccount(); return;
   }
   uid = user.uid; try { localStorage.setItem(LASTUID, uid); } catch {}
+  const anonScripts = (readLocal(SCRIPTS_KEY).items || []).filter(x => x && typeof x.id === 'string'); // scripts guardados antes de iniciar sesión
   scripts = readScripts(); scriptsRemote = ''; renderScripts();
   syncStatus = 'Sincronizando…'; renderAccount();
   const ref = db.doc(CLOUD_DOC(uid));
@@ -1967,22 +1969,36 @@ async function onUser(user) {
     unsubCloud = ref.onSnapshot(sn => { // cambios hechos desde otro dispositivo
       if (sn.metadata.hasPendingWrites || !sn.exists) return;
       const str = sn.data().state; if (!str || str === lastRemote) return;
-      lastRemote = str; try { applyState(JSON.parse(str), true); save(); } catch {}
+      lastRemote = str; try { applyState(JSON.parse(str), true); save(); refreshPineAfterSync(); } catch {}
     }, () => {});
     const sref = db.doc(`users/${uid}/data/scripts`), ssnap = await sref.get();
     if (ssnap.exists && ssnap.data().items) { scriptsRemote = ssnap.data().items; try { scripts = JSON.parse(scriptsRemote); localStorage.setItem(scriptsKey(), JSON.stringify({items: scripts})); renderScripts(); } catch {} }
-    else if (scripts.length) { scriptsRemote = JSON.stringify(scripts); await sref.set({items: scriptsRemote, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); }
-    syncStatus = 'Guardado en tu cuenta';
-  } catch (e) { syncStatus = 'No se pudo sincronizar (' + (e.code || 'error') + '). Tus datos siguen guardados en este dispositivo.'; }
+    else { // la cuenta aún no tiene scripts: se suben los de este dispositivo (los de la cuenta local + los guardados antes de iniciar sesión)
+      const have = new Set(scripts.map(x => x.id)); for (const x of anonScripts) if (!have.has(x.id)) scripts.push(x);
+      if (scripts.length) { scriptsRemote = JSON.stringify(scripts); try { localStorage.setItem(scriptsKey(), JSON.stringify({items: scripts})); } catch {} await sref.set({items: scriptsRemote, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); renderScripts(); }
+    }
+    unsubScripts = sref.onSnapshot(sn => { // scripts cambiados desde otro dispositivo
+      if (sn.metadata.hasPendingWrites || !sn.exists) return;
+      const str = sn.data().items; if (!str || str === scriptsRemote) return;
+      try { const arr = JSON.parse(str); if (!Array.isArray(arr)) return; scriptsRemote = str; scripts = arr; localStorage.setItem(scriptsKey(), JSON.stringify({items: scripts})); renderScripts(); refreshPineAfterSync(); } catch {}
+    }, () => {});
+    refreshPineAfterSync();
+    syncStatus = 'Guardado en tu cuenta · ' + syncSummary();
+  } catch (e) {
+    const hint = ['permission-denied', 'failed-precondition', 'unavailable', 'not-found'].includes(e.code) ? ' Revisa en Firebase Console que Firestore esté creado y que las reglas de firestore.rules estén publicadas.' : '';
+    syncStatus = 'No se pudo sincronizar (' + (e.code || 'error') + '). Tus datos siguen guardados en este dispositivo.' + hint;
+  }
   renderAccount();
 }
+const syncSummary = () => `${state.pine.length} script${state.pine.length === 1 ? '' : 's'} en el gráfico · ${scripts.length} guardado${scripts.length === 1 ? '' : 's'} · ${state.alerts.length} alerta${state.alerts.length === 1 ? '' : 's'}`;
+function refreshPineAfterSync() { renderIndicators(); countIndicators(); renderAlerts(); pineKey = ''; for (const k of Object.keys(pineRes)) if (!scripts.some(s => s.id === k)) delete pineRes[k]; schedulePine(); scheduleRender(); }
 function cloudPush() {
   if (!uid || !db || !fbUser) return;
   clearTimeout(pushTimer);
   pushTimer = setTimeout(async () => {
     const str = JSON.stringify(state); if (str === lastRemote) return;
     lastRemote = str;
-    try { await db.doc(CLOUD_DOC(uid)).set({state: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); syncStatus = 'Guardado en tu cuenta'; }
+    try { await db.doc(CLOUD_DOC(uid)).set({state: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); syncStatus = 'Guardado en tu cuenta · ' + syncSummary(); }
     catch { syncStatus = 'No se pudo guardar en la nube. Se reintentará al próximo cambio.'; lastRemote = ''; }
     renderAccount();
   }, 1200);
