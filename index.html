@@ -21,6 +21,7 @@
       <div class="side-tabs"><button data-side="indicatorView" class="active">ƒx Indicadores</button><button data-side="settingsView">⚙ Ajustes</button></div>
       <span id="connection" class="connection">● Conectando</span>
       <button id="accountBtn" class="account-btn" hidden>Iniciar sesión</button>
+      <button id="settingsBtn" class="icon-btn" title="Ajustes" aria-label="Ajustes">⚙</button>
       <button id="themeBtn" title="Cambiar tema" class="icon-btn">◐</button>
     </div>
   </header>
@@ -85,12 +86,29 @@
       <div class="view-head"><div><div class="eyebrow">ANÁLISIS TÉCNICO</div><h1>Indicadores</h1></div></div>
       <p class="intro">Activa indicadores y aparecerán directamente en el gráfico. Los cambios se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.</p>
       <div id="indicatorList" class="settings-list"></div>
+      <div class="legacy-scripts">
       <div class="section-label">MIS SCRIPTS</div>
       <div id="scriptList" class="settings-list"></div>
       <div class="script-actions"><label class="small-button" for="scriptFile">＋ Importar archivo</label><button class="small-button" id="pasteScript">Pegar código</button></div>
       <input type="file" id="scriptFile" accept=".pine,.txt,text/plain" hidden>
       <p class="small-note">Los scripts de Pine se guardan en este dispositivo y en tu cuenta de Google (nunca en el repositorio público). Por ahora solo se guardan y se pueden consultar: dibujarlos en el gráfico móvil requiere portar su lógica.</p>
+      </div>
       <button class="primary" id="goChart">Ver gráfico →</button>
+    </section>
+
+    <section class="view" id="newsView">
+      <div class="view-head"><div><div class="eyebrow">MERCADO</div><h1>Noticias</h1></div></div>
+      <div class="soon"><div class="soon-ic">▤</div><b>Próximamente</b><small>Esta sección está en camino.</small></div>
+    </section>
+
+    <section class="view" id="aiView">
+      <div class="view-head"><div><div class="eyebrow">ASISTENTE</div><h1>IA</h1></div></div>
+      <div class="soon"><div class="soon-ic">✦</div><b>Próximamente</b><small>Esta sección está en camino.</small></div>
+    </section>
+
+    <section class="view" id="alertsView">
+      <div class="view-head"><div><div class="eyebrow">AVISOS</div><h1>Alertas</h1></div></div>
+      <div class="soon"><div class="soon-ic">◔</div><b>Próximamente</b><small>Esta sección está en camino.</small></div>
     </section>
 
     <!-- 4 · AJUSTES -->
@@ -118,8 +136,9 @@
   <nav class="bottom-nav" aria-label="Navegación">
     <button data-view="watchView" class="active"><span>☷</span><small>Seguimiento</small></button>
     <button data-view="chartView"><span>▥</span><small>Gráfico</small></button>
-    <button data-view="indicatorView"><span>ƒx</span><small>Indicadores</small></button>
-    <button data-view="settingsView"><span>⚙</span><small>Ajustes</small></button>
+    <button data-view="newsView"><span>▤</span><small>Noticias</small></button>
+    <button data-view="aiView"><span>✦</span><small>IA</small></button>
+    <button data-view="alertsView"><span>◔</span><small>Alertas</small></button>
   </nav>
 
   <div class="sheet-backdrop" id="sheetBackdrop"></div>

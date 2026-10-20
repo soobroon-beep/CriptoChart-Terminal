@@ -87,6 +87,7 @@ function switchView(id) {
   syncFullscreenLabel();
 }
 $$('.bottom-nav button').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+$('#settingsBtn').onclick = () => switchView('settingsView');
 $$('.side-tabs button').forEach(b => b.addEventListener('click', () => setSide(b.dataset.side)));
 function onLayoutChange() {
   if (isDesktop()) { setSide(document.body.dataset.side || 'indicatorView'); switchView('chartView'); }
@@ -348,8 +349,13 @@ function calcNova() {
   try { ind.nn = NovaNexus.compute(candles, {smc: !!(I.nnSmc || I.nnOb), emaLen: NP('emaLen'), emaMult: NP('emaMult'), minScore: NP('minScore'), cooldown: NP('cooldown'), cdBoth: NP('cdBoth'), slMult: NP('slMult'), tp1Mult: NP('tp1'), tp2Mult: NP('tp2'), tp3Mult: NP('tp3'), tpBars: NP('tpBars'), smcOpts: {mslen: NP('smcLen'), window: NP('smcWindow'), swingLimit: NP('smcSwing'), sweep: NP('smcSweep'), oblast: NP('obLast'), obmiti: NP('obMiti')}}); } catch (e) { ind.nn = null; console.warn('Nova Nexus:', e); }
 }
 const NN_KEYS = indicatorMeta.map(m => m[0]).filter(k => k.startsWith('nn')), novaOn = () => NN_KEYS.some(k => state.indicators[k]);
-const indicatorRows = () => indicatorMeta.filter(m => !m[0].startsWith('nn')).map(([key, title, desc]) =>
-  `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div>`).join('') + `<div class="pine-head"><b>Mis indicadores</b><small>Indicadores completos con varios módulos y ajustes</small></div>` + novaCard() + pineSection();
+let indTab = 'std';
+const indTabs = () => `<div class="ind-tabs"><button data-indtab="std" class="${indTab === 'std' ? 'active' : ''}">Comunes</button><button data-indtab="mine" class="${indTab === 'mine' ? 'active' : ''}">Mis indicadores</button></div>`;
+const indicatorRows = () => { document.body.dataset.indtab = indTab; return indTabs() + (indTab === 'std'
+  ? indicatorMeta.filter(m => !m[0].startsWith('nn')).map(([key, title, desc]) =>
+    `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div>`).join('')
+  : novaCard() + pineSection()); };
+document.addEventListener('click', e => { const t = e.target.closest('[data-indtab]'); if (!t) return; indTab = t.dataset.indtab; renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); });
 function renderIndicators() { $('#indicatorList').innerHTML = indicatorRows(); }
 function countIndicators() { const n = Object.entries(state.indicators).filter(([k, v]) => v && !k.startsWith('nn')).length + (novaOn() ? 1 : 0); $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
 document.addEventListener('click', e => {
