@@ -1722,44 +1722,81 @@ function pineSection() {
 }
 
 /* ───────── Informe de estrategia (backtest) ───────── */
+async function fetchKlinesPaged(sym, itv, count) { // hasta 10 000 velas, de 1000 en 1000 hacia atrás
+  let out = [], end = null; count = Math.min(10000, count);
+  while (out.length < count) {
+    const raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${itv}&limit=1000${end ? '&endTime=' + end : ''}`);
+    if (!raw.length) break; out = raw.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})).concat(out); end = raw[0][0] - 1; if (raw.length < 1000) break;
+  }
+  return out.slice(-count);
+}
+function downloadText(name, text, mime = 'text/csv') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type: mime + ';charset=utf-8'})); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
 function openStrategyReport(sid) {
-  const r = pineRes[sid]; if (!r || !r.ok || !r.strategy) { toast('Esta estrategia aún no tiene resultados'); return; }
-  const S = r.strategy, st = S.stats, cur = S.currency || 'USDT', money = v => v == null ? '—' : (v < 0 ? '−' : '') + Math.abs(v).toLocaleString('en-US', {maximumFractionDigits: 2}), pc = v => v == null || !Number.isFinite(v) ? '—' : v.toFixed(2) + '%', cls = v => v > 0 ? 'positive' : v < 0 ? 'negative' : '';
+  const r0 = pineRes[sid]; if (!r0 || !r0.ok || !r0.strategy) { toast('Esta estrategia aún no tiene resultados'); return; }
+  let S = r0.strategy, rc = candles, rsym = state.symbol, ritv = state.interval, nBars = candles.length, busy = false;
+  const money = v => v == null ? '—' : (v < 0 ? '−' : '') + Math.abs(v).toLocaleString('en-US', {maximumFractionDigits: 2}), pc = v => v == null || !Number.isFinite(v) ? '—' : v.toFixed(2) + '%', cls = v => v > 0 ? 'positive' : v < 0 ? 'negative' : '';
   const card = (l, v, c) => `<div class="rep-card"><small>${l}</small><b class="${c || ''}">${v}</b></div>`;
   const el = document.createElement('div'); el.className = 'cfg-overlay';
   el.innerHTML = `<div class="cfg-dlg" role="dialog" aria-modal="true" aria-label="Informe de estrategia"><div class="cfg-head"><strong>${esc(S.title || pineName(sid))}</strong><button class="cfg-x" aria-label="Cerrar">✕</button></div>
+    <div class="rep-ctl"><select id="rpSym" aria-label="Activo">${[...new Set([state.symbol, ...state.symbols])].map(s => `<option value="${s}" ${s === rsym ? 'selected' : ''}>${esc(base(s))}</option>`).join('')}</select><select id="rpTf" aria-label="Temporalidad">${INTERVALS.map(t => `<option ${t === ritv ? 'selected' : ''}>${t}</option>`).join('')}</select><select id="rpN" aria-label="Historial">${[500, 1000, 3000, 5000, 10000].map(n => `<option value="${n}" ${n === 1000 ? 'selected' : ''}>${n}</option>`).join('')}</select><button class="small-button" id="rpGo">Recalcular</button></div>
     <div class="cfg-tabs"><button data-rt="sum" class="on">Resumen</button><button data-rt="tr">Operaciones</button><button data-rt="par">Supuestos</button></div>
-    <div class="cfg-body" id="repBody"></div><div class="cfg-foot"><span class="cfg-sp"></span><button class="cfg-btn cfg-ok" data-act="cancel">Cerrar</button></div></div>`;
+    <div class="cfg-body" id="repBody"></div><div class="cfg-foot"><button class="cfg-btn" data-act="csvT">⬇ Operaciones</button><button class="cfg-btn" data-act="csvE">⬇ Capital</button><span class="cfg-sp"></span><button class="cfg-btn cfg-ok" data-act="cancel">Cerrar</button></div></div>`;
   document.body.appendChild(el);
-  const body = el.querySelector('#repBody');
+  const body = el.querySelector('#repBody'); let tab = 'sum';
   const drawEq = cv => {
-    const eq = S.equity, n = eq.length, w = cv.clientWidth || 320, h = 150, dpr = window.devicePixelRatio || 1; cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+    const eq = S.equity, n = eq.length, st = S.stats, w = cv.clientWidth || 320, h = 150, dpr = window.devicePixelRatio || 1; cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
     const vals = eq.filter(v => v != null); if (vals.length < 2) return; let mn = Math.min(...vals, st.init), mx = Math.max(...vals, st.init); if (mx === mn) { mx += 1; mn -= 1; }
     const X = i => 4 + i / (n - 1) * (w - 8), Y = v => h - 8 - (v - mn) / (mx - mn) * (h - 16), css = getComputedStyle(document.body);
     g.strokeStyle = css.getPropertyValue('--line') || '#263244'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, Y(st.init)); g.lineTo(w, Y(st.init)); g.stroke(); g.setLineDash([]);
     g.strokeStyle = vals[vals.length - 1] >= st.init ? '#26a69a' : '#ef5350'; g.lineWidth = 2; g.beginPath(); let started = false; eq.forEach((v, i) => { if (v == null) return; if (!started) { g.moveTo(X(i), Y(v)); started = true; } else g.lineTo(X(i), Y(v)); }); g.stroke();
   };
-  const show = tab => {
-    el.querySelectorAll('.cfg-tabs button').forEach(b => b.classList.toggle('on', b.dataset.rt === tab));
+  const show = () => {
+    const st = S.stats, cur = S.currency || 'USDT'; el.querySelectorAll('.cfg-tabs button').forEach(b => b.classList.toggle('on', b.dataset.rt === tab));
+    const span = rc.length ? `${new Date(rc[0].t).toLocaleDateString()} → ${new Date(rc[rc.length - 1].t).toLocaleDateString()} · ${rc.length} velas · ${base(rsym)} ${ritv}` : '';
     if (tab === 'sum') {
-      body.innerHTML = `<canvas id="repEq" style="width:100%;height:150px;display:block;margin-bottom:12px"></canvas><div class="rep-grid">`
+      body.innerHTML = `<p class="cfg-note">${span}</p><canvas id="repEq" style="width:100%;height:150px;display:block;margin-bottom:12px"></canvas><div class="rep-grid">`
         + card('Beneficio neto', `${money(st.net)} ${cur}<br><small>${pc(st.netPct)}</small>`, cls(st.net)) + card('Capital final', money(st.equity), cls(st.equity - st.init)) + card('Operaciones cerradas', st.trades) + card('% ganadoras', st.winRate == null ? '—' : pc(st.winRate))
         + card('Factor de beneficio', st.profitFactor == null ? '—' : st.profitFactor === Infinity ? '∞' : st.profitFactor.toFixed(2)) + card('Reducción máx. (drawdown)', `${money(st.maxDD)}<br><small>${pc(st.maxDDpct)}</small>`, 'negative')
         + card('Ganancia media', money(st.avgWin), 'positive') + card('Pérdida media', money(st.avgLoss), 'negative') + card('Mayor ganancia', money(st.largestWin), 'positive') + card('Mayor pérdida', money(st.largestLoss), 'negative')
         + card('Largos / Cortos', `${st.longs} / ${st.shorts}`) + card('Comisiones', money(st.commission)) + card('Abiertas ahora', `${st.openTrades}<br><small>${money(st.openProfit)}</small>`, cls(st.openProfit)) + card('Comprar y mantener', pc(st.buyHoldPct), cls(st.buyHoldPct)) + `</div>`;
       drawEq(body.querySelector('#repEq'));
     } else if (tab === 'tr') {
-      const rows = S.open.map(t => [...t, 1]).concat([...S.trades].reverse().map(t => [...t, 0]));
-      const dt = i => { const c = candles[i]; return c ? new Date(c.t).toLocaleDateString() : ''; };
-      body.innerHTML = rows.length ? `<p class="cfg-note">Mostrando ${Math.min(rows.length, 500)} de ${S.tradesTotal + S.open.length} (las más recientes primero). Las fechas corresponden al gráfico actual.</p><div class="rep-tbl"><table><thead><tr><th>#</th><th>Lado</th><th>Entrada</th><th>Salida</th><th>Cant.</th><th>Resultado</th></tr></thead><tbody>${rows.map((t, i) => `<tr><td>${esc(t[0])}</td><td>${t[1] === 1 ? 'Largo' : 'Corto'}</td><td>${fmt(t[3])}<small>${dt(t[4])}</small></td><td>${t[9] ? '<i>abierta</i>' : fmt(t[5]) + `<small>${dt(t[6])} · ${esc(t[8])}</small>`}</td><td>${(+t[2].toFixed(6))}</td><td class="${cls(t[7])}">${money(t[7])}</td></tr>`).join('')}</tbody></table></div>` : '<p class="cfg-empty">La estrategia no hizo operaciones en estas velas.</p>';
+      const rows = S.open.map(t => [...t, 1]).concat([...S.trades].reverse().map(t => [...t, 0])).slice(0, 300);
+      const dt = i => { const c = rc[i]; return c ? new Date(c.t).toLocaleDateString() : ''; };
+      body.innerHTML = rows.length ? `<p class="cfg-note">Mostrando ${rows.length} de ${S.tradesTotal + S.open.length} (más recientes primero). Descarga el CSV para ver todas.</p><div class="rep-tbl"><table><thead><tr><th>#</th><th>Lado</th><th>Entrada</th><th>Salida</th><th>Cant.</th><th>Resultado</th></tr></thead><tbody>${rows.map(t => `<tr><td>${esc(t[0])}</td><td>${t[1] === 1 ? 'Largo' : 'Corto'}</td><td>${fmt(t[3])}<small>${dt(t[4])}</small></td><td>${t[9] ? '<i>abierta</i>' : fmt(t[5]) + `<small>${dt(t[6])} · ${esc(t[8])}</small>`}</td><td>${(+t[2].toFixed(6))}</td><td class="${cls(t[7])}">${money(t[7])}</td></tr>`).join('')}</tbody></table></div>` : '<p class="cfg-empty">La estrategia no hizo operaciones en estas velas.</p>';
     } else {
       const P = S.params, qt = {fixed: 'contratos fijos', cash: 'efectivo fijo', percent_of_equity: '% del capital'}[P.qtyType];
       body.innerHTML = `<div class="rep-note"><p><b>Capital inicial:</b> ${money(st.init)} ${cur} · <b>Tamaño:</b> ${P.qtyVal} (${qt}) · <b>Pyramiding:</b> ${P.pyramiding} · <b>Comisión:</b> ${P.commVal} (${P.commType}) · <b>Deslizamiento:</b> ${P.slippage} ticks · <b>Ejecución:</b> ${P.onClose ? 'al cierre de la vela' : 'en la apertura de la vela siguiente'}</p>
-      <p>Cómo se simula: las órdenes de mercado se ejecutan en la apertura de la vela siguiente; límites y stops dentro de la vela siguiendo la ruta O→H→L→C (o O→L→H→C si el mínimo está más cerca de la apertura); trailing stop aproximado. No se simulan margen, liquidaciones, calc_on_every_tick ni datos intravela. Es un backtest histórico con las velas cargadas (hasta 1000): <b>no garantiza resultados futuros ni coincide exactamente con TradingView</b>. Solo análisis; no se ejecutan órdenes reales.</p></div>`;
+      <p>Cómo se simula: las órdenes de mercado se ejecutan en la apertura de la vela siguiente (nunca con datos futuros); límites y stops dentro de la vela siguiendo la ruta O→H→L→C (o O→L→H→C si el mínimo está más cerca de la apertura); trailing stop aproximado. No se simulan margen, liquidaciones, calc_on_every_tick ni datos intravela. Los resultados son reproducibles: mismo script, mismos datos y mismos ajustes dan el mismo informe. Es un backtest histórico: <b>no garantiza resultados futuros ni coincide exactamente con TradingView</b>. Solo análisis; no se ejecutan órdenes reales.</p></div>`;
     }
   };
-  el.addEventListener('click', e => { if (e.target === el || e.target.closest('.cfg-x') || e.target.closest('[data-act=cancel]')) { el.remove(); return; } const b = e.target.closest('[data-rt]'); if (b) show(b.dataset.rt); });
-  show('sum');
+  const csvEsc = v => { const s = String(v == null ? '' : v); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const iso = i => rc[i] ? new Date(rc[i].t).toISOString() : '';
+  el.addEventListener('click', async e => {
+    if (e.target === el || e.target.closest('.cfg-x') || e.target.closest('[data-act=cancel]')) { el.remove(); return; }
+    const b = e.target.closest('[data-rt]'); if (b) { tab = b.dataset.rt; show(); return; }
+    const nm = `${base(rsym)}_${ritv}_${(pineName(sid) || 'estrategia').replace(/[^\w-]+/g, '_')}`;
+    if (e.target.closest('[data-act=csvT]')) {
+      const head = ['n', 'entrada_id', 'lado', 'cantidad', 'entrada_fecha_utc', 'entrada_precio', 'salida_fecha_utc', 'salida_precio', 'resultado', 'salida_motivo'];
+      const rows = S.trades.map((t, i) => [S.tradesTotal - S.trades.length + i + 1, t[0], t[1] === 1 ? 'largo' : 'corto', t[2], iso(t[4]), t[3], iso(t[6]), t[5], t[7], t[8]]).concat(S.open.map(t => ['', t[0], t[1] === 1 ? 'largo' : 'corto', t[2], iso(t[4]), t[3], '', '', t[7], 'abierta']));
+      downloadText(nm + '_operaciones.csv', [head, ...rows].map(r => r.map(csvEsc).join(',')).join('\n')); return;
+    }
+    if (e.target.closest('[data-act=csvE]')) { downloadText(nm + '_capital.csv', ['fecha_utc,capital', ...S.equity.map((v, i) => v == null ? null : `${iso(i)},${v}`).filter(Boolean)].join('\n')); return; }
+    if (e.target.closest('#rpGo')) {
+      if (busy) return; busy = true; const go = el.querySelector('#rpGo'); go.textContent = 'Calculando…'; go.disabled = true;
+      try {
+        const sym = el.querySelector('#rpSym').value, itv = el.querySelector('#rpTf').value, n = +el.querySelector('#rpN').value;
+        const cs = await fetchKlinesPaged(sym, itv, n); if (cs.length < 30) throw new Error('Pocas velas disponibles');
+        const s = scripts.find(x => x.id === sid), p = state.pine.find(x => x.sid === sid);
+        const res = await pineRunFull(s.code, {inputs: (p && p.inputs) || {}, interval: itv, symbol: sym, name: s.name, cs, timeLimitMs: 25000});
+        if (!res || !res.ok) throw new Error(res && res.error ? res.error.msg : 'Error al calcular');
+        if (!res.strategy) throw new Error('El script no produjo un backtest');
+        S = res.strategy; rc = cs; rsym = sym; ritv = itv; show(); if (!res.complete) toast('Aviso: hay partes del script sin soporte; el resultado puede diferir');
+      } catch (err) { toast('No se pudo recalcular: ' + (err.message || err)); }
+      busy = false; go.textContent = 'Recalcular'; go.disabled = false;
+    }
+  });
+  show();
 }
 function pineMsgHtml(res, code) {
   if (!res.ok) { const src = (code || '').split('\n')[res.error.line - 1]; return `<div class="pine-box err"><b>No se pudo interpretar</b><div>${res.error.line ? 'Línea ' + res.error.line + ': ' : ''}${esc(res.error.msg)}</div>${src ? `<pre>${esc(src.trim().slice(0, 160))}</pre>` : ''}</div>`; }

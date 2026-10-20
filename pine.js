@@ -1468,7 +1468,7 @@ class Broker {
       avgBars: n ? all.reduce((s, t) => s + (t.exitBar - t.entryBar), 0) / n : null};
   }
   result(cs) {
-    const tr = this.closed.slice(-500).map(t => [t.id, t.dir, t.qty, t.entry, t.entryBar, t.exit, t.exitBar, t.profit, t.exitId]);
+    const tr = this.closed.slice(-5000).map(t => [t.id, t.dir, t.qty, t.entry, t.entryBar, t.exit, t.exitBar, t.profit, t.exitId]);
     const op = this.open.map(t => [t.id, t.dir, t.qty, t.entry, t.bar, null, null, t.dir * (cs[cs.length - 1].c - t.entry) * t.qty, '']);
     return {title: this.title, currency: this.currency, params: {qtyType: this.qtyType, qtyVal: this.qtyVal, pyramiding: this.pyr, commType: this.commType, commVal: this.commVal, slippage: this.slip, onClose: this.onClose},
       stats: this.stats(cs), trades: tr, open: op, equity: this.equity.map(v => v === undefined ? null : Math.round(v * 1e6) / 1e6), marks: this.marks.slice(-1500), tradesTotal: this.closed.length};
