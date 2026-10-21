@@ -17,7 +17,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  light: false, drawings: {}, pine: [], novaSaved: null, novaParams: {}, alerts: []
+  light: false, chartStyle: {}, drawings: {}, pine: [], novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -29,6 +29,14 @@ function sanAlert(a) {
   if (!Number.isFinite(a.price) || !(a.price > 0) || (a.dir !== 'up' && a.dir !== 'down')) return null;
   return Object.assign(base0, {price: a.price, dir: a.dir, firedPrice: Number.isFinite(a.firedPrice) ? a.firedPrice : null});
 }
+const CHART_DEF = {bg: '', grid: '', gridH: true, gridV: true, up: '#20bf9f', down: '#f06b79', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false};
+function sanChartStyle(c) {
+  const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
+  for (const k of ['bg', 'grid', 'up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick']) if (typeof c[k] === 'string' && /^#[0-9a-fA-F]{6}$/.test(c[k])) o[k] = c[k];
+  for (const k of ['gridH', 'gridV', 'hollow']) if (typeof c[k] === 'boolean') o[k] = c[k];
+  return o;
+}
+const cstyle = () => Object.assign({}, CHART_DEF, state.chartStyle || {});
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
@@ -36,6 +44,7 @@ function merge(s) {
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 60)) : {};
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
+  o.chartStyle = sanChartStyle(o.chartStyle);
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
@@ -846,15 +855,18 @@ function timeLabel(t, prev) {
   if (prev != null && new Date(prev).getDate() !== d.getDate()) return `${d.getDate()}/${d.getMonth() + 1}`;
   return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
 }
-let legRows = [], legSig = '';
+let legRows = [], legSig = '', grips = [], gripDrag = false;
+let paneH = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneH_v1') || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; } })();
+const savePaneH = () => { try { localStorage.setItem('cct_paneH_v1', JSON.stringify(paneH)); } catch {} };
 const paneScale0 = () => { try { const v = parseFloat(localStorage.getItem('cct_paneScale')); return v >= .6 && v <= 3 ? v : 1.25; } catch { return 1.25; } };
 let paneScale = paneScale0();
 function legAt(text, x, y, act, dim) { legRows.push({x: x + g.measureText(text).width + 8, y: y - 12, act, dim: !!dim}); }
 function syncLegend() {
-  const box = $('#legendBox'); if (!box) return;
-  const sig = legRows.map(r => [Math.round(r.x), Math.round(r.y), r.act.t, r.act.sid || r.act.key || '', r.dim ? 1 : 0, r.act.pane || ''].join(':')).join('|');
+  const box = $('#legendBox'); if (!box || gripDrag) return;
+  const sig = grips.map(q => q.key + ':' + Math.round(q.y)).join(',') + '#' + legRows.map(r => [Math.round(r.x), Math.round(r.y), r.act.t, r.act.sid || r.act.key || '', r.dim ? 1 : 0, r.act.pane || ''].join(':')).join('|');
   if (sig === legSig) return; legSig = sig;
-  box.innerHTML = legRows.map(r => { const a = r.act, id = a.sid || a.key || '', d = `data-leg="${a.t}" data-id="${esc(id)}"`;
+  const gw = geo ? Math.max(40, geo.w - geo.left - geo.right + 2) : 100;
+  box.innerHTML = grips.map(q => `<div class="pane-grip" data-gk="${esc(q.key)}" data-gd="${q.dir}" data-gh="${q.h}" style="top:${Math.round(q.y) - 10}px;left:${geo ? geo.left : 6}px;width:${gw}px" title="Arrastra para cambiar la altura (doble toque: automática)"></div>`).join('') + legRows.map(r => { const a = r.act, id = a.sid || a.key || '', d = `data-leg="${a.t}" data-id="${esc(id)}"`;
     return `<div class="leg-row" style="left:${Math.round(r.x)}px;top:${Math.round(r.y)}px"><button ${d} data-do="eye" title="${r.dim ? 'Mostrar' : 'Ocultar'}" aria-label="${r.dim ? 'Mostrar' : 'Ocultar'}">${r.dim ? '🙈' : '👁'}</button><button ${d} data-do="set" title="Ajustes" aria-label="Ajustes">⚙</button>${a.t === 'pine' ? `<button ${d} data-do="move" title="Mover de panel" aria-label="Mover de panel">⇅</button>` : ''}<button ${d} data-do="del" title="Eliminar del gráfico" aria-label="Eliminar">✕</button></div>`; }).join('');
 }
 document.addEventListener('click', e => {
@@ -882,14 +894,47 @@ document.addEventListener('click', e => {
   }
 });
 function render() { renderCore(); syncLegend(); }
+(() => {
+  const box = $('#legendBox'); if (!box) return; let drag = null;
+  box.addEventListener('pointerdown', e => {
+    const el = e.target.closest('.pane-grip'); if (!el) return; e.preventDefault(); e.stopPropagation();
+    drag = {el, key: el.dataset.gk, dir: el.dataset.gd, h0: +el.dataset.gh, y0: e.clientY, top0: parseFloat(el.style.top), max: +el.dataset.gh + Math.max(0, (geo ? geo.plotH : 200) - 80)};
+    gripDrag = true; box.classList.add('dragging'); el.classList.add('on'); try { el.setPointerCapture(e.pointerId); } catch {}
+  });
+  box.addEventListener('pointermove', e => {
+    if (!drag) return; let dy = e.clientY - drag.y0, nh = Math.round(drag.dir === 'up' ? drag.h0 - dy : drag.h0 + dy);
+    nh = Math.max(36, Math.min(drag.max, nh)); dy = drag.dir === 'up' ? drag.h0 - nh : nh - drag.h0;
+    paneH[drag.key] = nh; drag.el.style.top = (drag.top0 + dy) + 'px'; scheduleRender();
+  });
+  const end = () => { if (!drag) return; drag.el.classList.remove('on'); drag = null; gripDrag = false; box.classList.remove('dragging'); savePaneH(); legSig = ''; scheduleRender(); };
+  box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
+  box.addEventListener('dblclick', e => { const el = e.target.closest('.pane-grip'); if (!el) return; delete paneH[el.dataset.gk]; savePaneH(); legSig = ''; scheduleRender(); toast('Altura automática'); });
+})();
+function openChartStyle() {
+  const cs = cstyle(); let bgDef = '#101725'; try { let n = $('#chartArea'); while (n) { const c = getComputedStyle(n).backgroundColor, m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(c); if (m && (m[4] === undefined || +m[4] > 0)) { bgDef = '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join(''); break; } n = n.parentElement; } } catch {}
+  const lineDef = '#263244', P = (key, title, type, def, group, extra) => Object.assign({key, title, type, def, value: state.chartStyle && state.chartStyle[key] !== undefined ? state.chartStyle[key] : def, group}, extra || {});
+  const inputs = [
+    P('bg', 'Color de fondo', 'color', bgDef, '🖼 FONDO Y CUADRÍCULA'), P('gridH', 'Líneas horizontales', 'bool', true, '🖼 FONDO Y CUADRÍCULA'), P('gridV', 'Líneas verticales', 'bool', true, '🖼 FONDO Y CUADRÍCULA'), P('grid', 'Color de la cuadrícula', 'color', lineDef, '🖼 FONDO Y CUADRÍCULA'),
+    P('up', 'Vela alcista · cuerpo', 'color', CHART_DEF.up, '🕯 VELAS'), P('down', 'Vela bajista · cuerpo', 'color', CHART_DEF.down, '🕯 VELAS'),
+    P('upBorder', 'Alcista · borde', 'color', cs.upBorder || cs.up, '🕯 VELAS'), P('downBorder', 'Bajista · borde', 'color', cs.downBorder || cs.down, '🕯 VELAS'),
+    P('upWick', 'Alcista · mecha', 'color', cs.upWick || cs.up, '🕯 VELAS'), P('downWick', 'Bajista · mecha', 'color', cs.downWick || cs.down, '🕯 VELAS'),
+    P('hollow', 'Velas alcistas huecas', 'bool', false, '🕯 VELAS'), {key: 'reset', title: 'Restablecer todo a los valores por defecto', type: 'bool', def: false, value: false, group: '↺ RESTABLECER'}];
+  CCTSettings.open({title: 'Aspecto del gráfico', tabs: ['in'], note: 'Colores y cuadrícula del gráfico. Se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
+    const v = res.inputs, o = {};
+    if (!v.reset) for (const i of inputs) { if (i.key === 'reset') continue; const x = v[i.key]; if (x === undefined) continue; const dflt = i.key === 'bg' ? bgDef : i.key === 'grid' ? lineDef : (i.key === 'upBorder' ? (v.up || CHART_DEF.up) : i.key === 'downBorder' ? (v.down || CHART_DEF.down) : i.key === 'upWick' ? (v.up || CHART_DEF.up) : i.key === 'downWick' ? (v.down || CHART_DEF.down) : i.def); if (x !== dflt) o[i.key] = x; }
+    state.chartStyle = sanChartStyle(o); save(); scheduleRender(); toast(v.reset ? 'Aspecto restablecido' : 'Aspecto aplicado');
+  }});
+}
+$('#chartStyleBtn').onclick = openChartStyle;
 function renderCore() {
   if (currentView !== 'chartView') return;
   const el = $('#priceCanvas'); if (!el.getBoundingClientRect().width) return;
   const {w, h} = setupCanvas();
   const css = getComputedStyle(document.body);
   const text = css.getPropertyValue('--muted').trim(), line = css.getPropertyValue('--line').trim(), bg = css.getPropertyValue('--bg').trim(), drawCol = css.getPropertyValue('--draw').trim() || '#e9c36e', fg = css.getPropertyValue('--text').trim();
-  const up = '#20bf9f', down = '#f06b79';
-  g.clearRect(0, 0, w, h);
+  const CS = cstyle(), up = CS.up, down = CS.down;
+  g.clearRect(0, 0, w, h); if (CS.bg) { g.fillStyle = CS.bg; g.fillRect(0, 0, w, h); }
+  const gridCol = CS.grid || line; grips = [];
   const n = candles.length; if (!n) { geo = null; return; }
 
   const pineKeyNow = `${state.symbol}|${state.interval}|${candles[0].t}`;
@@ -898,12 +943,14 @@ function renderCore() {
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
   const left = 6, right = 64, axisH = 22, top0 = 6;
-  const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH = state.indicators.rsi ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH = state.indicators.volume ? Math.round(Math.max(40, h * (hasTbl ? .07 : .12))) : 0;
+  const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH0 = state.indicators.rsi ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH0 = state.indicators.volume ? Math.round(Math.max(40, h * (hasTbl ? .07 : .12))) : 0;
+  const cap = Math.max(40, h - axisH - 80 - top0), rsiH = rsiH0 && paneH.rsi ? clamp(paneH.rsi, 40, cap) : rsiH0, volH = volH0 && paneH.vol ? clamp(paneH.vol, 36, cap) : volH0;
   const panelKeys = [...PANELS.filter(k => state.indicators[k] && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
+  const isC = k => paneH[k] > 0;
   const tblOnly = x => !!(x && x.r && x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length);
-  const wBot = panelKeys.map(k => k.startsWith('pine:') && tblOnly(pr.find(x => 'pine:' + x.p.sid === k)) ? 4 : 1), wTop = pTop.map(x => tblOnly(x) ? 4 : 1), wSum = wBot.concat(wTop).reduce((a, b) => a + b, 0);
-  const panelBudget = Math.max(0, Math.min(h - axisH - (wSum > panelKeys.length + pTop.length ? 120 : 170) - rsiH - volH, h * Math.min(.85, .6 + (psc - 1) * .25 + (wSum > panelKeys.length + pTop.length ? .2 : 0)) - rsiH - volH));
-  const unitH = wSum ? Math.max(56, Math.min(clamp(h * .16, 52, 110) * psc, panelBudget / wSum)) : 0, hBot = wBot.map(x => Math.round(Math.max(56, unitH * x))), hTop = wTop.map(x => Math.round(Math.max(56, unitH * x)));
+  const wBot = panelKeys.map(k => k.startsWith('pine:') && tblOnly(pr.find(x => 'pine:' + x.p.sid === k)) ? 4 : 1), wTop = pTop.map(x => tblOnly(x) ? 4 : 1), wSum = wBot.map((x, i) => isC(panelKeys[i]) ? 0 : x).concat(wTop.map((x, i) => isC('pine:' + pTop[i].p.sid) ? 0 : x)).reduce((a, b) => a + b, 0), nAuto = panelKeys.filter(k => !isC(k)).length + pTop.filter(x => !isC('pine:' + x.p.sid)).length, customSum = panelKeys.filter(isC).reduce((s2, k) => s2 + clamp(paneH[k], 40, cap), 0) + pTop.filter(x => isC('pine:' + x.p.sid)).reduce((s2, x) => s2 + clamp(paneH['pine:' + x.p.sid], 40, cap), 0);
+  const panelBudget = Math.max(0, Math.min(h - axisH - (wSum > nAuto ? 120 : 170) - rsiH - volH - customSum, h * Math.min(.85, .6 + (psc - 1) * .25 + (wSum > nAuto ? .2 : 0)) - rsiH - volH - customSum));
+  const unitH = wSum ? Math.max(56, Math.min(clamp(h * .16, 52, 110) * psc, panelBudget / wSum)) : 0, hBot = wBot.map((x, i) => isC(panelKeys[i]) ? Math.round(clamp(paneH[panelKeys[i]], 40, cap)) : Math.round(Math.max(56, unitH * x))), hTop = wTop.map((x, i) => isC('pine:' + pTop[i].p.sid) ? Math.round(clamp(paneH['pine:' + pTop[i].p.sid], 40, cap)) : Math.round(Math.max(56, unitH * x)));
   const offOf = arr => arr.map((_, i) => arr.slice(0, i).reduce((a, b) => a + b, 0)), oBot = offOf(hBot), oTop = offOf(hTop);
   const extraH = hBot.reduce((a, b) => a + b, 0), topH = hTop.reduce((a, b) => a + b, 0), plotTop = top0 + topH;
   const vpOn = !!(state.indicators.nnVP && ind.vp), gutter = vpOn ? clamp(Math.round((w - left - right) * .4), 110, 300) : 0; // margen derecho para el perfil
@@ -935,11 +982,15 @@ function renderCore() {
   { const lb = document.querySelector('.chart-label'); if (lb) lb.style.top = (topH + 8) + 'px'; } // la leyenda del precio baja si hay paneles arriba
   geo = {w, h, left, right, gutter, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
 
+  if (volH) grips.push({key: 'vol', y: geo.volTop, dir: 'up', h: volH});
+  if (rsiH) grips.push({key: 'rsi', y: geo.rsiTop, dir: 'up', h: rsiH});
+  panelKeys.forEach((k, i) => grips.push({key: k, y: geo.extraTop + oBot[i], dir: 'up', h: hBot[i]}));
+  pTop.forEach((x, i) => grips.push({key: 'pine:' + x.p.sid, y: top0 + oTop[i] + hTop[i], dir: 'down', h: hTop[i]}));
   // cuadrícula y escala de precios
   g.font = '10px system-ui'; g.textAlign = 'left'; g.lineWidth = .6;
   for (let i = 0; i <= 4; i++) {
     const yy = plotTop + i * plotH / 4, pr = max - (max - min) * i / 4;
-    g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right + 2, yy); g.stroke();
+    if (CS.gridH) { g.strokeStyle = gridCol; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right + 2, yy); g.stroke(); }
     g.fillStyle = text; g.fillText(fmt(pr), w - right + 6, yy + 3);
   }
   // eje de tiempo
@@ -947,7 +998,7 @@ function renderCore() {
   g.fillStyle = text; g.textAlign = 'center';
   for (let i = Math.ceil(lo / stride) * stride; i < hi; i += stride) {
     const xx = X(i); if (xx < left + 14 || xx > w - right - 14) continue;
-    g.strokeStyle = line; g.beginPath(); g.moveTo(xx, top0); g.lineTo(xx, plotTop + plotH + volH + rsiH + extraH); g.stroke();
+    if (CS.gridV) { g.strokeStyle = gridCol; g.beginPath(); g.moveTo(xx, top0); g.lineTo(xx, plotTop + plotH + volH + rsiH + extraH); g.stroke(); }
     g.fillText(timeLabel(candles[i].t, i > 0 ? candles[i - 1].t : null), xx, h - 7);
   }
   g.textAlign = 'left';
@@ -968,9 +1019,10 @@ function renderCore() {
   for (const {r} of pr) for (const e of r.barcolors) for (const [bar, ci] of e.pts) pineBar[bar + (e.offset || 0)] = r.palette[ci];
   for (let i = lo; i < hi; i++) {
     const d = candles[i], xx = X(i), col = pineBar[i] || (limeBars && d.t > ind.liq.after ? '#00e676' : d.c >= d.o ? up : down), yo = Y(d.o), yc = Y(d.c);
-    g.strokeStyle = g.fillStyle = col; g.lineWidth = 1;
-    g.beginPath(); g.moveTo(xx, Y(d.h)); g.lineTo(xx, Y(d.l)); g.stroke();
-    g.fillRect(xx - barW / 2, Math.min(yo, yc), barW, Math.max(1, Math.abs(yo - yc)));
+    const isUp = d.c >= d.o, custom = !pineBar[i] && !(limeBars && d.t > ind.liq.after), wk = custom ? (isUp ? CS.upWick : CS.downWick) || col : col, bd = custom ? (isUp ? CS.upBorder : CS.downBorder) || col : col;
+    g.lineWidth = 1; g.strokeStyle = wk; g.beginPath(); g.moveTo(xx, Y(d.h)); g.lineTo(xx, Y(d.l)); g.stroke();
+    if (custom && CS.hollow && isUp) { g.strokeStyle = bd; g.strokeRect(xx - barW / 2 + .5, Math.min(yo, yc) + .5, Math.max(1, barW - 1), Math.max(1, Math.abs(yo - yc) - 1)); }
+    else { g.fillStyle = col; g.fillRect(xx - barW / 2, Math.min(yo, yc), barW, Math.max(1, Math.abs(yo - yc))); if (custom && bd !== col) { g.strokeStyle = bd; g.strokeRect(xx - barW / 2 + .5, Math.min(yo, yc) + .5, Math.max(1, barW - 1), Math.max(1, Math.abs(yo - yc) - 1)); } }
   }
   // medias y bandas
   for (const [, arr, col, dashed] of overlays) {
@@ -1029,7 +1081,7 @@ function renderCore() {
     for (let i = lo; i < hi; i++) maxV = Math.max(maxV, candles[i].v);
     g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.volTop); g.lineTo(w - right + 2, geo.volTop); g.stroke();
     g.fillStyle = text; g.fillText('VOL', left + 4, top + 9); legAt('VOL', left + 4, top + 9, {t: 'std', key: 'volume'});
-    for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = d.c >= d.o ? '#1b8c78aa' : '#d45a6aaa'; const bh = Math.max(1, d.v / maxV * height); g.fillRect(X(i) - barW / 2, top + height - bh, barW, bh); }
+    for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = (d.c >= d.o ? up : down) + 'aa'; const bh = Math.max(1, d.v / maxV * height); g.fillRect(X(i) - barW / 2, top + height - bh, barW, bh); }
   }
   // RSI
   if (rsiH) {

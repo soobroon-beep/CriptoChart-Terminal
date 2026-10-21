@@ -84,3 +84,7 @@ Arrastra el borde entre *Seguimiento* y el gráfico, o entre el gráfico y *Indi
 - La corrida de `request.security` ahora recorta el script a lo que dependen sus argumentos (más rápido con muchos símbolos).
 - Nova Nexus nativo: ⚙ → **Estrategia** (Mobile / Cloud / SMC), con las mismas combinaciones de módulos del Pine; «Ninguna» devuelve tus módulos.
 - Leyenda sobre el gráfico: junto a cada indicador, 👁 ocultar/mostrar (Pine) o apagar (nativos), ⚙ ajustes, ⇅ mover (sobre el gráfico / panel arriba / panel abajo, solo Pine) y ✕ quitar. Botones ▤− / ▤+ de la barra del gráfico cambian la altura de los paneles (se recuerda).
+
+## Paneles redimensionables y aspecto del gráfico
+- Cada panel (volumen, RSI, MACD…, paneles de Pine) tiene un **asa en su borde** (una pastilla gris): arrástrala con el dedo o el ratón para agrandar o achicar ese panel; doble toque/clic = altura automática. Las alturas se recuerdan en el dispositivo. ▤− / ▤+ siguen escalando los paneles automáticos.
+- **🎨 Aspecto** (barra del gráfico): color de fondo, líneas horizontales/verticales (y su color), colores de cuerpo, borde y mecha de velas alcistas/bajistas, velas alcistas huecas y «restablecer». Se guarda en el estado (también se sincroniza con tu cuenta).

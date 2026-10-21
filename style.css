@@ -194,3 +194,7 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
 .leg-row button:hover{border-color:var(--accent)}
 #legMenu{position:fixed;z-index:60;background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:4px;display:flex;flex-direction:column;box-shadow:0 8px 24px rgba(0,0,0,.4)}#legMenu button{background:none;border:0;color:var(--text);text-align:left;padding:8px 12px;border-radius:7px;font-size:13px}#legMenu button:hover{background:var(--surface)}#legMenu button.cur{color:var(--accent);font-weight:700}
 @media(max-width:760px){.leg-row{opacity:.8}.leg-row button{height:22px;min-width:24px;font-size:12px}}
+
+.pane-grip{position:absolute;height:20px;pointer-events:auto;cursor:ns-resize;touch-action:none;z-index:3}.pane-grip::before{content:"";position:absolute;left:50%;top:7px;width:38px;height:4px;margin-left:-19px;border-radius:3px;background:var(--muted);opacity:.35;transition:opacity .15s,background .15s}
+.pane-grip:hover::before,.pane-grip.on::before{opacity:.9;background:var(--accent)}.legend-box.dragging .leg-row{opacity:0}
+@media(max-width:760px){.pane-grip{height:30px}.pane-grip::before{top:12px;width:46px;height:5px;margin-left:-23px;opacity:.5}}
