@@ -68,12 +68,12 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   .view{height:100%;min-height:0}
   #watchView{display:block!important;grid-area:watch;border-right:1px solid var(--line);padding:18px 16px 20px}
   #chartView{display:flex!important;grid-area:chart;min-width:0}
-  #indicatorView,#settingsView,#alertsView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
-  body:not([data-side]) #indicatorView,body[data-side="indicatorView"] #indicatorView{display:block}
+  #indicatorView{display:none!important}
+  #newsView,#aiView,#settingsView,#alertsView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
+  body:not([data-side]) #newsView,body[data-side="newsView"] #newsView{display:block}
+  body[data-side="aiView"] #aiView{display:block}
   body[data-side="settingsView"] #settingsView{display:block}
   body[data-side="alertsView"] #alertsView{display:block}
-  body[data-side="alertsView"] #indicatorView{display:none}
-  body[data-side="settingsView"] #indicatorView{display:none}
   #goChart{display:none}
   h1{font-size:21px}
   .view-head{margin-bottom:16px}
@@ -92,7 +92,7 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   .sheet-handle{display:none}
   #toast{bottom:36px}
   .expanded .topbar{display:flex}
-  .expanded #watchView,.expanded #indicatorView,.expanded #settingsView{display:none!important}
+  .expanded #watchView,.expanded #newsView,.expanded #aiView,.expanded #alertsView,.expanded #settingsView{display:none!important}
   .expanded main{grid-template-columns:1fr;grid-template-areas:"chart"}
 }
 @media(min-width:1024px){
@@ -185,7 +185,7 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
   #splitL{left:calc(var(--wl-w) - 4px)}#splitR{right:calc(var(--side-w) - 4px)}
   .split-btn{position:absolute;top:50%;left:-3px;transform:translateY(-50%);width:16px;height:44px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:14px;line-height:1;opacity:0;transition:opacity .15s;cursor:pointer}
   .splitter:hover .split-btn,.splitter.collapsed .split-btn{opacity:1}
-  body.wl-off #watchView,body.side-off #indicatorView,body.side-off #settingsView,body.side-off #alertsView{display:none!important}
+  body.wl-off #watchView,body.side-off #newsView,body.side-off #aiView,body.side-off #settingsView,body.side-off #alertsView{display:none!important}
   body.wl-off #splitL{left:0}body.side-off #splitR{right:0}
 }
 

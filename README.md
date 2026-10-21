@@ -92,3 +92,9 @@ Arrastra el borde entre *Seguimiento* y el gráfico, o entre el gráfico y *Indi
 ## Ajustes por indicador desde la leyenda
 - El ⚙ junto al nombre de cada indicador abre **solo la configuración de ese indicador** (sin abrir la lista): parámetros y color en EMA/SMA/WMA, Bollinger, RSI, MACD, Estocástico, ATR, Supertrend, VWAP y OBV; Nova Nexus y los scripts de Pine abren su propia ventana. También hay ⚙ en cada fila de «Comunes». Las alertas con indicadores estándar siguen usando los valores clásicos.
 - Si un script Pine falla por tiempo, se reintenta una vez solo; en «Mis indicadores» la tarjeta muestra el error y un botón «↻ Reintentar».
+
+## Catálogo integrado, colores y panel derecho
+- **Nova Nexus (Pine completo), Nova Oscillator y Nova Screener viven en la página** (`catalog/` → `catalog.js`): aparecen en Indicadores → Mis indicadores sin subir nada y **no se guardan en tu cuenta** (ya no sale «el script no quedó guardado»). Las copias que habías pegado antes se reemplazan solas por las integradas conservando tus ajustes.
+- El panel derecho ya no lleva indicadores: ahora son **Noticias** e **IA** (próximamente), Alertas y Ajustes. Los indicadores se abren con el botón «ƒx Indicadores» sobre el gráfico.
+- ⚙ de indicadores nativos: color **y opacidad**, grosor y estilo de línea (EMA/SMA/WMA/Bollinger/VWAP), relleno de Bollinger, niveles del RSI y del Estocástico, colores de MACD y Supertrend, colores del volumen. Nova Nexus nativo: sección «🎨 Colores y opacidad» (EMA Cloud, Smooth Trail, Reversal Bands, Soporte/Resistencia, Volume Profile).
+- El convertidor de Pine muestra siempre **todas** las entradas del script (p. ej. 233 en el Nova Nexus) y la pestaña Estilo con tipo, grosor, color y opacidad de cada línea, relleno, forma y objeto.

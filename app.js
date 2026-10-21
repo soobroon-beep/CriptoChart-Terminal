@@ -37,30 +37,33 @@ function sanChartStyle(c) {
   return o;
 }
 const STD_SCHEMA = {
-  ema20: [['len', 'Período', 'int', 20, 1, 500], ['color', 'Color', 'color', '#f5c568']], ema50: [['len', 'Período', 'int', 50, 1, 500], ['color', 'Color', 'color', '#6ca5f9']],
-  sma200: [['len', 'Período', 'int', 200, 1, 1000], ['color', 'Color', 'color', '#b58dff']], wma20: [['len', 'Período', 'int', 20, 1, 500], ['color', 'Color', 'color', '#4dd0e1']],
-  bollinger: [['len', 'Período', 'int', 20, 2, 500], ['mult', 'Desviaciones', 'float', 2, .1, 10], ['color', 'Color', 'color', '#748bab']],
-  rsi: [['len', 'Período', 'int', 14, 2, 200], ['color', 'Color', 'color', '#bb9cff']],
-  macd: [['fast', 'Rápida', 'int', 12, 1, 200], ['slow', 'Lenta', 'int', 26, 2, 400], ['sig', 'Señal', 'int', 9, 1, 100]],
-  stoch: [['k', 'Longitud %K', 'int', 14, 1, 200], ['ks', 'Suavizado %K', 'int', 3, 1, 50], ['d', 'Suavizado %D', 'int', 3, 1, 50]],
-  atr: [['len', 'Período', 'int', 14, 1, 200], ['color', 'Color', 'color', '#e07b53']],
-  supertrend: [['len', 'Período ATR', 'int', 10, 1, 200], ['factor', 'Factor', 'float', 3, .1, 20]],
-  vwap: [['color', 'Color', 'color', '#ff8a65']], obv: [['color', 'Color', 'color', '#2ec4b6']]
+  ema20: [['len', 'Período', 'int', 20, 1, 500], ['color', 'Color y opacidad', 'color', '#f5c568'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]], ema50: [['len', 'Período', 'int', 50, 1, 500], ['color', 'Color y opacidad', 'color', '#6ca5f9'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]],
+  sma200: [['len', 'Período', 'int', 200, 1, 1000], ['color', 'Color y opacidad', 'color', '#b58dff'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]], wma20: [['len', 'Período', 'int', 20, 1, 500], ['color', 'Color y opacidad', 'color', '#4dd0e1'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]],
+  bollinger: [['len', 'Período', 'int', 20, 2, 500], ['mult', 'Desviaciones', 'float', 2, .1, 10], ['color', 'Color y opacidad', 'color', '#748bab'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Guiones', 0, 0, ['Sólida', 'Guiones', 'Puntos']], ['fill', 'Relleno entre bandas', 'color', '#748bab00']],
+  rsi: [['len', 'Período', 'int', 14, 2, 200], ['color', 'Color y opacidad', 'color', '#bb9cff'], ['width', 'Grosor', 'int', 2, 1, 6], ['ob', 'Nivel sobrecompra', 'int', 70, 50, 100], ['os', 'Nivel sobreventa', 'int', 30, 0, 50]],
+  macd: [['fast', 'Rápida', 'int', 12, 1, 200], ['slow', 'Lenta', 'int', 26, 2, 400], ['sig', 'Señal', 'int', 9, 1, 100], ['cLine', 'Color línea MACD', 'color', '#548fff'], ['cSig', 'Color señal', 'color', '#f5a623'], ['hUp', 'Histograma positivo', 'color', '#20bf9f'], ['hDn', 'Histograma negativo', 'color', '#f06b79'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  stoch: [['k', 'Longitud %K', 'int', 14, 1, 200], ['ks', 'Suavizado %K', 'int', 3, 1, 50], ['d', 'Suavizado %D', 'int', 3, 1, 50], ['cK', 'Color %K', 'color', '#548fff'], ['cD', 'Color %D', 'color', '#f5a623'], ['lo', 'Nivel inferior', 'int', 20, 0, 50], ['hi', 'Nivel superior', 'int', 80, 50, 100], ['width', 'Grosor', 'int', 1, 1, 6]],
+  atr: [['len', 'Período', 'int', 14, 1, 200], ['color', 'Color y opacidad', 'color', '#e07b53'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  supertrend: [['len', 'Período ATR', 'int', 10, 1, 200], ['factor', 'Factor', 'float', 3, .1, 20], ['up', 'Color alcista', 'color', '#20bf9f'], ['down', 'Color bajista', 'color', '#f06b79'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  vwap: [['color', 'Color y opacidad', 'color', '#ff8a65'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]], obv: [['color', 'Color y opacidad', 'color', '#2ec4b6'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  volume: [['up', 'Color alcista y opacidad', 'color', '#20bf9faa'], ['down', 'Color bajista y opacidad', 'color', '#f06b79aa']]
 };
 const sp = (key, name) => { const v = state.stdParams && state.stdParams[key] && state.stdParams[key][name]; if (v !== undefined) return v; const e = (STD_SCHEMA[key] || []).find(x => x[0] === name); return e ? e[3] : undefined; };
 function sanStdParams(p) {
   const o = {}; if (!p || typeof p !== 'object' || Array.isArray(p)) return o;
   for (const key of Object.keys(STD_SCHEMA)) { const src = p[key]; if (!src || typeof src !== 'object') continue; const q = {};
-    for (const [nm, , type, def, mn, mx] of STD_SCHEMA[key]) { const v = src[nm]; if (type === 'color') { if (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) && v !== def) q[nm] = v; } else if (Number.isFinite(v)) { const x = type === 'int' ? Math.round(v) : v; if (x >= mn && x <= mx && x !== def) q[nm] = x; } }
+    for (const [nm, , type, def, mn, mx, opts] of STD_SCHEMA[key]) { const v = src[nm]; if (type === 'color') { if (typeof v === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(v) && v !== def) q[nm] = v; } else if (type === 'string') { if (typeof v === 'string' && opts && opts.includes(v) && v !== def) q[nm] = v; } else if (Number.isFinite(v)) { const x = type === 'int' ? Math.round(v) : v; if (x >= mn && x <= mx && x !== def) q[nm] = x; } }
     if (Object.keys(q).length) o[key] = q; }
   return o;
 }
+const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
+const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
 const cstyle = () => Object.assign({}, CHART_DEF, state.chartStyle || {});
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
   if (!o.drawings || typeof o.drawings !== 'object' || Array.isArray(o.drawings)) o.drawings = {};
-  o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 60)) : {};
+  o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
   o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
@@ -112,7 +115,7 @@ function setSide(id) {
 }
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
-    if (id === 'indicatorView' || id === 'settingsView' || id === 'alertsView') { setSide(id); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
+    if (id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView') { setSide(id); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
     id = 'chartView';
   }
   currentView = id;
@@ -130,7 +133,7 @@ $$('.bottom-nav button').forEach(b => b.addEventListener('click', () => switchVi
 $('#settingsBtn').onclick = () => switchView('settingsView');
 $$('.side-tabs button').forEach(b => b.addEventListener('click', () => setSide(b.dataset.side)));
 function onLayoutChange() {
-  if (isDesktop()) { setSide(document.body.dataset.side || 'indicatorView'); switchView('chartView'); }
+  if (isDesktop()) { setSide(document.body.dataset.side || 'newsView'); switchView('chartView'); }
   else { delete document.body.dataset.side; document.body.classList.remove('expanded'); switchView('watchView'); }
   requestAnimationFrame(() => { if (candles.length) { visible = defaultVisible(); pan = 0; } render(); });
 }
@@ -600,6 +603,23 @@ const NOVA_SCHEMA = [
   {key: 'minScore', title: 'Score mínimo para mostrar señal', type: 'int', def: 1, min: 1, max: 5, group: '⚡ IA Signals — Score'},
   {key: 'cooldown', title: 'Velas mínimas entre señales', type: 'int', def: 10, min: 0, max: 200, group: '⚡ IA Signals — Cooldown'},
   {key: 'cdBoth', title: 'Cooldown compartido (BUY y SELL)', type: 'bool', def: false, group: '⚡ IA Signals — Cooldown'},
+  {key: 'cloudBull', title: 'EMA Cloud alcista', type: 'color', def: '#8c9bb933', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'cloudBear', title: 'EMA Cloud bajista', type: 'color', def: '#78828c33', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'cloudEdge', title: 'EMA Cloud bordes', type: 'color', def: '#c8d2e64d', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'trailBull', title: 'Smooth Trail alcista', type: 'color', def: '#119c7e', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'trailBear', title: 'Smooth Trail bajista', type: 'color', def: '#7c3cf3', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'revUp', title: 'Reversal Bands superior', type: 'color', def: '#f23645', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'revDn', title: 'Reversal Bands inferior', type: 'color', def: '#089981', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'revOp', title: 'Reversal Bands · opacidad %', type: 'int', def: 100, min: 0, max: 200, group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'srSup', title: 'Soporte', type: 'color', def: '#ff5252', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'srRes', title: 'Resistencia', type: 'color', def: '#089981', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'srOp', title: 'Soporte/Resistencia · opacidad %', type: 'int', def: 100, min: 0, max: 300, group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'vpHvc', title: 'Volume Profile · nodo de alto volumen', type: 'color', def: '#ffeb3b80', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'vpAvc', title: 'Volume Profile · nodo promedio', type: 'color', def: '#2962ff80', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'vpLvc', title: 'Volume Profile · nodo de bajo volumen', type: 'color', def: '#f2364580', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'vpBlc', title: 'Volume Profile · compras', type: 'color', def: '#26a69aff', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'vpBrc', title: 'Volume Profile · ventas', type: 'color', def: '#ef5350ff', group: '🎨 COLORES Y OPACIDAD'},
+  {key: 'vpOp', title: 'Volume Profile · opacidad %', type: 'int', def: 100, min: 0, max: 100, group: '🎨 COLORES Y OPACIDAD'},
   {key: 'strat', title: 'Estrategia', type: 'string', def: 'Ninguna (usar módulos)', options: Object.keys(NOVA_STRATS), group: '📱 ESTRATEGIAS', tooltip: 'Como en el Pine original: Mobile / Cloud / SMC activan un conjunto fijo de módulos y desactivan el resto. «Ninguna» devuelve tus módulos.'},
   {key: 'rulesText', title: 'Texto de Reglas', type: 'string', def: '', group: '📋 REGLAS', tooltip: 'Una regla por línea separada con «|». Vacío = reglas por defecto.'}
 ];
@@ -931,10 +951,10 @@ function render() { renderCore(); syncLegend(); }
 })();
 function openStdDialog(key) {
   const meta = indicatorMeta.find(m => m[0] === key), schema = STD_SCHEMA[key];
-  if (key === 'volume' || key === 'cross' || !schema) { if (key === 'volume') { openChartStyle(); toast('El volumen usa los colores de las velas (🎨 Aspecto)'); } else toast('Este indicador no tiene parámetros'); return; }
-  const inputs = schema.map(([nm, title, type, def, mn, mx]) => ({key: nm, title, type, def, min: mn, max: mx, value: sp(key, nm), group: 'PARÁMETROS'}));
+  if (!schema) { toast('Este indicador no tiene parámetros'); return; }
+  const inputs = schema.map(([nm, title, type, def, mn, mx, opts]) => Object.assign({key: nm, title, type, def, min: mn, max: mx, value: sp(key, nm), group: type === 'color' || nm === 'width' || nm === 'dash' ? 'ESTILO' : 'PARÁMETROS'}, opts ? {options: opts} : {}));
   CCTSettings.open({title: meta ? meta[1] : key, tabs: ['in'], note: 'Parámetros del indicador. Las alertas con este indicador siguen usando los valores clásicos.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
-    const q = {}; for (const i of inputs) { let v = res.inputs[i.key]; if (v === undefined) continue; if (i.type !== 'color') { v = +v; if (!Number.isFinite(v)) continue; v = Math.max(i.min, Math.min(i.max, v)); if (i.type === 'int') v = Math.round(v); } if (v !== i.def) q[i.key] = v; }
+    const q = {}; for (const i of inputs) { let v = res.inputs[i.key]; if (v === undefined) continue; if (i.type === 'string') { if (!i.options.includes(v) || v === i.def) continue; } else if (i.type !== 'color') { v = +v; if (!Number.isFinite(v)) continue; v = Math.max(i.min, Math.min(i.max, v)); if (i.type === 'int') v = Math.round(v); } if (v !== i.def) q[i.key] = v; }
     const sps = Object.assign({}, state.stdParams); if (Object.keys(q).length) sps[key] = q; else delete sps[key]; state.stdParams = sanStdParams(sps);
     save(); if (candles.length) recalc(); scheduleRender(); toast('Configuración aplicada');
   }});
@@ -961,7 +981,7 @@ function renderCore() {
   const {w, h} = setupCanvas();
   const css = getComputedStyle(document.body);
   const text = css.getPropertyValue('--muted').trim(), line = css.getPropertyValue('--line').trim(), bg = css.getPropertyValue('--bg').trim(), drawCol = css.getPropertyValue('--draw').trim() || '#e9c36e', fg = css.getPropertyValue('--text').trim();
-  const CS = cstyle(), up = CS.up, down = CS.down;
+  syncNovaCols(); const CS = cstyle(), up = CS.up, down = CS.down;
   g.clearRect(0, 0, w, h); if (CS.bg) { g.fillStyle = CS.bg; g.fillRect(0, 0, w, h); }
   const gridCol = CS.grid || line; grips = [];
   const n = candles.length; if (!n) { geo = null; return; }
@@ -995,13 +1015,13 @@ function renderCore() {
   const pineOff = [];
   for (const {r} of pOver) { const c = CCTPineDraw.contrib(r, lo, hi, min, max); if (Number.isFinite(c.min)) { min = Math.min(min, c.min); max = Math.max(max, c.max); } pineOff.push(...c.off); }
   const overlays = [];
-  if (state.indicators.ema20) overlays.push([`EMA ${sp('ema20', 'len')}`, ind.ema20, sp('ema20', 'color'), false, 'ema20']);
-  if (state.indicators.ema50) overlays.push([`EMA ${sp('ema50', 'len')}`, ind.ema50, sp('ema50', 'color'), false, 'ema50']);
-  if (state.indicators.sma200) overlays.push([`SMA ${sp('sma200', 'len')}`, ind.sma200, sp('sma200', 'color'), false, 'sma200']);
-  if (state.indicators.wma20 && ind.wma20) overlays.push([`WMA ${sp('wma20', 'len')}`, ind.wma20, sp('wma20', 'color'), false, 'wma20']);
-  if (state.indicators.vwap && ind.vwap) overlays.push(['VWAP', ind.vwap, sp('vwap', 'color'), false, 'vwap']);
-  if (state.indicators.supertrend && ind.stUp) overlays.push(['Supertrend ↑', ind.stUp, '#20bf9f'], ['Supertrend ↓', ind.stDn, '#f06b79']);
-  if (state.indicators.bollinger) overlays.push(['BB sup', ind.bbU, sp('bollinger', 'color'), true, 'bollinger'], ['BB inf', ind.bbL, sp('bollinger', 'color'), true]);
+  if (state.indicators.ema20) overlays.push([`EMA ${sp('ema20', 'len')}`, ind.ema20, sp('ema20', 'color'), false, 'ema20', lineSty('ema20')]);
+  if (state.indicators.ema50) overlays.push([`EMA ${sp('ema50', 'len')}`, ind.ema50, sp('ema50', 'color'), false, 'ema50', lineSty('ema50')]);
+  if (state.indicators.sma200) overlays.push([`SMA ${sp('sma200', 'len')}`, ind.sma200, sp('sma200', 'color'), false, 'sma200', lineSty('sma200')]);
+  if (state.indicators.wma20 && ind.wma20) overlays.push([`WMA ${sp('wma20', 'len')}`, ind.wma20, sp('wma20', 'color'), false, 'wma20', lineSty('wma20')]);
+  if (state.indicators.vwap && ind.vwap) overlays.push(['VWAP', ind.vwap, sp('vwap', 'color'), false, 'vwap', lineSty('vwap')]);
+  if (state.indicators.supertrend && ind.stUp) overlays.push(['Supertrend ↑', ind.stUp, sp('supertrend', 'up'), false, null, {w: sp('supertrend', 'width'), d: []}], ['Supertrend ↓', ind.stDn, sp('supertrend', 'down'), false, null, {w: sp('supertrend', 'width'), d: []}]);
+  if (state.indicators.bollinger) overlays.push(['BB sup', ind.bbU, sp('bollinger', 'color'), false, 'bollinger', lineSty('bollinger')], ['BB inf', ind.bbL, sp('bollinger', 'color'), false, null, lineSty('bollinger')]);
   for (const [, arr] of overlays) for (let i = lo; i < hi; i++) if (arr[i] != null) { if (arr[i] < min) min = arr[i]; if (arr[i] > max) max = arr[i]; }
   if (state.indicators.nnTrail && ind.trail) for (let i = lo; i < hi; i++) { const v = ind.trail.trail[i]; if (v != null) { if (v < min) min = v; if (v > max) max = v; } }
   const nn = ind.nn;
@@ -1054,8 +1074,9 @@ function renderCore() {
     else { g.fillStyle = col; g.fillRect(xx - barW / 2, Math.min(yo, yc), barW, Math.max(1, Math.abs(yo - yc))); if (custom && bd !== col) { g.strokeStyle = bd; g.strokeRect(xx - barW / 2 + .5, Math.min(yo, yc) + .5, Math.max(1, barW - 1), Math.max(1, Math.abs(yo - yc) - 1)); } }
   }
   // medias y bandas
-  for (const [, arr, col, dashed] of overlays) {
-    g.strokeStyle = col; g.lineWidth = 1.4; g.setLineDash(dashed ? [4, 3] : []); g.beginPath();
+  if (state.indicators.bollinger && ind.bbU && sp('bollinger', 'fill') !== '#748bab00') fillBetween(ind.bbU, ind.bbL, lo, hi, sp('bollinger', 'fill'), 1);
+  for (const [, arr, col, , , sty] of overlays) {
+    g.strokeStyle = col; g.lineWidth = sty ? sty.w : 1.4; g.setLineDash(sty ? sty.d : []); g.beginPath();
     let on = false;
     for (let i = lo; i < hi; i++) { if (arr[i] == null) { on = false; continue; } const xx = X(i), yy = Y(arr[i]); if (!on) { g.moveTo(xx, yy); on = true; } else g.lineTo(xx, yy); }
     g.stroke(); g.setLineDash([]);
@@ -1110,7 +1131,7 @@ function renderCore() {
     for (let i = lo; i < hi; i++) maxV = Math.max(maxV, candles[i].v);
     g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.volTop); g.lineTo(w - right + 2, geo.volTop); g.stroke();
     g.fillStyle = text; g.fillText('VOL', left + 4, top + 9); legAt('VOL', left + 4, top + 9, {t: 'std', key: 'volume'});
-    for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = (d.c >= d.o ? up : down) + 'aa'; const bh = Math.max(1, d.v / maxV * height); g.fillRect(X(i) - barW / 2, top + height - bh, barW, bh); }
+    for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#20bf9faa' ? up + 'aa' : sp('volume', 'up')) : (sp('volume', 'down') === '#f06b79aa' ? down + 'aa' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * height); g.fillRect(X(i) - barW / 2, top + height - bh, barW, bh); }
   }
   // RSI
   if (rsiH) {
@@ -1119,9 +1140,9 @@ function renderCore() {
     const lastR = [...ind.rsi].reverse().find(x => x != null);
     { const tx = `RSI ${sp('rsi', 'len')}  ${lastR != null ? lastR.toFixed(1) : '—'}`; g.fillStyle = text; g.fillText(tx, left + 4, top + 9); legAt(tx, left + 4, top + 9, {t: 'std', key: 'rsi'}); }
     g.setLineDash([2, 3]);
-    for (const r of [30, 70]) { const yy = top + (100 - r) / 100 * height; g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
+    for (const r of [sp('rsi', 'os'), sp('rsi', 'ob')]) { const yy = top + (100 - r) / 100 * height; g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
     g.setLineDash([]);
-    g.strokeStyle = sp('rsi', 'color'); g.lineWidth = 1.5; g.beginPath(); let on = false;
+    g.strokeStyle = sp('rsi', 'color'); g.lineWidth = sp('rsi', 'width'); g.beginPath(); let on = false;
     for (let i = lo; i < hi; i++) { const v = ind.rsi[i]; if (v == null) { on = false; continue; } const yy = top + (100 - v) / 100 * height; if (!on) { g.moveTo(X(i), yy); on = true; } else g.lineTo(X(i), yy); }
     g.stroke();
   }
@@ -1155,7 +1176,7 @@ function renderCore() {
 function drawSubPanel(key, top0, H, lo, hi, o) {
   const {left, w, right, line, text} = o, top = top0 + 4, height = H - 10, fmtV = v => v == null ? '—' : Math.abs(v) >= 1000 ? v.toLocaleString('en-US', {maximumFractionDigits: 0}) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(6);
   const D = ind[key]; if (!D) return;
-  const series = key === 'macd' ? [[D.line, '#548fff'], [D.signal, '#f5a623']] : key === 'stoch' ? [[D.k, '#548fff'], [D.d, '#f5a623']] : [[D, key === 'atr' ? sp('atr', 'color') : sp('obv', 'color')]];
+  const series = key === 'macd' ? [[D.line, sp('macd', 'cLine')], [D.signal, sp('macd', 'cSig')]] : key === 'stoch' ? [[D.k, sp('stoch', 'cK')], [D.d, sp('stoch', 'cD')]] : [[D, key === 'atr' ? sp('atr', 'color') : sp('obv', 'color')]];
   const hist = key === 'macd' ? D.hist : null;
   let mn = Infinity, mx = -Infinity;
   const take = arr => { for (let i = lo; i < hi; i++) { const v = arr[i]; if (v != null) { if (v < mn) mn = v; if (v > mx) mx = v; } } };
@@ -1173,14 +1194,15 @@ function drawSubPanel(key, top0, H, lo, hi, o) {
   { const tx = `${label}  ${series.map(([a]) => fmtV(last(a))).join('  ')}`; g.fillStyle = text; g.fillText(tx, left + 4, top + 9); legAt(tx, left + 4, top + 9, {t: 'std', key}); }
   if (key === 'stoch') {
     g.setLineDash([2, 3]);
-    for (const r of [20, 80]) { const yy = Yp(r); g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
+    for (const r of [sp('stoch', 'lo'), sp('stoch', 'hi')]) { const yy = Yp(r); g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
     g.setLineDash([]);
   } else if (key === 'macd') {
     const y0 = Yp(0); g.setLineDash([2, 3]); g.strokeStyle = line; g.beginPath(); g.moveTo(left, y0); g.lineTo(w - right, y0); g.stroke(); g.setLineDash([]);
     const bw = clamp(geo.step * .6, 1, 12);
-    for (let i = lo; i < hi; i++) { const v = hist[i]; if (v == null) continue; const pv = i > 0 ? hist[i - 1] : null; g.fillStyle = v >= 0 ? (pv != null && v < pv ? '#1b8c7899' : '#20bf9fcc') : (pv != null && v > pv ? '#d45a6a99' : '#f06b79cc'); g.fillRect(X(i) - bw / 2, Math.min(y0, Yp(v)), bw, Math.max(1, Math.abs(Yp(v) - y0))); }
+    for (let i = lo; i < hi; i++) { const v = hist[i]; if (v == null) continue; const pv = i > 0 ? hist[i - 1] : null; g.globalAlpha = (v >= 0 ? (pv != null && v < pv) : (pv != null && v > pv)) ? .55 : .85; g.fillStyle = v >= 0 ? sp('macd', 'hUp') : sp('macd', 'hDn'); g.fillRect(X(i) - bw / 2, Math.min(y0, Yp(v)), bw, Math.max(1, Math.abs(Yp(v) - y0))); }
+    g.globalAlpha = 1;
   } else { g.fillStyle = text; g.fillText(fmtV(mx), w - right + 6, top + 9); g.fillText(fmtV(mn), w - right + 6, top + height); }
-  g.lineWidth = 1.4;
+  g.lineWidth = sp(key, 'width') || 1.4;
   for (const [a, col] of series) {
     g.strokeStyle = col; g.beginPath(); let on = false;
     for (let i = lo; i < hi; i++) { const v = a[i]; if (v == null) { on = false; continue; } if (!on) { g.moveTo(X(i), Yp(v)); on = true; } else g.lineTo(X(i), Yp(v)); }
@@ -1194,6 +1216,7 @@ function drawNovaCloud(nn, lo, hi, css) {
   const light = document.body.classList.contains('light');
   const bullFill = light ? 'rgba(70,95,150,.16)' : 'rgba(140,155,185,.20)', bearFill = light ? 'rgba(110,110,125,.16)' : 'rgba(120,125,140,.20)';
   const edge = light ? 'rgba(30,40,60,.35)' : 'rgba(200,210,230,.30)';
+  const cB = novaP('cloudBull'), cR = novaP('cloudBear'), cE = novaP('cloudEdge'), dB = novaDef('cloudBull'), dR = novaDef('cloudBear'), dE = novaDef('cloudEdge');
   // relleno por tramos del mismo color (alcista/bajista)
   let i = lo;
   while (i < hi) {
@@ -1204,10 +1227,10 @@ function drawNovaCloud(nn, lo, hi, css) {
     g.beginPath(); g.moveTo(X(a), Y(nn.emaTop[a]));
     for (let k = a + 1; k <= j; k++) g.lineTo(X(k), Y(nn.emaTop[k]));
     for (let k = j; k >= a; k--) g.lineTo(X(k), Y(nn.emaBot[k]));
-    g.closePath(); g.fillStyle = bull ? bullFill : bearFill; g.fill();
+    g.closePath(); g.fillStyle = bull ? (cB !== dB ? cB : bullFill) : (cR !== dR ? cR : bearFill); g.fill();
     i = j + 1;
   }
-  g.strokeStyle = edge; g.lineWidth = 1; g.setLineDash([]);
+  g.strokeStyle = cE !== dE ? cE : edge; g.lineWidth = 1; g.setLineDash([]);
   for (const arr of [nn.emaTop, nn.emaBot]) {
     g.beginPath(); let on = false;
     for (let k = lo; k < hi; k++) { const v = arr[k]; if (!Number.isFinite(v)) { on = false; continue; } if (!on) { g.moveTo(X(k), Y(v)); on = true; } else g.lineTo(X(k), Y(v)); }
@@ -1217,6 +1240,9 @@ function drawNovaCloud(nn, lo, hi, css) {
 
 /* ───────── Nova Nexus: Smooth Trail y Reversal Bands ───────── */
 const TRAIL_COL = {bull: '#119c7e', bear: '#7c3cf3'}, REV_COL = {up: '#f23645', dn: '#089981'};
+const hexArr = h => { const m = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(h || ''); return m ? [parseInt(m[1].slice(0, 2), 16), parseInt(m[1].slice(2, 4), 16), parseInt(m[1].slice(4, 6), 16), m[2] ? parseInt(m[2], 16) / 255 : 1] : [128, 128, 128, 1]; };
+function syncNovaCols() { TRAIL_COL.bull = novaP('trailBull'); TRAIL_COL.bear = novaP('trailBear'); REV_COL.up = novaP('revUp'); REV_COL.dn = novaP('revDn'); SR_COL.sup = novaP('srSup'); SR_COL.res = novaP('srRes'); }
+function vpPal(vp) { const o = {HVC: 'vpHvc', AVC: 'vpAvc', LVC: 'vpLvc', BLC: 'vpBlc', BRC: 'vpBrc'}, k = novaP('vpOp') / 100, m = new Map(), C = {}; for (const n in o) { const c = hexArr(novaP(o[n])); c[3] *= k; C[n] = c; m.set(vp.colors[n], c); } return {C, map: c => m.get(c) || c}; }
 function fillBetween(top, bot, lo, hi, color, alpha) { // relleno entre dos series por tramos continuos
   g.fillStyle = color; g.globalAlpha = alpha;
   let i = lo;
@@ -1229,8 +1255,9 @@ function fillBetween(top, bot, lo, hi, color, alpha) { // relleno entre dos seri
   g.globalAlpha = 1;
 }
 function drawNovaRev(r, lo, hi) { // bandas 6-7 (suave) y 7-8 (fuerte), como los fill del Pine
-  fillBetween(r.up[0], r.up[1], lo, hi, REV_COL.up, .2); fillBetween(r.up[1], r.up[2], lo, hi, REV_COL.up, .5);
-  fillBetween(r.dn[2], r.dn[1], lo, hi, REV_COL.dn, .5); fillBetween(r.dn[1], r.dn[0], lo, hi, REV_COL.dn, .2);
+  const ro = novaP('revOp') / 100;
+  fillBetween(r.up[0], r.up[1], lo, hi, REV_COL.up, Math.min(1, .2 * ro)); fillBetween(r.up[1], r.up[2], lo, hi, REV_COL.up, Math.min(1, .5 * ro));
+  fillBetween(r.dn[2], r.dn[1], lo, hi, REV_COL.dn, Math.min(1, .5 * ro)); fillBetween(r.dn[1], r.dn[0], lo, hi, REV_COL.dn, Math.min(1, .2 * ro));
 }
 function drawNovaTrailFill(t, lo, hi) {
   let i = lo;
@@ -1259,12 +1286,13 @@ function fmtVolPine(v) { // aproxima format.volume: 1.23K · 4.5M · 2B
   return sg + (a >= 1e12 ? t(a / 1e12) + 'T' : a >= 1e9 ? t(a / 1e9) + 'B' : a >= 1e6 ? t(a / 1e6) + 'M' : a >= 1e3 ? t(a / 1e3) + 'K' : t(a));
 }
 function drawNovaVPZone(vp) { // zona del POC (Last(Zone)): caja y línea punteada sobre las velas del perfil
-  const C = vp.colors, x1 = X(vp.from), x2 = X(vp.to), yT = Y(vp.pocTop), yB = Y(vp.pocBot), yc = Y(vp.pocPrice);
+  const C = vpPal(vp).C, x1 = X(vp.from), x2 = X(vp.to), yT = Y(vp.pocTop), yB = Y(vp.pocBot), yc = Y(vp.pocPrice);
   g.fillStyle = rgbaOf(C.HVC, .27); g.fillRect(x1, yT, x2 - x1, yB - yT);
   g.strokeStyle = rgbaOf(C.HVC); g.lineWidth = 1; g.setLineDash([]); g.strokeRect(x1, yT, x2 - x1, yB - yT);
   g.setLineDash([1, 3]); g.beginPath(); g.moveTo(x1, yc); g.lineTo(x2, yc); g.stroke(); g.setLineDash([]);
 }
-function drawNovaVP(vp, fg) { // columnas del perfil: sentimiento | precios | volumen, en el margen derecho (mismo orden que el Pine)
+function drawNovaVP(vp, fg) {
+  const pal = vpPal(vp); // columnas del perfil: sentimiento | precios | volumen, en el margen derecho (mismo orden que el Pine)
   const G = geo.gutter, x0 = geo.left + geo.plotW, small = geo.w < 480;
   const Wp = clamp(Math.round(G * .30), 38, 56), R = G - Wp - 8, Ws = Math.round(R * .42), Wv = R - Ws;
   const sb = x0 + 4 + Ws, pc = sb + 1, vb = pc + Wp; // base del sentimiento (crece a la izquierda), columna de precios, base del volumen (crece a la derecha)
@@ -1282,13 +1310,13 @@ function drawNovaVP(vp, fg) { // columnas del perfil: sentimiento | precios | vo
     // volumen (hacia la derecha)
     const wv = r.lpm * Wv;
     if (wv >= .5) {
-      g.fillStyle = rgbaOf(r.vcol); g.fillRect(vb, yT, wv, h); g.strokeStyle = rgbaOf(r.vcol); g.strokeRect(vb, yT, wv, h);
+      g.fillStyle = rgbaOf(pal.map(r.vcol)); g.fillRect(vb, yT, wv, h); g.strokeStyle = rgbaOf(pal.map(r.vcol)); g.strokeRect(vb, yT, wv, h);
       if (tall) { const full = `${fmtVolPine(r.quote)} USDT ${pctTxt(r.pct)}`, txt = fits(full, wv) ? full : fits(pctTxt(r.pct), wv) ? pctTxt(r.pct) : ''; if (txt) { g.fillStyle = fg; g.textAlign = 'left'; g.fillText(txt, vb + 3, ty); } }
     }
     // sentimiento (hacia la izquierda)
     const ws = r.dpm * Ws;
     if (r.scol && ws >= .5) {
-      g.fillStyle = rgbaOf(r.scol); g.fillRect(sb - ws, yT, ws, h); g.strokeStyle = rgbaOf(r.scol); g.strokeRect(sb - ws, yT, ws, h);
+      g.fillStyle = rgbaOf(pal.map(r.scol)); g.fillRect(sb - ws, yT, ws, h); g.strokeStyle = rgbaOf(pal.map(r.scol)); g.strokeRect(sb - ws, yT, ws, h);
       if (tall) { const full = `${fmtVolPine(r.bbp)} ${pctTxt(r.bpct)}`, txt = fits(full, ws) ? full : fits(pctTxt(r.bpct), ws) ? pctTxt(r.bpct) : ''; if (txt) { g.fillStyle = fg; g.textAlign = 'right'; g.fillText(txt, sb - 3, ty); } }
     }
   }
@@ -1337,7 +1365,7 @@ function drawNovaSRBoxes(sr, lo, hi) {
   for (const b of sr.boxes) {
     if (b.right < lo - 1 || b.left > hi + 1) continue;
     const x1 = X(b.left), x2 = X(b.right), yT = Y(b.top), yB = Y(b.bot), h = Math.max(1, yB - yT);
-    g.fillStyle = SR_COL[b.kind]; g.globalAlpha = .1; g.fillRect(x1, yT, x2 - x1, h); g.globalAlpha = 1;
+    g.fillStyle = SR_COL[b.kind]; g.globalAlpha = Math.min(1, .1 * novaP('srOp') / 100); g.fillRect(x1, yT, x2 - x1, h); g.globalAlpha = 1;
     g.strokeStyle = SR_COL[b.kind]; g.setLineDash([1, 3]); g.strokeRect(x1, yT, x2 - x1, h); g.setLineDash([]);
   }
 }
@@ -1670,17 +1698,20 @@ document.addEventListener('keydown', e => {
 const SCRIPTS_KEY = 'cct_scripts_v1', SCRIPTS_MAX = 600 * 1024;
 const scriptsKey = () => uid ? `${SCRIPTS_KEY}_${uid}` : SCRIPTS_KEY;
 const readScripts = () => { const o = readLocal(scriptsKey()); return Array.isArray(o.items) ? o.items : []; };
-let scripts = readScripts(), viewScriptId = null, scriptsRemote = '', scriptsTimer = 0;
+const catalogScripts = () => (window.CCTCatalog || []).map(c => ({id: 'cat:' + c.id, name: c.name, code: c.code, size: 0, lines: c.code.split('\n').length, addedAt: 0, builtin: true}));
+const withCatalog = arr => catalogScripts().concat((Array.isArray(arr) ? arr : []).filter(x => x && !x.builtin && !String(x.id).startsWith('cat:')));
+const userScripts = () => scripts.filter(x => !x.builtin);
+let scripts = withCatalog(readScripts()), viewScriptId = null, scriptsRemote = '', scriptsTimer = 0;
 const scriptsBytes = arr => arr.reduce((a, x) => a + (x.size || 0), 0);
 function saveScripts() {
-  try { localStorage.setItem(scriptsKey(), JSON.stringify({items: scripts})); } catch { toast('No se pudo guardar en este dispositivo (almacenamiento lleno)'); }
+  try { localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); } catch { toast('No se pudo guardar en este dispositivo (almacenamiento lleno)'); }
   pushScripts();
 }
 function pushScripts() {
   if (!uid || !db || !fbUser) return;
   clearTimeout(scriptsTimer);
   scriptsTimer = setTimeout(async () => {
-    const str = JSON.stringify(scripts); if (str === scriptsRemote) return; scriptsRemote = str;
+    const str = JSON.stringify(userScripts()); if (str === scriptsRemote) return; scriptsRemote = str;
     try { await db.doc(`users/${uid}/data/scripts`).set({items: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); }
     catch { scriptsRemote = ''; toast('No se pudieron guardar los scripts en tu cuenta'); }
   }, 1200);
@@ -1696,8 +1727,18 @@ function addScript(code, fallbackName) {
   scripts.push({id: sid, name: (m ? m[1] : fallbackName || 'Script').slice(0, 80), code, size, lines: code.split('\n').length, addedAt: Date.now()});
   saveScripts(); renderScripts(); toast('Script guardado'); return sid;
 }
+function migrateCatalog() { // copias antiguas (pegadas a mano) de los scripts incluidos: pasan a la versión integrada, sin tocar sus ajustes
+  const cat = scripts.filter(x => x.builtin); let changed = false;
+  for (const p of state.pine.slice()) { const s = scripts.find(x => x.id === p.sid && !x.builtin), c = s && cat.find(x => x.code === s.code); if (!c) continue;
+    if (state.pine.some(q => q.sid === c.id)) state.pine = state.pine.filter(q => q !== p); else p.sid = c.id; changed = true; }
+  const dup = scripts.filter(x => !x.builtin && cat.some(c => c.code === x.code) && !state.pine.some(p => p.sid === x.id));
+  if (dup.length) { scripts = scripts.filter(x => !dup.includes(x)); changed = true; }
+  if (changed) { save(); saveScripts(); }
+}
 function renderScripts() {
-  $('#scriptList').innerHTML = scripts.length ? scripts.map(x => `<div class="setting-row script-row"><div><b>${esc(x.name)}</b><small>${x.lines} líneas · ${Math.max(1, Math.round(x.size / 1024))} KB · guardado</small></div><div class="script-btns"><button class="small-button" data-pine-add="${x.id}">Al gráfico</button><button class="small-button" data-view-script="${x.id}">Ver</button><button class="small-button danger" data-del-script="${x.id}" aria-label="Eliminar">✕</button></div></div>`).join('')
+  migrateCatalog();
+  const mine = userScripts();
+  $('#scriptList').innerHTML = mine.length ? mine.map(x => `<div class="setting-row script-row"><div><b>${esc(x.name)}</b><small>${x.lines} líneas · ${Math.max(1, Math.round(x.size / 1024))} KB · guardado</small></div><div class="script-btns"><button class="small-button" data-pine-add="${x.id}">Al gráfico</button><button class="small-button" data-view-script="${x.id}">Ver</button><button class="small-button danger" data-del-script="${x.id}" aria-label="Eliminar">✕</button></div></div>`).join('')
     : '<div class="setting-row"><div><b>Sin scripts guardados</b><small>Importa un archivo .pine o pega el código.</small></div></div>';
   renderIndicators(); pineKey = ''; schedulePine();
 }
@@ -1813,7 +1854,7 @@ async function pineRunOne(p) {
   pineBusy[p.sid] = false; res._key = key; pineRes[p.sid] = res;
   if (!res.ok && /tard/.test((res.error && res.error.msg) || '') && !pineRetried.has(p.sid)) { pineRetried.add(p.sid); setTimeout(() => { pineKey = ''; schedulePine(); }, 3000); } else if (res.ok) pineRetried.delete(p.sid); if (res.stats) pineLastMs = Math.max(pineLastMs * .5, res.stats.ms); // los scripts pesados se recalculan con menos frecuencia
   if (pineDirty[p.sid]) { pineDirty[p.sid] = false; pineKey = ''; schedulePine(); }
-  if (currentView === 'indicatorView' || (sheetMode === 'indicators' && $('#sheet').classList.contains('open'))) { renderIndicators(); if (sheetMode === 'indicators') $('#sheetList').innerHTML = indicatorRows(); }
+  if ((sheetMode === 'indicators' && $('#sheet').classList.contains('open'))) { renderIndicators(); if (sheetMode === 'indicators') $('#sheetList').innerHTML = indicatorRows(); }
   scheduleRender();
 }
 // Estilo y visibilidad elegidos en la ventana de configuración (no obligan a recalcular el script)
@@ -1863,6 +1904,7 @@ function schedulePine() {
 /* ───────── Catálogo: indicadores Pine listos para añadir ───────── */
 const CAT_SYMS = 'BTC ETH BNB SOL XRP DOGE ADA AVAX LINK DOT TRX LTC BCH ATOM UNI NEAR APT ARB OP FIL INJ SUI SEI TIA RUNE AAVE MKR ALGO XLM HBAR ETC SAND MANA GALA IMX PEPE SHIB WLD FET RNDR'.split(' ').map(x => 'BINANCE:' + x + 'USDT');
 function catPreviewSvg(id) {
+  if (id === 'nova-nexus') return novaPreviewSvg();
   const bg = '<rect width="300" height="130" fill="#0b0e14"/>';
   if (id === 'nova-osc') {
     let a = '', b = '', f = ''; const n = 40, X = i => 8 + i * 7.1;
@@ -1875,8 +1917,7 @@ function catPreviewSvg(id) {
   names.forEach((nm, i) => { const y = 26 + i * 14, c = sg[i] > 0 ? '#00e676' : sg[i] < 0 ? '#ff2d55' : '#40405c', t = sg[i] > 0 ? 'LONG' : sg[i] < 0 ? 'SHORT' : '—'; rows += `<rect x="40" y="${y - 10}" width="220" height="13" fill="${i % 2 ? '#0c0c16' : '#13131f'}"/><text x="48" y="${y}" font-size="9" fill="#eaeaff" font-weight="700">${nm}</text><text x="130" y="${y}" font-size="9" fill="${c}" font-weight="700">${t}</text><text x="200" y="${y}" font-size="9" fill="#b366ff">${sg[i] ? Math.abs(sg[i]) + 2 + '/5' : ''}</text>`; });
   return `<svg class="nova-prev" viewBox="0 0 300 130" xmlns="http://www.w3.org/2000/svg">${bg}<rect x="39" y="5" width="222" height="120" fill="none" stroke="#8a6bff"/><rect x="40" y="6" width="220" height="13" fill="#1c1c3d"/><text x="48" y="16" font-size="9" fill="#a5a5ff" font-weight="700">SÍMBOLO</text><text x="130" y="16" font-size="9" fill="#a5a5ff" font-weight="700">SEÑAL</text><text x="200" y="16" font-size="9" fill="#a5a5ff" font-weight="700">SCORE</text>${rows}</svg>`;
 }
-const catScriptOf = c => scripts.find(x => x.code === c.code);
-const catPineOf = c => { const sc = catScriptOf(c); return sc && state.pine.find(p => p.sid === sc.id); };
+const catPineOf = c => state.pine.find(p => p.sid === 'cat:' + c.id);
 function catalogCards() {
   return (window.CCTCatalog || []).map(c => {
     const p = catPineOf(c);
@@ -1888,7 +1929,7 @@ document.addEventListener('click', async e => {
   const b = e.target.closest('[data-cat-add]'); if (!b) return;
   const c = (window.CCTCatalog || []).find(x => x.id === b.dataset.catAdd); if (!c) return;
   if (activePine().length >= PINE_MAX) { toast(`Máximo ${PINE_MAX} scripts activos`); return; }
-  const sid = addScript(c.code, c.name); if (!sid) return;
+  const sid = 'cat:' + c.id;
   const inputs = {};
   if (c.id === 'nova-scr') { const r = await pineRunRaw(c.code, {interval: state.interval, symbol: state.symbol, timeLimitMs: 12000}); if (r && r.ok) r.inputs.filter(i => i.type === 'symbol').forEach((i, k) => { inputs[i.key] = CAT_SYMS[k] || ''; }); }
   if (!state.pine.some(p => p.sid === sid)) state.pine.push({sid, on: true, inputs});
@@ -2137,12 +2178,12 @@ async function onUser(user) {
   clearTimeout(pushTimer); fbUser = user;
   if (!user) {
     try { localStorage.removeItem(LASTUID); } catch {}
-    if (uid) { uid = null; lastRemote = ''; scriptsRemote = ''; applyState(readLocal(STORE)); scripts = readScripts(); renderScripts(); } // vuelve al estado local sin sesión; los datos de la cuenta no se quedan visibles
+    if (uid) { uid = null; lastRemote = ''; scriptsRemote = ''; applyState(readLocal(STORE)); scripts = withCatalog(readScripts()); renderScripts(); } // vuelve al estado local sin sesión; los datos de la cuenta no se quedan visibles
     syncStatus = ''; renderAccount(); return;
   }
   uid = user.uid; try { localStorage.setItem(LASTUID, uid); } catch {}
   const anonScripts = (readLocal(SCRIPTS_KEY).items || []).filter(x => x && typeof x.id === 'string'); // scripts guardados antes de iniciar sesión
-  scripts = readScripts(); scriptsRemote = ''; renderScripts();
+  scripts = withCatalog(readScripts()); scriptsRemote = ''; renderScripts();
   syncStatus = 'Sincronizando…'; renderAccount();
   const ref = db.doc(CLOUD_DOC(uid));
   try {
@@ -2158,7 +2199,7 @@ async function onUser(user) {
       lastRemote = str; try { applyState(JSON.parse(str), true); save(); refreshPineAfterSync(); } catch {}
     }, () => {});
     const sref = db.doc(`users/${uid}/data/scripts`), ssnap = await sref.get();
-    if (ssnap.exists && ssnap.data().items) { scriptsRemote = ssnap.data().items; try { scripts = JSON.parse(scriptsRemote); localStorage.setItem(scriptsKey(), JSON.stringify({items: scripts})); renderScripts(); } catch {} }
+    if (ssnap.exists && ssnap.data().items) { scriptsRemote = ssnap.data().items; try { scripts = withCatalog(JSON.parse(scriptsRemote)); localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); renderScripts(); } catch {} }
     else { // la cuenta aún no tiene scripts: se suben los de este dispositivo (los de la cuenta local + los guardados antes de iniciar sesión)
       const have = new Set(scripts.map(x => x.id)); for (const x of anonScripts) if (!have.has(x.id)) scripts.push(x);
       if (scripts.length) { scriptsRemote = JSON.stringify(scripts); try { localStorage.setItem(scriptsKey(), JSON.stringify({items: scripts})); } catch {} await sref.set({items: scriptsRemote, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); renderScripts(); }
@@ -2166,7 +2207,7 @@ async function onUser(user) {
     unsubScripts = sref.onSnapshot(sn => { // scripts cambiados desde otro dispositivo
       if (sn.metadata.hasPendingWrites || !sn.exists) return;
       const str = sn.data().items; if (!str || str === scriptsRemote) return;
-      try { const arr = JSON.parse(str); if (!Array.isArray(arr)) return; scriptsRemote = str; scripts = arr; localStorage.setItem(scriptsKey(), JSON.stringify({items: scripts})); renderScripts(); refreshPineAfterSync(); } catch {}
+      try { const arr = JSON.parse(str); if (!Array.isArray(arr)) return; scriptsRemote = str; scripts = withCatalog(arr); localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); renderScripts(); refreshPineAfterSync(); } catch {}
     }, () => {});
     refreshPineAfterSync();
     syncStatus = 'Guardado en tu cuenta · ' + syncSummary();
@@ -2220,7 +2261,7 @@ async function initCloud() {
     scheduleRender();
   };
   const store = () => { try { localStorage.setItem(KEY, JSON.stringify(L)); } catch {} };
-  const curW = k => { const el = document.getElementById(k === 'wl' ? 'watchView' : (document.body.dataset.side || 'indicatorView')); return Math.round(el.getBoundingClientRect().width) || LIM[k][2]; };
+  const curW = k => { const el = document.getElementById(k === 'wl' ? 'watchView' : (document.body.dataset.side || 'newsView')); return Math.round(el.getBoundingClientRect().width) || LIM[k][2]; };
   const bind = (id, k) => {
     const el = document.getElementById(id);
     el.addEventListener('pointerdown', e => {
