@@ -69,7 +69,7 @@ async function getJSON(url, signal) { const r = await fetch(url, {signal}); if (
 let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null;
 let currentView = 'watchView', sheetMode = 'select', editMode = false;
 let pineLastMs = 0, pineRes = {}, pineBusy = {}, pineDirty = {}, pineLast = 0, pineTimer = 0, pineKey = '', pineDraft = {name: '', code: ''}, pineSetSid = null, pineWorker = null, pineNoWorker = false, pineSeq = 0;
-const pineJobs = new Map(), PINE_MAX = 6;
+const PINE_MAX = 6;
 let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null;
 let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
 let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0;
@@ -1678,19 +1678,28 @@ function pineInline(code, opts) {
   try { return window.CCTPine ? CCTPine.run(code, opts.cs || candles, opts) : {ok: false, error: {msg: 'El motor de Pine no está disponible', line: 0}}; }
   catch (e) { return {ok: false, error: {msg: String(e && e.message || e), line: 0}}; }
 }
-function pineRunRaw(code, opts) { // Worker aislado con tiempo límite; si no hay Worker, en línea (con el mismo límite interno)
+const pineWorkers = [], pineQueue = [], PINE_POOL = Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
+function pineDispatch() {
+  while (pineQueue.length) {
+    let w = pineWorkers.find(x => !x.job);
+    if (!w && pineWorkers.length < PINE_POOL) { w = {job: null, wk: null}; pineWorkers.push(w); }
+    if (!w) return;
+    const j = pineQueue.shift();
+    try {
+      if (!w.wk) {
+        w.wk = new Worker('pine.js');
+        w.wk.onmessage = e => { const cur = w.job; if (cur && cur.id === e.data.id) { clearTimeout(cur.t); w.job = null; cur.ok(e.data.result); pineDispatch(); } };
+        w.wk.onerror = () => { pineNoWorker = true; try { w.wk.terminate(); } catch {} w.wk = null; const cur = w.job; w.job = null; if (cur) { clearTimeout(cur.t); cur.ok(pineInline(cur.code, cur.opts)); } pineDispatch(); };
+      }
+      j.id = ++pineSeq; w.job = j;
+      j.t = setTimeout(() => { try { w.wk.terminate(); } catch {} w.wk = null; w.job = null; j.ok({ok: false, error: {msg: 'El script tardó demasiado y se detuvo (límite de tiempo en este dispositivo)', line: 0}}); pineDispatch(); }, 45000);
+      const o2 = Object.assign({}, j.opts); delete o2.cs; w.wk.postMessage({id: j.id, code: j.code, candles: j.opts.cs || candles, opts: o2});
+    } catch { pineNoWorker = true; w.job = null; j.ok(pineInline(j.code, j.opts)); }
+  }
+}
+function pineRunRaw(code, opts) { // Workers aislados (un grupo pequeño: un script pesado no bloquea a los demás), con tiempo límite por script
   if (typeof Worker === 'undefined' || pineNoWorker) return Promise.resolve(pineInline(code, opts));
-  try {
-    if (!pineWorker) {
-      pineWorker = new Worker('pine.js');
-      pineWorker.onmessage = e => { const j = pineJobs.get(e.data.id); if (j) { clearTimeout(j.t); pineJobs.delete(e.data.id); j.ok(e.data.result); } };
-      pineWorker.onerror = () => { pineNoWorker = true; try { pineWorker.terminate(); } catch {} pineWorker = null; for (const [id, j] of [...pineJobs]) { clearTimeout(j.t); pineJobs.delete(id); j.ok(pineInline(j.code, j.opts)); } };
-    }
-    return new Promise(ok => {
-      const id = ++pineSeq, t = setTimeout(() => { pineJobs.delete(id); try { pineWorker.terminate(); } catch {} pineWorker = null; ok({ok: false, error: {msg: 'El script tardó demasiado y se detuvo', line: 0}}); }, 40000);
-      pineJobs.set(id, {ok, t, code, opts}); { const o2 = Object.assign({}, opts); delete o2.cs; pineWorker.postMessage({id, code, candles: opts.cs || candles, opts: o2}); }
-    });
-  } catch { pineNoWorker = true; return Promise.resolve(pineInline(code, opts)); }
+  return new Promise(ok => { pineQueue.push({code, opts, ok}); pineDispatch(); });
 }
 // request.security: la app descarga las velas de Binance que pide el script y repite la corrida una vez
 const pineSecCache = new Map();
@@ -1754,7 +1763,7 @@ function pineDialogData(p, r) {
 }
 function openPineDialog(sid) {
   const p = state.pine.find(x => x.sid === sid), r = pineRes[sid];
-  if (!p) return; if (!r || !r.ok) { toast(r ? 'El script tiene errores: corrígelo para configurarlo' : 'Espera a que termine de calcularse'); return; }
+  if (!p) return; if (!r || !r.ok) { toast(r ? 'Error del script: ' + ((r.error && r.error.msg) || 'desconocido') + (r.error && r.error.line ? ' (línea ' + r.error.line + ')' : '') : 'Espera a que termine de calcularse'); return; }
   CCTSettings.open(Object.assign(pineDialogData(p, r), {onApply: res => {
     const inChanged = JSON.stringify(res.inputs) !== JSON.stringify(p.inputs || {});
     p.inputs = res.inputs; p.style = res.style; p.vis = res.vis; if (!Object.keys(p.style).length) delete p.style; if (!Object.keys(p.vis).length) delete p.vis;
@@ -1788,7 +1797,7 @@ const catPineOf = c => { const sc = catScriptOf(c); return sc && state.pine.find
 function catalogCards() {
   return (window.CCTCatalog || []).map(c => {
     const p = catPineOf(c);
-    return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small></div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">⚙ Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
+    return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">⚙ Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
   }).join('');
 }
 document.addEventListener('click', async e => {
