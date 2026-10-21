@@ -540,6 +540,7 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.vp = I.nnVP ? T.volumeProfile(candles, {rows: NP('vpRows'), lookback: NP('vpLookback'), hiThr: NP('vpHi'), loThr: NP('vpLo')}) : null;
 }
 // Parámetros de Nova Nexus editables (misma presentación que la ventana de TradingView: grupos, filas y ayudas)
+const NOVA_STRATS = {'Ninguna (usar módulos)': null, '📱 Mobile (IA + Smooth Trail + Reversal Bands)': ['nnIa', 'nnTrail', 'nnRev'], '☁️ Cloud (IA + EMA Cloud + Volume Profile + S/R)': ['nnIa', 'nnEma', 'nnVP', 'nnSR'], '🏛 SMC (IA + SMC + Pivots + Volume Profile)': ['nnIa', 'nnSmc', 'nnOb', 'nnPiv', 'nnVP']};
 const NOVA_SCHEMA = [
   {key: 'emaLen', title: 'EMA Periodos', type: 'int', def: 55, min: 2, max: 500, group: '☁️ EMA CLOUD'},
   {key: 'emaMult', title: 'Multiplicador ATR', type: 'float', def: 0.6, min: 0.1, max: 10, step: 0.1, group: '☁️ EMA CLOUD'},
@@ -571,6 +572,7 @@ const NOVA_SCHEMA = [
   {key: 'minScore', title: 'Score mínimo para mostrar señal', type: 'int', def: 1, min: 1, max: 5, group: '⚡ IA Signals — Score'},
   {key: 'cooldown', title: 'Velas mínimas entre señales', type: 'int', def: 10, min: 0, max: 200, group: '⚡ IA Signals — Cooldown'},
   {key: 'cdBoth', title: 'Cooldown compartido (BUY y SELL)', type: 'bool', def: false, group: '⚡ IA Signals — Cooldown'},
+  {key: 'strat', title: 'Estrategia', type: 'string', def: 'Ninguna (usar módulos)', options: Object.keys(NOVA_STRATS), group: '📱 ESTRATEGIAS', tooltip: 'Como en el Pine original: Mobile / Cloud / SMC activan un conjunto fijo de módulos y desactivan el resto. «Ninguna» devuelve tus módulos.'},
   {key: 'rulesText', title: 'Texto de Reglas', type: 'string', def: '', group: '📋 REGLAS', tooltip: 'Una regla por línea separada con «|». Vacío = reglas por defecto.'}
 ];
 const novaDef = k => { const e = NOVA_SCHEMA.find(x => x.key === k); return e ? e.def : undefined; };
@@ -581,8 +583,12 @@ function openNovaDialog() {
   const values = {}; for (const i of mods.concat(params)) values[i.key] = i.value;
   CCTSettings.open({title: 'Nova Nexus', tabs: ['in'], note: 'Estos son los parámetros que el indicador ya permite cambiar. Para tener TODOS los parámetros del Pine original, pega su código en «Scripts de Pine».', inputs: mods.concat(params), values, plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
     const get = i => res.inputs[i.key] !== undefined ? res.inputs[i.key] : i.def;
-    for (const i of mods) { const k = i.key.slice(4); state.indicators[k] = !!get(i); }
-    state.novaSaved = null; const np = {}; for (const i of params) { const v = get(i); if (JSON.stringify(v) !== JSON.stringify(i.def)) np[i.key] = v; } state.novaParams = np;
+    const prevStrat = state.novaParams.strat, strat = NOVA_STRATS[get(params.find(p => p.key === 'strat'))];
+    if (strat) {
+      if (!prevStrat || !NOVA_STRATS[prevStrat]) state.novaSaved = Object.fromEntries(mods.map(i => [i.key.slice(4), !!get(i)]));
+      for (const k of NN_KEYS) state.indicators[k] = strat.includes(k);
+    } else if (prevStrat && NOVA_STRATS[prevStrat] && state.novaSaved) { for (const k of NN_KEYS) state.indicators[k] = !!state.novaSaved[k]; if (!novaOn()) NOVA_DEFAULT.forEach(k => state.indicators[k] = true); state.novaSaved = null; }
+    else { for (const i of mods) state.indicators[i.key.slice(4)] = !!get(i); state.novaSaved = null; } const np = {}; for (const i of params) { const v = get(i); if (JSON.stringify(v) !== JSON.stringify(i.def)) np[i.key] = v; } state.novaParams = np;
     save(); renderIndicators(); countIndicators(); calcNova(); calcExtra(); scheduleRender(); toast('Configuración aplicada');
   }});
 }
