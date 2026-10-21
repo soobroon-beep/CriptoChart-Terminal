@@ -78,3 +78,9 @@ Cada script Pine tiene un selector **Panel** (en *Mis indicadores*): automático
 
 ### Ancho de los paneles laterales (escritorio)
 Arrastra el borde entre *Seguimiento* y el gráfico, o entre el gráfico y *Indicadores/Alertas/Ajustes*, para ensanchar o estrechar los paneles; doble clic (o el botón ‹ ›) los oculta/muestra para dar todo el ancho al gráfico. Se recuerda en este dispositivo.
+
+## Catálogo, estrategias de Nova y leyenda del gráfico
+- **Mis indicadores** incluye Nova Nexus, Nova Oscillator 1.1 y Nova Screener 40 Cryptos (códigos Pine originales en `catalog/`, empaquetados con `node tools-gen-catalog.js` → `catalog.js`). El Screener se añade con 40 pares de Binance en sus entradas (cámbialos en ⚙); calcula 40 símbolos y puede tardar varios segundos.
+- La corrida de `request.security` ahora recorta el script a lo que dependen sus argumentos (más rápido con muchos símbolos).
+- Nova Nexus nativo: ⚙ → **Estrategia** (Mobile / Cloud / SMC), con las mismas combinaciones de módulos del Pine; «Ninguna» devuelve tus módulos.
+- Leyenda sobre el gráfico: junto a cada indicador, 👁 ocultar/mostrar (Pine) o apagar (nativos), ⚙ ajustes, ⇅ mover (sobre el gráfico / panel arriba / panel abajo, solo Pine) y ✕ quitar. Botones ▤− / ▤+ de la barra del gráfico cambian la altura de los paneles (se recuerda).

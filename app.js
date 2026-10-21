@@ -35,7 +35,7 @@ function merge(s) {
   if (!o.drawings || typeof o.drawings !== 'object' || Array.isArray(o.drawings)) o.drawings = {};
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 60)) : {};
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
-  o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {})) : [];
+  o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
@@ -604,7 +604,7 @@ const indTabs = () => `<div class="ind-tabs"><button data-indtab="std" class="${
 const indicatorRows = () => { document.body.dataset.indtab = indTab; return indTabs() + (indTab === 'std'
   ? indicatorMeta.filter(m => !m[0].startsWith('nn')).map(([key, title, desc]) =>
     `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div>`).join('')
-  : novaCard() + pineSection()); };
+  : novaCard() + catalogCards() + pineSection()); };
 document.addEventListener('change', e => { const s = e.target.closest('[data-pine-pane]'); if (!s) return; const p = state.pine.find(x => x.sid === s.dataset.pinePane); if (!p) return; if (s.value) p.pane = s.value; else delete p.pane; save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); scheduleRender(); });
 document.addEventListener('click', e => { const t = e.target.closest('[data-indtab]'); if (!t) return; indTab = t.dataset.indtab; renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); });
 function renderIndicators() { $('#indicatorList').innerHTML = indicatorRows(); }
@@ -846,7 +846,43 @@ function timeLabel(t, prev) {
   if (prev != null && new Date(prev).getDate() !== d.getDate()) return `${d.getDate()}/${d.getMonth() + 1}`;
   return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
 }
-function render() {
+let legRows = [], legSig = '';
+const paneScale0 = () => { try { const v = parseFloat(localStorage.getItem('cct_paneScale')); return v >= .6 && v <= 3 ? v : 1.25; } catch { return 1.25; } };
+let paneScale = paneScale0();
+function legAt(text, x, y, act, dim) { legRows.push({x: x + g.measureText(text).width + 8, y: y - 12, act, dim: !!dim}); }
+function syncLegend() {
+  const box = $('#legendBox'); if (!box) return;
+  const sig = legRows.map(r => [Math.round(r.x), Math.round(r.y), r.act.t, r.act.sid || r.act.key || '', r.dim ? 1 : 0, r.act.pane || ''].join(':')).join('|');
+  if (sig === legSig) return; legSig = sig;
+  box.innerHTML = legRows.map(r => { const a = r.act, id = a.sid || a.key || '', d = `data-leg="${a.t}" data-id="${esc(id)}"`;
+    return `<div class="leg-row" style="left:${Math.round(r.x)}px;top:${Math.round(r.y)}px"><button ${d} data-do="eye" title="${r.dim ? 'Mostrar' : 'Ocultar'}" aria-label="${r.dim ? 'Mostrar' : 'Ocultar'}">${r.dim ? '🙈' : '👁'}</button><button ${d} data-do="set" title="Ajustes" aria-label="Ajustes">⚙</button>${a.t === 'pine' ? `<button ${d} data-do="move" title="Mover de panel" aria-label="Mover de panel">⇅</button>` : ''}<button ${d} data-do="del" title="Eliminar del gráfico" aria-label="Eliminar">✕</button></div>`; }).join('');
+}
+document.addEventListener('click', e => {
+  const m = e.target.closest('[data-leg-pane]');
+  if (m) { const p = state.pine.find(x => x.sid === m.dataset.id); if (p) { if (m.dataset.legPane) p.pane = m.dataset.legPane; else delete p.pane; save(); renderIndicators(); scheduleRender(); } $('#legMenu')?.remove(); return; }
+  const b = e.target.closest('[data-leg]'); if (!b) { $('#legMenu')?.remove(); return; }
+  const t = b.dataset.leg, id = b.dataset.id, act = b.dataset.do; $('#legMenu')?.remove();
+  if (t === 'pine') {
+    const p = state.pine.find(x => x.sid === id); if (!p) return;
+    if (act === 'eye') { if (p.hide) delete p.hide; else p.hide = true; save(); scheduleRender(); }
+    else if (act === 'set') { pineSetSid = id; openPineDialog(id); }
+    else if (act === 'del') { state.pine = state.pine.filter(x => x !== p); delete pineRes[p.sid]; save(); renderIndicators(); countIndicators(); scheduleRender(); toast('Quitado del gráfico (sigue en Mis indicadores)'); }
+    else if (act === 'move') {
+      const r = pineRes[id], cur = p.pane || (r && r.meta && r.meta.overlay ? 'main' : 'bottom'), r0 = b.getBoundingClientRect();
+      const mk = (v, tx) => `<button data-leg-pane="${v}" data-id="${esc(id)}" class="${cur === (v || (r && r.meta && r.meta.overlay ? 'main' : 'bottom')) ? 'cur' : ''}">${tx}</button>`;
+      const el = document.createElement('div'); el.id = 'legMenu'; el.innerHTML = mk('main', 'Sobre el gráfico') + mk('top', 'Panel arriba') + mk('bottom', 'Panel abajo');
+      el.style.cssText = `left:${Math.min(r0.left, innerWidth - 170)}px;top:${r0.bottom + 4}px`; document.body.appendChild(el);
+    }
+    return;
+  }
+  if (t === 'nova') { if (act === 'set') openNovaDialog(); else if (act === 'eye' || act === 'del') { novaToggleAll(false); novaAfter(); toast('Nova Nexus apagado: actívalo en Indicadores → Mis indicadores'); } return; }
+  if (t === 'std') {
+    if (act === 'set') { indTab = 'std'; openSheet('indicators'); return; }
+    state.indicators[id] = false; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast('Indicador apagado: puedes volver a activarlo en Indicadores');
+  }
+});
+function render() { renderCore(); syncLegend(); }
+function renderCore() {
   if (currentView !== 'chartView') return;
   const el = $('#priceCanvas'); if (!el.getBoundingClientRect().width) return;
   const {w, h} = setupCanvas();
@@ -857,14 +893,15 @@ function render() {
   const n = candles.length; if (!n) { geo = null; return; }
 
   const pineKeyNow = `${state.symbol}|${state.interval}|${candles[0].t}`;
-  const pr = activePine().filter(p => pineVisibleOn(p, state.interval)).map(p => ({p, r: pineStyled(pineRes[p.sid], p)})).filter(x => x.r && x.r.ok && x.r._key === pineKeyNow);
+  legRows = [];
+  const prAll = activePine().filter(p => pineVisibleOn(p, state.interval)).map(p => ({p, r: pineStyled(pineRes[p.sid], p)})).filter(x => x.r && x.r.ok && x.r._key === pineKeyNow), pr = prAll.filter(x => !x.p.hide), pHid = prAll.filter(x => x.p.hide);
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
   const left = 6, right = 64, axisH = 22, top0 = 6;
-  const rsiH = state.indicators.rsi ? Math.round(Math.max(70, h * .18)) : 0, volH = state.indicators.volume ? Math.round(Math.max(40, h * .12)) : 0;
+  const psc = paneScale, rsiH = state.indicators.rsi ? Math.round(Math.max(70, h * .18 * Math.min(psc, 1.5))) : 0, volH = state.indicators.volume ? Math.round(Math.max(40, h * .12)) : 0;
   const panelKeys = [...PANELS.filter(k => state.indicators[k] && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
-  const panelBudget = Math.max(0, h * .58 - rsiH - volH);
-  const nPanels = panelKeys.length + pTop.length, panelH = nPanels ? Math.round(Math.max(40, Math.min(clamp(h * .16, 52, 110), panelBudget / nPanels))) : 0, extraH = panelH * panelKeys.length, topH = panelH * pTop.length, plotTop = top0 + topH;
+  const panelBudget = Math.max(0, h * Math.min(.8, .58 + (psc - 1) * .25) - rsiH - volH);
+  const nPanels = panelKeys.length + pTop.length, panelH = nPanels ? Math.round(Math.max(40, Math.min(clamp(h * .16, 52, 110) * psc, panelBudget / nPanels))) : 0, extraH = panelH * panelKeys.length, topH = panelH * pTop.length, plotTop = top0 + topH;
   const vpOn = !!(state.indicators.nnVP && ind.vp), gutter = vpOn ? clamp(Math.round((w - left - right) * .4), 110, 300) : 0; // margen derecho para el perfil
   const plotH = Math.max(80, h - axisH - rsiH - volH - extraH - plotTop), plotW = w - left - right - gutter;
   const count = clamp(visible, 15, 400);
@@ -975,17 +1012,19 @@ function render() {
   }
   // leyenda de indicadores
   let ly2 = plotTop + 48; g.font = '10px system-ui';
-  for (const [name, arr, col] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); g.fillStyle = col; g.fillText(`${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`, left + 8, ly2); ly2 += 13; }
+  for (const [name, arr, col] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); const tx = `${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`; g.fillStyle = col; g.fillText(tx, left + 8, ly2); const mk = indicatorMeta.find(m => m[1] === name) || (name === 'BB sup' ? indicatorMeta.find(m => m[0] === 'bollinger') : null); if (mk) legAt(tx, left + 8, ly2, {t: 'std', key: mk[0]}); ly2 += 13; }
 
-  for (const {p, r} of pOver) { g.fillStyle = text; g.fillText(`ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`, left + 8, ly2); ly2 += 13; for (const it of CCTPineDraw.legend(r, n - 1).slice(0, 4)) { g.fillStyle = it.color; g.fillText(it.text, left + 8, ly2); ly2 += 13; } }
-  if (state.indicators.supertrend && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#20bf9f' : '#f06b79'; g.fillText(`Supertrend ${dv < 0 ? '↑' : '↓'}  ${fmt((dv < 0 ? ind.stUp : ind.stDn)[j])}`, left + 8, ly2); ly2 += 13; } }
+  for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; g.fillText(tx, left + 8, ly2); legAt(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += 13; for (const it of CCTPineDraw.legend(r, n - 1).slice(0, 4)) { g.fillStyle = it.color; g.fillText(it.text, left + 8, ly2); ly2 += 13; } }
+  for (const {p, r} of pHid) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)} (oculto)`; g.globalAlpha = .5; g.fillStyle = text; g.fillText(tx, left + 8, ly2); g.globalAlpha = 1; legAt(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); ly2 += 13; }
+  if (novaOn() && ind.nn) { const tx = 'Nova Nexus'; g.fillStyle = '#11cf77'; g.fillText(tx, left + 8, ly2); legAt(tx, left + 8, ly2, {t: 'nova'}); ly2 += 13; }
+  if (state.indicators.supertrend && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#20bf9f' : '#f06b79'; { const tx = `Supertrend ${dv < 0 ? '↑' : '↓'}  ${fmt((dv < 0 ? ind.stUp : ind.stDn)[j])}`; g.fillText(tx, left + 8, ly2); legAt(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += 13; } }
 
   // volumen
   if (volH) {
     const top = geo.volTop + 4, height = volH - 8; let maxV = 1;
     for (let i = lo; i < hi; i++) maxV = Math.max(maxV, candles[i].v);
     g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.volTop); g.lineTo(w - right + 2, geo.volTop); g.stroke();
-    g.fillStyle = text; g.fillText('VOL', left + 4, top + 9);
+    g.fillStyle = text; g.fillText('VOL', left + 4, top + 9); legAt('VOL', left + 4, top + 9, {t: 'std', key: 'volume'});
     for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = d.c >= d.o ? '#1b8c78aa' : '#d45a6aaa'; const bh = Math.max(1, d.v / maxV * height); g.fillRect(X(i) - barW / 2, top + height - bh, barW, bh); }
   }
   // RSI
@@ -993,7 +1032,7 @@ function render() {
     const top = geo.rsiTop + 4, height = rsiH - 12;
     g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.rsiTop); g.lineTo(w - right + 2, geo.rsiTop); g.stroke();
     const lastR = [...ind.rsi].reverse().find(x => x != null);
-    g.fillStyle = text; g.fillText(`RSI 14  ${lastR != null ? lastR.toFixed(1) : '—'}`, left + 4, top + 9);
+    { const tx = `RSI 14  ${lastR != null ? lastR.toFixed(1) : '—'}`; g.fillStyle = text; g.fillText(tx, left + 4, top + 9); legAt(tx, left + 4, top + 9, {t: 'std', key: 'rsi'}); }
     g.setLineDash([2, 3]);
     for (const r of [30, 70]) { const yy = top + (100 - r) / 100 * height; g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
     g.setLineDash([]);
@@ -1046,7 +1085,7 @@ function drawSubPanel(key, top0, H, lo, hi, o) {
   g.font = '10px system-ui';
   const last = a => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; };
   const label = {macd: 'MACD 12 26 9', stoch: 'Estoc 14 3 3', atr: 'ATR 14', obv: 'OBV'}[key];
-  g.fillStyle = text; g.fillText(`${label}  ${series.map(([a]) => fmtV(last(a))).join('  ')}`, left + 4, top + 9);
+  { const tx = `${label}  ${series.map(([a]) => fmtV(last(a))).join('  ')}`; g.fillStyle = text; g.fillText(tx, left + 4, top + 9); legAt(tx, left + 4, top + 9, {t: 'std', key}); }
   if (key === 'stoch') {
     g.setLineDash([2, 3]);
     for (const r of [20, 80]) { const yy = Yp(r); g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
@@ -1513,6 +1552,8 @@ $('#zoomIn').onclick = () => { visible = clamp(visible / 1.3, 15, 400); render()
 $('#zoomOut').onclick = () => { visible = clamp(visible * 1.3, 15, 400); render(); };
 $('#fitChart').onclick = fit;
 function syncFullscreenLabel() { $('#fullscreen').textContent = document.body.classList.contains('expanded') ? '⤓ Reducir' : '⛶ Expandir'; }
+const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
+$('#paneBig').onclick = () => setPaneScale(paneScale * 1.2); $('#paneSmall').onclick = () => setPaneScale(paneScale / 1.2);
 $('#fullscreen').onclick = () => { document.body.classList.toggle('expanded'); syncFullscreenLabel(); requestAnimationFrame(render); };
 if (window.ResizeObserver) new ResizeObserver(() => scheduleRender()).observe(area);
 window.addEventListener('resize', scheduleRender);
@@ -1642,7 +1683,7 @@ function pineRunRaw(code, opts) { // Worker aislado con tiempo límite; si no ha
       pineWorker.onerror = () => { pineNoWorker = true; try { pineWorker.terminate(); } catch {} pineWorker = null; for (const [id, j] of [...pineJobs]) { clearTimeout(j.t); pineJobs.delete(id); j.ok(pineInline(j.code, j.opts)); } };
     }
     return new Promise(ok => {
-      const id = ++pineSeq, t = setTimeout(() => { pineJobs.delete(id); try { pineWorker.terminate(); } catch {} pineWorker = null; ok({ok: false, error: {msg: 'El script tardó demasiado y se detuvo', line: 0}}); }, 30000);
+      const id = ++pineSeq, t = setTimeout(() => { pineJobs.delete(id); try { pineWorker.terminate(); } catch {} pineWorker = null; ok({ok: false, error: {msg: 'El script tardó demasiado y se detuvo', line: 0}}); }, 40000);
       pineJobs.set(id, {ok, t, code, opts}); { const o2 = Object.assign({}, opts); delete o2.cs; pineWorker.postMessage({id, code, candles: opts.cs || candles, opts: o2}); }
     });
   } catch { pineNoWorker = true; return Promise.resolve(pineInline(code, opts)); }
@@ -1664,8 +1705,9 @@ async function pineRunFull(code, opts) {
   let res = await pineRunRaw(code, opts);
   if (res && res.ok && res.needs && res.needs.length) {
     const sec = Object.assign({}, opts.sec);
-    await Promise.all(res.needs.slice(0, 12).map(async n => { sec[n.symbol + '|' + n.interval] = await pineSecCandles(n.symbol, n.interval); }));
-    res = await pineRunRaw(code, Object.assign({}, opts, {sec}));
+    const need = res.needs.slice(0, 40);
+    for (let i = 0; i < need.length; i += 8) await Promise.all(need.slice(i, i + 8).map(async n => { sec[n.symbol + '|' + n.interval] = await pineSecCandles(n.symbol, n.interval); }));
+    res = await pineRunRaw(code, Object.assign({}, opts, {sec, timeLimitMs: need.length > 6 ? 26000 : opts.timeLimitMs}));
   }
   return res;
 }
@@ -1721,9 +1763,45 @@ function schedulePine() {
   clearTimeout(pineTimer);
   pineTimer = setTimeout(() => { pineKey = key; pineLast = Date.now(); activePine().forEach(pineRunOne); }, wait);
 }
+
+/* ───────── Catálogo: indicadores Pine listos para añadir ───────── */
+const CAT_SYMS = 'BTC ETH BNB SOL XRP DOGE ADA AVAX LINK DOT TRX LTC BCH ATOM UNI NEAR APT ARB OP FIL INJ SUI SEI TIA RUNE AAVE MKR ALGO XLM HBAR ETC SAND MANA GALA IMX PEPE SHIB WLD FET RNDR'.split(' ').map(x => 'BINANCE:' + x + 'USDT');
+function catPreviewSvg(id) {
+  const bg = '<rect width="300" height="130" fill="#0b0e14"/>';
+  if (id === 'nova-osc') {
+    let a = '', b = '', f = ''; const n = 40, X = i => 8 + i * 7.1;
+    const flux = i => 65 - Math.sin(i / 4.2) * 30 - Math.cos(i / 9) * 10, mom = i => 65 - Math.sin((i - 3) / 4.2) * 24 - Math.cos(i / 9) * 8;
+    for (let i = 0; i < n; i++) { a += `${i ? 'L' : 'M'}${X(i).toFixed(1)},${flux(i).toFixed(1)}`; b += `${i ? 'L' : 'M'}${X(i).toFixed(1)},${mom(i).toFixed(1)}`; }
+    f = `${a}L${X(n - 1)},65L${X(0)},65Z`;
+    return `<svg class="nova-prev" viewBox="0 0 300 130" xmlns="http://www.w3.org/2000/svg">${bg}<line x1="0" x2="300" y1="30" y2="30" stroke="#444" stroke-dasharray="3 3"/><line x1="0" x2="300" y1="100" y2="100" stroke="#444" stroke-dasharray="3 3"/><line x1="0" x2="300" y1="65" y2="65" stroke="#333"/><path d="${f}" fill="rgba(0,230,118,.22)"/><path d="${a}" fill="none" stroke="#00e676" stroke-width="1.6"/><path d="${b}" fill="none" stroke="#ff9800" stroke-width="1.2"/><circle cx="${X(10)}" cy="${flux(10)}" r="3" fill="#ff2d55"/><circle cx="${X(29)}" cy="${flux(29)}" r="3" fill="#00e676"/><rect x="0" y="120" width="300" height="10" fill="#1c1c3d"/><rect x="${X(20)}" y="120" width="60" height="10" fill="#00e676" opacity=".7"/><text x="8" y="12" font-size="9" fill="#a5a5ff" font-weight="700">Nova Oscillator · Flux + Momentum</text></svg>`;
+  }
+  let rows = ''; const names = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA'], sg = [1, 0, -1, 2, 0, -2, 1];
+  names.forEach((nm, i) => { const y = 26 + i * 14, c = sg[i] > 0 ? '#00e676' : sg[i] < 0 ? '#ff2d55' : '#40405c', t = sg[i] > 0 ? 'LONG' : sg[i] < 0 ? 'SHORT' : '—'; rows += `<rect x="40" y="${y - 10}" width="220" height="13" fill="${i % 2 ? '#0c0c16' : '#13131f'}"/><text x="48" y="${y}" font-size="9" fill="#eaeaff" font-weight="700">${nm}</text><text x="130" y="${y}" font-size="9" fill="${c}" font-weight="700">${t}</text><text x="200" y="${y}" font-size="9" fill="#b366ff">${sg[i] ? Math.abs(sg[i]) + 2 + '/5' : ''}</text>`; });
+  return `<svg class="nova-prev" viewBox="0 0 300 130" xmlns="http://www.w3.org/2000/svg">${bg}<rect x="39" y="5" width="222" height="120" fill="none" stroke="#8a6bff"/><rect x="40" y="6" width="220" height="13" fill="#1c1c3d"/><text x="48" y="16" font-size="9" fill="#a5a5ff" font-weight="700">SÍMBOLO</text><text x="130" y="16" font-size="9" fill="#a5a5ff" font-weight="700">SEÑAL</text><text x="200" y="16" font-size="9" fill="#a5a5ff" font-weight="700">SCORE</text>${rows}</svg>`;
+}
+const catScriptOf = c => scripts.find(x => x.code === c.code);
+const catPineOf = c => { const sc = catScriptOf(c); return sc && state.pine.find(p => p.sid === sc.id); };
+function catalogCards() {
+  return (window.CCTCatalog || []).map(c => {
+    const p = catPineOf(c);
+    return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small></div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">⚙ Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
+  }).join('');
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-cat-add]'); if (!b) return;
+  const c = (window.CCTCatalog || []).find(x => x.id === b.dataset.catAdd); if (!c) return;
+  if (activePine().length >= PINE_MAX) { toast(`Máximo ${PINE_MAX} scripts activos`); return; }
+  const sid = addScript(c.code, c.name); if (!sid) return;
+  const inputs = {};
+  if (c.id === 'nova-scr') { const r = await pineRunRaw(c.code, {interval: state.interval, symbol: state.symbol, timeLimitMs: 12000}); if (r && r.ok) r.inputs.filter(i => i.type === 'symbol').forEach((i, k) => { inputs[i.key] = CAT_SYMS[k] || ''; }); }
+  if (!state.pine.some(p => p.sid === sid)) state.pine.push({sid, on: true, inputs});
+  save(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); toast(c.id === 'nova-scr' ? 'Añadido: calcula 40 símbolos, puede tardar unos segundos' : 'Añadido al gráfico');
+  if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows();
+});
+
 function pineSection() {
   const rows = state.pine.map(p => {
-    const s = scripts.find(x => x.id === p.sid); if (!s) return ''; const r = pineRes[p.sid]; let st;
+    const s = scripts.find(x => x.id === p.sid); if (!s) return ''; if ((window.CCTCatalog || []).some(c => c.code === s.code)) return ''; const r = pineRes[p.sid]; let st;
     if (!p.on) st = 'Apagado'; else if (!r) st = 'Calculando…';
     else if (!r.ok) st = `<span class="pine-err">Error${r.error.line ? ' · línea ' + r.error.line : ''}: ${esc(r.error.msg)}</span>`;
     else { const u = r.warnings.filter(w => w.level === 'unsupported').length; st = `${r.plots.length} plot${r.plots.length === 1 ? '' : 's'} · ` + (u ? `<span class="pine-warn">⚠ ${u} aviso${u > 1 ? 's' : ''} de no soportado</span>` : r.warnings.length ? `${r.warnings.length} aviso${r.warnings.length > 1 ? 's' : ''}` : 'sin avisos') + (r.meta.overlay ? '' : ' · panel propio') + (r.strategy ? ` · <b class="${r.strategy.stats.net >= 0 ? 'positive' : 'negative'}">Estrategia ${r.strategy.stats.net >= 0 ? '+' : ''}${r.strategy.stats.netPct.toFixed(2)}% · ${r.strategy.tradesTotal} ops</b>` : ''); }
@@ -1905,7 +1983,7 @@ function drawPinePane(x, top0, H, lo, hi, o) {
   g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip();
   g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
   g.font = '10px system-ui'; g.fillStyle = text; g.textAlign = 'left';
-  g.fillText(`${(r.meta.short || r.meta.title || '').slice(0, 22)}  ${CCTPineDraw.legend(r, candles.length - 1).slice(0, 2).map(i => i.text.replace(/^.* /, '')).join('  ')}`, left + 4, top + 9);
+  { const tx = `${(r.meta.short || r.meta.title || '').slice(0, 22)}  ${CCTPineDraw.legend(r, candles.length - 1).slice(0, 2).map(i => i.text.replace(/^.* /, '')).join('  ')}`; g.fillText(tx, left + 4, top + 9); legAt(tx, left + 4, top + 9, {t: 'pine', sid: x.p.sid, pane: x.p.pane || 'bottom'}); }
   g.fillText(CCTPineDraw.fmtV(mx - pad), w - right + 6, top + 9); g.fillText(CCTPineDraw.fmtV(mn + pad), w - right + 6, top + height);
   g.beginPath(); g.rect(left, top0, plotW + 2, H); g.clip();
   CCTPineDraw.draw(g, r, {X, Y: Yp, lo, hi, left, right: left + plotW, top: top0 + 2, bottom: top0 + H - 2, step, candles, overlay: false});

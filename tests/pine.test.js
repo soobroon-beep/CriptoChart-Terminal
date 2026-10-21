@@ -239,3 +239,19 @@ test('strategy: sintaxis antigua con when= y dirección booleana, y position_siz
   assert.ok(r.ok, JSON.stringify(r.error)); assert.equal(r.strategy.trades.length, 1); assert.equal(r.strategy.trades[0][3], 100); assert.equal(r.strategy.trades[0][5], 102);
   assert.deepEqual(r.plots[0].values.map(v => v || 0), [0, 0, 0, 1, 1]);
 });
+
+test('catálogo Nova: Oscillator y Screener se interpretan sin avisos de no soportado', () => {
+  const fs = require('fs'), cs = walkC(400);
+  for (const f of ['nova-oscillator.pine', 'nova-screener.pine']) {
+    const r = P.run(fs.readFileSync(__dirname + '/../catalog/' + f, 'utf8'), cs, {interval: '1h', symbol: 'BTCUSDT', timeLimitMs: 20000});
+    assert.ok(r.ok, f + ' ' + JSON.stringify(r.error));
+    assert.equal(r.warnings.filter(w => w.level === 'unsupported').length, 0, f);
+  }
+});
+test('request.security recortado da el mismo resultado que el script completo', () => {
+  const cs = walkC(120), oth = walkC(120).map(c => Object.assign({}, c, {c: c.c * 2, o: c.o * 2, h: c.h * 2, l: c.l * 2}));
+  const code = hdr + 'junk = ta.sma(close, 5)\nplot(junk)\nx = request.security("ETHUSDT", "1h", ta.ema(close, 4))\nplot(x)';
+  const r = P.run(code, cs, {symbol: 'BTCUSDT', interval: '1h', sec: {'ETHUSDT|1h': oth}});
+  assert.ok(r.ok); const ref = P.run(hdr + 'plot(request.security("ETHUSDT", "1h", ta.ema(close, 4)))', cs, {symbol: 'BTCUSDT', interval: '1h', sec: {'ETHUSDT|1h': oth}});
+  assert.deepEqual(r.plots[1].values, ref.plots[0].values);
+});

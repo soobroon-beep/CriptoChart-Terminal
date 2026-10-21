@@ -1,0 +1,700 @@
+//@version=5
+indicator("Nova Nexus — Screener 40 Cryptos", "Nova Nexus© - Screener 2.0", overlay = false)
+
+// =========================================================================
+// VISUALIZACIÓN
+// =========================================================================
+grpVis   = "🎨  Visualización"
+mobileOn = input.bool(false, "📱 Modo Móvil", group=grpVis, tooltip="Activa para ver tabla compacta en celular.")
+posOpt   = input.string("Abajo Derecha", "📍 Posición", options=["Arriba Derecha","Arriba Izquierda","Abajo Derecha","Abajo Izquierda"], group=grpVis)
+
+tPos = switch posOpt
+    "Arriba Derecha"   => position.top_right
+    "Arriba Izquierda" => position.top_left
+    "Abajo Izquierda"  => position.bottom_left
+    => position.bottom_right
+
+// =========================================================================
+// TEMA: DARK GLASS NEÓN (rediseñado — mayor contraste y saturación)
+// =========================================================================
+t_bg     = color.new(#0a0a14, 0)   // fondo casi negro, tinte azul profundo
+t_hbg    = color.new(#1c1c3d, 0)   // header violeta oscuro premium
+t_htxt   = color.new(#a5a5ff, 0)   // lavanda neón brillante
+t_rEven  = color.new(#13131f, 0)
+t_rOdd   = color.new(#0c0c16, 0)
+t_sym    = color.new(#eaeaff, 0)   // símbolo casi blanco, tinte lavanda
+t_long   = color.new(#00e676, 0)   // verde neón vívido
+t_short  = color.new(#ff2d55, 0)   // rojo/rosa neón vívido
+t_rng    = color.new(#b366ff, 0)   // púrpura neón
+t_div    = color.new(#ffc400, 0)   // dorado brillante
+t_empty  = color.new(#0a0a14, 0)
+t_sigTxt = color.new(#ffffff, 0)
+t_sigDiv = color.new(#14141c, 0)
+t_emTxt  = color.new(#40405c, 0)
+t_border = color.new(#33336b, 0)   // borde violeta más visible
+t_frame  = color.new(#8a6bff, 0)   // marco exterior neón
+
+// =========================================================================
+// SÍMBOLOS
+// =========================================================================
+grpSym = "📋  Símbolos (configúralos tú)"
+sym01 = input.symbol("", "Símbolo  1", group = grpSym)
+sym02 = input.symbol("", "Símbolo  2", group = grpSym)
+sym03 = input.symbol("", "Símbolo  3", group = grpSym)
+sym04 = input.symbol("", "Símbolo  4", group = grpSym)
+sym05 = input.symbol("", "Símbolo  5", group = grpSym)
+sym06 = input.symbol("", "Símbolo  6", group = grpSym)
+sym07 = input.symbol("", "Símbolo  7", group = grpSym)
+sym08 = input.symbol("", "Símbolo  8", group = grpSym)
+sym09 = input.symbol("", "Símbolo  9", group = grpSym)
+sym10 = input.symbol("", "Símbolo 10", group = grpSym)
+sym11 = input.symbol("", "Símbolo 11", group = grpSym)
+sym12 = input.symbol("", "Símbolo 12", group = grpSym)
+sym13 = input.symbol("", "Símbolo 13", group = grpSym)
+sym14 = input.symbol("", "Símbolo 14", group = grpSym)
+sym15 = input.symbol("", "Símbolo 15", group = grpSym)
+sym16 = input.symbol("", "Símbolo 16", group = grpSym)
+sym17 = input.symbol("", "Símbolo 17", group = grpSym)
+sym18 = input.symbol("", "Símbolo 18", group = grpSym)
+sym19 = input.symbol("", "Símbolo 19", group = grpSym)
+sym20 = input.symbol("", "Símbolo 20", group = grpSym)
+sym21 = input.symbol("", "Símbolo 21", group = grpSym)
+sym22 = input.symbol("", "Símbolo 22", group = grpSym)
+sym23 = input.symbol("", "Símbolo 23", group = grpSym)
+sym24 = input.symbol("", "Símbolo 24", group = grpSym)
+sym25 = input.symbol("", "Símbolo 25", group = grpSym)
+sym26 = input.symbol("", "Símbolo 26", group = grpSym)
+sym27 = input.symbol("", "Símbolo 27", group = grpSym)
+sym28 = input.symbol("", "Símbolo 28", group = grpSym)
+sym29 = input.symbol("", "Símbolo 29", group = grpSym)
+sym30 = input.symbol("", "Símbolo 30", group = grpSym)
+sym31 = input.symbol("", "Símbolo 31", group = grpSym)
+sym32 = input.symbol("", "Símbolo 32", group = grpSym)
+sym33 = input.symbol("", "Símbolo 33", group = grpSym)
+sym34 = input.symbol("", "Símbolo 34", group = grpSym)
+sym35 = input.symbol("", "Símbolo 35", group = grpSym)
+sym36 = input.symbol("", "Símbolo 36", group = grpSym)
+sym37 = input.symbol("", "Símbolo 37", group = grpSym)
+sym38 = input.symbol("", "Símbolo 38", group = grpSym)
+sym39 = input.symbol("", "Símbolo 39", group = grpSym)
+sym40 = input.symbol("", "Símbolo 40", group = grpSym)
+
+// =========================================================================
+// FILTROS
+// =========================================================================
+grpFilt  = "⚙️  Filtros"
+minScore = input.int(1, "Score mínimo",          minval=1, maxval=5, group=grpFilt, tooltip="1=todas | 5=solo perfectas")
+sigBars  = input.int(7, "Duración señal (velas)", minval=1, maxval=50, group=grpFilt)
+
+// =========================================================================
+// PARÁMETROS INTERNOS
+// =========================================================================
+int   _len     = 20
+int   _sig     = 3
+int   _dfl     = 30
+float _obLevel = 40.0
+float _osLevel = -40.0
+float _obRange = 35.0
+float _osRange = -35.0
+int   _emaLen  = 200
+float _mfMin   = 3.0
+int   _adxLen  = 14
+float _adxThr  = 25.0
+int   _divLook = 5
+int   _divTrs  = 25
+
+// =========================================================================
+// LÓGICA DE SEÑAL
+// =========================================================================
+f_sig() =>
+    _hl2   = math.avg(high, low)
+    _av    = ta.sma(_hl2, _len)
+    _hh    = ta.highest(_hl2, _len)
+    _ll    = ta.lowest(_hl2, _len)
+    _hlAvg = math.avg(math.avg(_hh, _ll), _av)
+    _atr   = ta.rma(math.max(math.max(high - low, math.abs(high - close[1])), math.abs(low - close[1])), _len)
+    oscV   = ta.linreg((close - _hlAvg) / _atr * 100, _len, 0)
+    sigV   = ta.sma(oscV, _sig)
+    _haC   = math.avg(open, high, low, close)
+    var float _haO = na
+    _haO  := na(_haO[1]) ? math.avg(open, close) : math.avg(_haO[1], _haC[1])
+    _haH   = math.max(high, math.max(_haO, _haC))
+    _haL   = math.min(low,  math.min(_haO, _haC))
+    _haAtr = ta.rma(math.max(math.max(_haH - _haL, math.abs(_haH - _haC[1])), math.abs(_haL - _haC[1])), _dfl)
+    _fUp   = ta.rma(math.max(ta.change(_haH), 0), _dfl) / _haAtr
+    _fDn   = ta.rma(math.max(-ta.change(_haL), 0), _dfl) / _haAtr
+    fluxV  = ta.rma((_fUp - _fDn) / (_fUp + _fDn), _dfl / 2) * 100
+    emaV   = ta.ema(close, _emaLen)
+    [_, __, adxV] = ta.dmi(_adxLen, _adxLen)
+    isRng  = adxV < _adxThr
+    obU    = isRng ? _obRange : _obLevel
+    osU    = isRng ? _osRange : _osLevel
+    inOB   = oscV >= obU
+    inOS   = oscV <= osU
+    xBuy   = ta.crossover(oscV, sigV)  and inOS
+    xSell  = ta.crossunder(oscV, sigV) and inOB
+    mfU    = isRng ? _mfMin / 2 : _mfMin
+    f3Buy  = fluxV >  mfU
+    f3Sell = fluxV < -mfU
+    f2Buy  = not isRng ? close > emaV : true
+    f2Sell = not isRng ? close < emaV : true
+    ppLow  = ta.lowest(low,   _divLook)
+    ppHigh = ta.highest(high, _divLook)
+    opLow  = ta.lowest(oscV,  _divLook)
+    opHigh = ta.highest(oscV, _divLook)
+    dBull  = low  < ppLow[1]  and oscV > opLow[1]  and oscV < -_divTrs and xBuy
+    dBear  = high > ppHigh[1] and oscV < opHigh[1] and oscV >  _divTrs and xSell
+    scBuy  = (inOS ? 1:0) + (close > emaV ? 1:0) + (f3Buy  ? 1:0) + (not isRng ? 1:0) + (dBull ? 1:0)
+    scSell = (inOB ? 1:0) + (close < emaV ? 1:0) + (f3Sell ? 1:0) + (not isRng ? 1:0) + (dBear ? 1:0)
+    fBuy   = xBuy  and f2Buy  and f3Buy  and scBuy  >= minScore
+    fSell  = xSell and f2Sell and f3Sell and scSell >= minScore
+    isDvg  = (fBuy and dBull) or (fSell and dBear)
+    sigEnc = fBuy ? (isRng ? 2 : 1) : fSell ? (isRng ? -2 : -1) : 0
+    [sigEnc, isDvg, close]
+
+// =========================================================================
+// REQUEST.SECURITY — 1 llamada por símbolo (Con Precio)
+// =========================================================================
+[s01, dv01, p01] = request.security(sym01, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s02, dv02, p02] = request.security(sym02, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s03, dv03, p03] = request.security(sym03, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s04, dv04, p04] = request.security(sym04, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s05, dv05, p05] = request.security(sym05, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s06, dv06, p06] = request.security(sym06, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s07, dv07, p07] = request.security(sym07, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s08, dv08, p08] = request.security(sym08, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s09, dv09, p09] = request.security(sym09, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s10, dv10, p10] = request.security(sym10, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s11, dv11, p11] = request.security(sym11, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s12, dv12, p12] = request.security(sym12, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s13, dv13, p13] = request.security(sym13, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s14, dv14, p14] = request.security(sym14, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s15, dv15, p15] = request.security(sym15, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s16, dv16, p16] = request.security(sym16, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s17, dv17, p17] = request.security(sym17, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s18, dv18, p18] = request.security(sym18, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s19, dv19, p19] = request.security(sym19, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s20, dv20, p20] = request.security(sym20, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s21, dv21, p21] = request.security(sym21, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s22, dv22, p22] = request.security(sym22, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s23, dv23, p23] = request.security(sym23, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s24, dv24, p24] = request.security(sym24, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s25, dv25, p25] = request.security(sym25, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s26, dv26, p26] = request.security(sym26, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s27, dv27, p27] = request.security(sym27, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s28, dv28, p28] = request.security(sym28, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s29, dv29, p29] = request.security(sym29, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s30, dv30, p30] = request.security(sym30, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s31, dv31, p31] = request.security(sym31, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s32, dv32, p32] = request.security(sym32, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s33, dv33, p33] = request.security(sym33, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s34, dv34, p34] = request.security(sym34, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s35, dv35, p35] = request.security(sym35, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s36, dv36, p36] = request.security(sym36, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s37, dv37, p37] = request.security(sym37, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s38, dv38, p38] = request.security(sym38, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s39, dv39, p39] = request.security(sym39, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+[s40, dv40, p40] = request.security(sym40, timeframe.period, f_sig(), lookahead=barmerge.lookahead_off)
+
+// =========================================================================
+// CONTADORES DE PERSISTENCIA
+// =========================================================================
+var int  ps01  = 0
+var bool pdv01 = false
+var int  cnt01 = 0
+var int  ps02  = 0
+var bool pdv02 = false
+var int  cnt02 = 0
+var int  ps03  = 0
+var bool pdv03 = false
+var int  cnt03 = 0
+var int  ps04  = 0
+var bool pdv04 = false
+var int  cnt04 = 0
+var int  ps05  = 0
+var bool pdv05 = false
+var int  cnt05 = 0
+var int  ps06  = 0
+var bool pdv06 = false
+var int  cnt06 = 0
+var int  ps07  = 0
+var bool pdv07 = false
+var int  cnt07 = 0
+var int  ps08  = 0
+var bool pdv08 = false
+var int  cnt08 = 0
+var int  ps09  = 0
+var bool pdv09 = false
+var int  cnt09 = 0
+var int  ps10  = 0
+var bool pdv10 = false
+var int  cnt10 = 0
+var int  ps11  = 0
+var bool pdv11 = false
+var int  cnt11 = 0
+var int  ps12  = 0
+var bool pdv12 = false
+var int  cnt12 = 0
+var int  ps13  = 0
+var bool pdv13 = false
+var int  cnt13 = 0
+var int  ps14  = 0
+var bool pdv14 = false
+var int  cnt14 = 0
+var int  ps15  = 0
+var bool pdv15 = false
+var int  cnt15 = 0
+var int  ps16  = 0
+var bool pdv16 = false
+var int  cnt16 = 0
+var int  ps17  = 0
+var bool pdv17 = false
+var int  cnt17 = 0
+var int  ps18  = 0
+var bool pdv18 = false
+var int  cnt18 = 0
+var int  ps19  = 0
+var bool pdv19 = false
+var int  cnt19 = 0
+var int  ps20  = 0
+var bool pdv20 = false
+var int  cnt20 = 0
+var int  ps21  = 0
+var bool pdv21 = false
+var int  cnt21 = 0
+var int  ps22  = 0
+var bool pdv22 = false
+var int  cnt22 = 0
+var int  ps23  = 0
+var bool pdv23 = false
+var int  cnt23 = 0
+var int  ps24  = 0
+var bool pdv24 = false
+var int  cnt24 = 0
+var int  ps25  = 0
+var bool pdv25 = false
+var int  cnt25 = 0
+var int  ps26  = 0
+var bool pdv26 = false
+var int  cnt26 = 0
+var int  ps27  = 0
+var bool pdv27 = false
+var int  cnt27 = 0
+var int  ps28  = 0
+var bool pdv28 = false
+var int  cnt28 = 0
+var int  ps29  = 0
+var bool pdv29 = false
+var int  cnt29 = 0
+var int  ps30  = 0
+var bool pdv30 = false
+var int  cnt30 = 0
+var int  ps31  = 0
+var bool pdv31 = false
+var int  cnt31 = 0
+var int  ps32  = 0
+var bool pdv32 = false
+var int  cnt32 = 0
+var int  ps33  = 0
+var bool pdv33 = false
+var int  cnt33 = 0
+var int  ps34  = 0
+var bool pdv34 = false
+var int  cnt34 = 0
+var int  ps35  = 0
+var bool pdv35 = false
+var int  cnt35 = 0
+var int  ps36  = 0
+var bool pdv36 = false
+var int  cnt36 = 0
+var int  ps37  = 0
+var bool pdv37 = false
+var int  cnt37 = 0
+var int  ps38  = 0
+var bool pdv38 = false
+var int  cnt38 = 0
+var int  ps39  = 0
+var bool pdv39 = false
+var int  cnt39 = 0
+var int  ps40  = 0
+var bool pdv40 = false
+var int  cnt40 = 0
+
+// =========================================================================
+// ACTUALIZACIÓN DE CONTADORES
+// =========================================================================
+if s01 != 0
+    ps01 := s01, pdv01 := dv01, cnt01 := sigBars
+else if cnt01 > 0
+    cnt01 := cnt01 - 1
+else
+    ps01 := 0, pdv01 := false
+
+if s02 != 0
+    ps02 := s02, pdv02 := dv02, cnt02 := sigBars
+else if cnt02 > 0
+    cnt02 := cnt02 - 1
+else
+    ps02 := 0, pdv02 := false
+
+if s03 != 0
+    ps03 := s03, pdv03 := dv03, cnt03 := sigBars
+else if cnt03 > 0
+    cnt03 := cnt03 - 1
+else
+    ps03 := 0, pdv03 := false
+
+if s04 != 0
+    ps04 := s04, pdv04 := dv04, cnt04 := sigBars
+else if cnt04 > 0
+    cnt04 := cnt04 - 1
+else
+    ps04 := 0, pdv04 := false
+
+if s05 != 0
+    ps05 := s05, pdv05 := dv05, cnt05 := sigBars
+else if cnt05 > 0
+    cnt05 := cnt05 - 1
+else
+    ps05 := 0, pdv05 := false
+
+if s06 != 0
+    ps06 := s06, pdv06 := dv06, cnt06 := sigBars
+else if cnt06 > 0
+    cnt06 := cnt06 - 1
+else
+    ps06 := 0, pdv06 := false
+
+if s07 != 0
+    ps07 := s07, pdv07 := dv07, cnt07 := sigBars
+else if cnt07 > 0
+    cnt07 := cnt07 - 1
+else
+    ps07 := 0, pdv07 := false
+
+if s08 != 0
+    ps08 := s08, pdv08 := dv08, cnt08 := sigBars
+else if cnt08 > 0
+    cnt08 := cnt08 - 1
+else
+    ps08 := 0, pdv08 := false
+
+if s09 != 0
+    ps09 := s09, pdv09 := dv09, cnt09 := sigBars
+else if cnt09 > 0
+    cnt09 := cnt09 - 1
+else
+    ps09 := 0, pdv09 := false
+
+if s10 != 0
+    ps10 := s10, pdv10 := dv10, cnt10 := sigBars
+else if cnt10 > 0
+    cnt10 := cnt10 - 1
+else
+    ps10 := 0, pdv10 := false
+
+if s11 != 0
+    ps11 := s11, pdv11 := dv11, cnt11 := sigBars
+else if cnt11 > 0
+    cnt11 := cnt11 - 1
+else
+    ps11 := 0, pdv11 := false
+
+if s12 != 0
+    ps12 := s12, pdv12 := dv12, cnt12 := sigBars
+else if cnt12 > 0
+    cnt12 := cnt12 - 1
+else
+    ps12 := 0, pdv12 := false
+
+if s13 != 0
+    ps13 := s13, pdv13 := dv13, cnt13 := sigBars
+else if cnt13 > 0
+    cnt13 := cnt13 - 1
+else
+    ps13 := 0, pdv13 := false
+
+if s14 != 0
+    ps14 := s14, pdv14 := dv14, cnt14 := sigBars
+else if cnt14 > 0
+    cnt14 := cnt14 - 1
+else
+    ps14 := 0, pdv14 := false
+
+if s15 != 0
+    ps15 := s15, pdv15 := dv15, cnt15 := sigBars
+else if cnt15 > 0
+    cnt15 := cnt15 - 1
+else
+    ps15 := 0, pdv15 := false
+
+if s16 != 0
+    ps16 := s16, pdv16 := dv16, cnt16 := sigBars
+else if cnt16 > 0
+    cnt16 := cnt16 - 1
+else
+    ps16 := 0, pdv16 := false
+
+if s17 != 0
+    ps17 := s17, pdv17 := dv17, cnt17 := sigBars
+else if cnt17 > 0
+    cnt17 := cnt17 - 1
+else
+    ps17 := 0, pdv17 := false
+
+if s18 != 0
+    ps18 := s18, pdv18 := dv18, cnt18 := sigBars
+else if cnt18 > 0
+    cnt18 := cnt18 - 1
+else
+    ps18 := 0, pdv18 := false
+
+if s19 != 0
+    ps19 := s19, pdv19 := dv19, cnt19 := sigBars
+else if cnt19 > 0
+    cnt19 := cnt19 - 1
+else
+    ps19 := 0, pdv19 := false
+
+if s20 != 0
+    ps20 := s20, pdv20 := dv20, cnt20 := sigBars
+else if cnt20 > 0
+    cnt20 := cnt20 - 1
+else
+    ps20 := 0, pdv20 := false
+
+if s21 != 0
+    ps21 := s21, pdv21 := dv21, cnt21 := sigBars
+else if cnt21 > 0
+    cnt21 := cnt21 - 1
+else
+    ps21 := 0, pdv21 := false
+
+if s22 != 0
+    ps22 := s22, pdv22 := dv22, cnt22 := sigBars
+else if cnt22 > 0
+    cnt22 := cnt22 - 1
+else
+    ps22 := 0, pdv22 := false
+
+if s23 != 0
+    ps23 := s23, pdv23 := dv23, cnt23 := sigBars
+else if cnt23 > 0
+    cnt23 := cnt23 - 1
+else
+    ps23 := 0, pdv23 := false
+
+if s24 != 0
+    ps24 := s24, pdv24 := dv24, cnt24 := sigBars
+else if cnt24 > 0
+    cnt24 := cnt24 - 1
+else
+    ps24 := 0, pdv24 := false
+
+if s25 != 0
+    ps25 := s25, pdv25 := dv25, cnt25 := sigBars
+else if cnt25 > 0
+    cnt25 := cnt25 - 1
+else
+    ps25 := 0, pdv25 := false
+
+if s26 != 0
+    ps26 := s26, pdv26 := dv26, cnt26 := sigBars
+else if cnt26 > 0
+    cnt26 := cnt26 - 1
+else
+    ps26 := 0, pdv26 := false
+
+if s27 != 0
+    ps27 := s27, pdv27 := dv27, cnt27 := sigBars
+else if cnt27 > 0
+    cnt27 := cnt27 - 1
+else
+    ps27 := 0, pdv27 := false
+
+if s28 != 0
+    ps28 := s28, pdv28 := dv28, cnt28 := sigBars
+else if cnt28 > 0
+    cnt28 := cnt28 - 1
+else
+    ps28 := 0, pdv28 := false
+
+if s29 != 0
+    ps29 := s29, pdv29 := dv29, cnt29 := sigBars
+else if cnt29 > 0
+    cnt29 := cnt29 - 1
+else
+    ps29 := 0, pdv29 := false
+
+if s30 != 0
+    ps30 := s30, pdv30 := dv30, cnt30 := sigBars
+else if cnt30 > 0
+    cnt30 := cnt30 - 1
+else
+    ps30 := 0, pdv30 := false
+
+if s31 != 0
+    ps31 := s31, pdv31 := dv31, cnt31 := sigBars
+else if cnt31 > 0
+    cnt31 := cnt31 - 1
+else
+    ps31 := 0, pdv31 := false
+
+if s32 != 0
+    ps32 := s32, pdv32 := dv32, cnt32 := sigBars
+else if cnt32 > 0
+    cnt32 := cnt32 - 1
+else
+    ps32 := 0, pdv32 := false
+
+if s33 != 0
+    ps33 := s33, pdv33 := dv33, cnt33 := sigBars
+else if cnt33 > 0
+    cnt33 := cnt33 - 1
+else
+    ps33 := 0, pdv33 := false
+
+if s34 != 0
+    ps34 := s34, pdv34 := dv34, cnt34 := sigBars
+else if cnt34 > 0
+    cnt34 := cnt34 - 1
+else
+    ps34 := 0, pdv34 := false
+
+if s35 != 0
+    ps35 := s35, pdv35 := dv35, cnt35 := sigBars
+else if cnt35 > 0
+    cnt35 := cnt35 - 1
+else
+    ps35 := 0, pdv35 := false
+
+if s36 != 0
+    ps36 := s36, pdv36 := dv36, cnt36 := sigBars
+else if cnt36 > 0
+    cnt36 := cnt36 - 1
+else
+    ps36 := 0, pdv36 := false
+
+if s37 != 0
+    ps37 := s37, pdv37 := dv37, cnt37 := sigBars
+else if cnt37 > 0
+    cnt37 := cnt37 - 1
+else
+    ps37 := 0, pdv37 := false
+
+if s38 != 0
+    ps38 := s38, pdv38 := dv38, cnt38 := sigBars
+else if cnt38 > 0
+    cnt38 := cnt38 - 1
+else
+    ps38 := 0, pdv38 := false
+
+if s39 != 0
+    ps39 := s39, pdv39 := dv39, cnt39 := sigBars
+else if cnt39 > 0
+    cnt39 := cnt39 - 1
+else
+    ps39 := 0, pdv39 := false
+
+if s40 != 0
+    ps40 := s40, pdv40 := dv40, cnt40 := sigBars
+else if cnt40 > 0
+    cnt40 := cnt40 - 1
+else
+    ps40 := 0, pdv40 := false
+
+// =========================================================================
+// HELPERS DE CELDA (con tema dinámico)
+// =========================================================================
+cellTxt(int sig, bool dvg, int elapsed) =>
+    rng  = math.abs(sig) == 2
+    bars = " (" + str.tostring(elapsed) + ")"
+    if sig > 0
+        dvg ? "◆ DIV+" + bars : rng ? "▲ RNG" + bars : "▲ LONG" + bars
+    else if sig < 0
+        dvg ? "◆ DIV-" + bars : rng ? "▼ RNG" + bars : "▼ SHORT" + bars
+    else
+        "·"
+
+cellBg(int sig, bool dvg) =>
+    rng = math.abs(sig) == 2
+    if sig > 0
+        dvg ? t_div : rng ? t_rng : t_long
+    else if sig < 0
+        dvg ? t_div : rng ? t_rng : t_short
+    else
+        t_empty
+
+cellFg(int sig, bool dvg) =>
+    if sig != 0
+        dvg ? t_sigDiv : t_sigTxt
+    else
+        t_emTxt
+
+symName(string s) =>
+    str.length(s) == 0 ? "—" : s
+
+// =========================================================================
+// TABLA
+// =========================================================================
+// Desktop: texto normal (más grande) | Móvil: texto small (más legible que antes)
+nCols = 4
+nRows = 21
+
+var table t = table.new(tPos, nCols, nRows, bgcolor=t_bg, border_color=t_border, border_width=2, frame_color=t_frame, frame_width=3)
+
+symArr = array.from(sym01,sym02,sym03,sym04,sym05,sym06,sym07,sym08,sym09,sym10,sym11,sym12,sym13,sym14,sym15,sym16,sym17,sym18,sym19,sym20,sym21,sym22,sym23,sym24,sym25,sym26,sym27,sym28,sym29,sym30,sym31,sym32,sym33,sym34,sym35,sym36,sym37,sym38,sym39,sym40)
+sigArr = array.from(ps01,ps02,ps03,ps04,ps05,ps06,ps07,ps08,ps09,ps10,ps11,ps12,ps13,ps14,ps15,ps16,ps17,ps18,ps19,ps20,ps21,ps22,ps23,ps24,ps25,ps26,ps27,ps28,ps29,ps30,ps31,ps32,ps33,ps34,ps35,ps36,ps37,ps38,ps39,ps40)
+dvArr  = array.from(pdv01,pdv02,pdv03,pdv04,pdv05,pdv06,pdv07,pdv08,pdv09,pdv10,pdv11,pdv12,pdv13,pdv14,pdv15,pdv16,pdv17,pdv18,pdv19,pdv20,pdv21,pdv22,pdv23,pdv24,pdv25,pdv26,pdv27,pdv28,pdv29,pdv30,pdv31,pdv32,pdv33,pdv34,pdv35,pdv36,pdv37,pdv38,pdv39,pdv40)
+cntArr = array.from(cnt01,cnt02,cnt03,cnt04,cnt05,cnt06,cnt07,cnt08,cnt09,cnt10,cnt11,cnt12,cnt13,cnt14,cnt15,cnt16,cnt17,cnt18,cnt19,cnt20,cnt21,cnt22,cnt23,cnt24,cnt25,cnt26,cnt27,cnt28,cnt29,cnt30,cnt31,cnt32,cnt33,cnt34,cnt35,cnt36,cnt37,cnt38,cnt39,cnt40)
+
+// Tamaño de texto: small en móvil (antes tiny), normal en desktop (antes small) — más grande y legible
+tSz = mobileOn ? size.small : size.normal
+
+// Header — siempre 4 columnas, con iconos para look más moderno
+table.cell(t, 0, 0, "💠 SÍMBOLO", text_color=t_htxt, bgcolor=t_hbg, text_size=tSz, text_halign=text.align_center, text_font_family=font.family_monospace)
+table.cell(t, 1, 0, "⚡ SEÑAL",   text_color=t_htxt, bgcolor=t_hbg, text_size=tSz, text_halign=text.align_center, text_font_family=font.family_monospace)
+table.cell(t, 2, 0, "💠 SÍMBOLO", text_color=t_htxt, bgcolor=t_hbg, text_size=tSz, text_halign=text.align_center, text_font_family=font.family_monospace)
+table.cell(t, 3, 0, "⚡ SEÑAL",   text_color=t_htxt, bgcolor=t_hbg, text_size=tSz, text_halign=text.align_center, text_font_family=font.family_monospace)
+
+// Filas — siempre 2 símbolos por fila, 20 filas
+for row = 1 to 20
+    iL   = row - 1
+    iR   = row + 19
+    sigL = array.get(sigArr, iL)
+    dvL  = array.get(dvArr,  iL)
+    sigR = array.get(sigArr, iR)
+    dvR  = array.get(dvArr,  iR)
+    elL  = sigL != 0 ? sigBars - array.get(cntArr, iL) : 0
+    elR  = sigR != 0 ? sigBars - array.get(cntArr, iR) : 0
+    rBg  = row % 2 == 0 ? t_rEven : t_rOdd
+    table.cell(t, 0, row, symName(array.get(symArr,iL)), text_color=t_sym,           bgcolor=rBg,               text_size=tSz, text_halign=text.align_left,   text_font_family=font.family_monospace)
+    table.cell(t, 1, row, cellTxt(sigL, dvL, elL),       text_color=cellFg(sigL,dvL), bgcolor=cellBg(sigL,dvL), text_size=tSz, text_halign=text.align_center, text_font_family=font.family_monospace)
+    table.cell(t, 2, row, symName(array.get(symArr,iR)), text_color=t_sym,           bgcolor=rBg,               text_size=tSz, text_halign=text.align_left,   text_font_family=font.family_monospace)
+    table.cell(t, 3, row, cellTxt(sigR, dvR, elR),       text_color=cellFg(sigR,dvR), bgcolor=cellBg(sigR,dvR), text_size=tSz, text_halign=text.align_center, text_font_family=font.family_monospace)
+
+// =========================================================================
+// ALERTAS DINÁMICAS AGRUPADAS (SOLUCIÓN ANTI-SPAM PARA DISCORD)
+// =========================================================================
+rawSigArr = array.from(s01,s02,s03,s04,s05,s06,s07,s08,s09,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32,s33,s34,s35,s36,s37,s38,s39,s40)
+rawPrcArr = array.from(p01,p02,p03,p04,p05,p06,p07,p08,p09,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23,p24,p25,p26,p27,p28,p29,p30,p31,p32,p33,p34,p35,p36,p37,p38,p39,p40)
+
+string listaSenales = ""
+int contadorSenales = 0
+
+for i = 0 to 39
+    string currentSym = array.get(symArr, i)
+    int currentSig = array.get(rawSigArr, i)
+    float currentPrice = array.get(rawPrcArr, i)
+    
+    if currentSig != 0 and currentSym != ""
+        string dirText = currentSig > 0 ? "🟢 LONG" : "🔴 SHORT"
+        string priceText = str.tostring(currentPrice, "#.########")
+        
+        listaSenales := listaSenales + "🔸 **" + currentSym + "** | " + dirText + " | Entrada: $" + priceText + "\\n"
+        contadorSenales := contadorSenales + 1
+
+if contadorSenales > 0
+    string titulo = "🚨 " + str.tostring(contadorSenales) + " NUEVAS SEÑALES DETECTADAS"
+    string jsonMsg = '{"username": "Nova Nexus Screener", "embeds": [{"title": "' + titulo + '", "color": 16766720, "description": "' + listaSenales + '", "footer": {"text": "Nova Nexus 2.0 | TF: ' + timeframe.period + 'm"}}]}'
+    alert(jsonMsg, alert.freq_once_per_bar_close)

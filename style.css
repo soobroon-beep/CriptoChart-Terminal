@@ -188,3 +188,9 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
   body.wl-off #watchView,body.side-off #indicatorView,body.side-off #settingsView,body.side-off #alertsView{display:none!important}
   body.wl-off #splitL{left:0}body.side-off #splitR{right:0}
 }
+
+.legend-box{position:absolute;inset:0;pointer-events:none;z-index:4}.leg-row{position:absolute;display:flex;gap:2px;pointer-events:auto;opacity:.55;transition:opacity .15s}.leg-row:hover,.leg-row:focus-within{opacity:1}
+.leg-row button{height:17px;min-width:19px;padding:0 3px;border:1px solid var(--line);border-radius:5px;background:rgba(13,20,33,.82);color:var(--text);font-size:10px;line-height:1;cursor:pointer}
+.leg-row button:hover{border-color:var(--accent)}
+#legMenu{position:fixed;z-index:60;background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:4px;display:flex;flex-direction:column;box-shadow:0 8px 24px rgba(0,0,0,.4)}#legMenu button{background:none;border:0;color:var(--text);text-align:left;padding:8px 12px;border-radius:7px;font-size:13px}#legMenu button:hover{background:var(--surface)}#legMenu button.cur{color:var(--accent);font-weight:700}
+@media(max-width:760px){.leg-row{opacity:.8}.leg-row button{height:22px;min-width:24px;font-size:12px}}

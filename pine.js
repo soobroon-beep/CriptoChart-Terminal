@@ -413,7 +413,7 @@ const OLDVAR = Object.assign(Object.create(null), {tickerid: 'syminfo.tickerid',
 const lookup = (env, name) => { for (let s = env.scope; s; s = s.up) { const v = s.m.get(name); if (v) return v; } return null; };
 const histAt = (ctx, v, off) => { if (off === 0) return v.cur; if (off < 0) return null; const i = ctx.bar - off; if (i < 0) return null; const h = v.hist[i]; return h === undefined ? null : h; };
 function warn(ctx, line, msg, key, level) { const k = key || msg; if (ctx.wkeys.has(k)) return; ctx.wkeys.add(k); ctx.warnings.push({line: line || 0, msg, level: level || 'warn'}); }
-function dotted(n) { const parts = []; while (n.k === 'mem') { parts.unshift(n.prop); n = n.obj; } if (n.k !== 'id') return null; parts.unshift(n.name); return parts; }
+function dotted(n) { if (n._dp !== undefined) return n._dp; const o = n, parts = []; while (n.k === 'mem') { parts.unshift(n.prop); n = n.obj; } if (n.k !== 'id') return (o._dp = null); parts.unshift(n.name); o._dp = parts; o._full = parts.join('.'); return parts; }
 function tick(ctx, line) { if ((++ctx.steps & 0xfff) === 0 && Date.now() > ctx.deadline) throw new PineError('El script tardó demasiado y se detuvo (límite de tiempo)', line); }
 
 function binop(op, l, r, line) {
@@ -453,7 +453,7 @@ function evId(n, env) {
 function evMem(n, env) {
   const ctx = env.ctx, parts = dotted(n);
   if (parts && !lookup(env, parts[0])) {
-    const full = parts.join('.');
+    const full = n._full;
     if (full in CONSTS) { const c = CONSTS[full]; return typeof c === 'function' ? c(ctx) : c; }
     if (CONST_DYN[full]) return CONST_DYN[full](ctx, env.frame.state(n));
     if (ctx.enums && ctx.enums.has(parts[0]) && parts.length === 2) { const en = ctx.enums.get(parts[0]); if (!en.fields.some(f => f.name === parts[1])) throw new PineError(`El enum ${parts[0]} no tiene el valor «${parts[1]}»`, n.line); return full; }
@@ -632,9 +632,9 @@ function callBuiltin(b, name, n, env, recv) {
 }
 function evCall(n, env) {
   const ctx = env.ctx, f = n.fn; let parts = null;
-  if (f.k === 'id') parts = [f.name]; else if (f.k === 'mem') parts = dotted(f);
+  if (f.k === 'id') parts = f._dp || (f._dp = [f.name]); else if (f.k === 'mem') parts = dotted(f);
   if (parts && (parts.length === 1 || !lookup(env, parts[0]))) { // una variable puede llamarse igual que una función (p. ej. «color barcolor = …» y «barcolor(…)»)
-    const name = parts.join('.');
+    const name = n._nm || (n._nm = parts.join('.'));
     if (parts.length === 1 && ctx.fns.has(name)) return callUser(ctx.fns.get(name), n, env);
     if (parts.length === 1 && ctx.methods.has(name) && n.args.length) { // método llamado como función: el primer argumento es el receptor
       const recv = ev(n.args[0].e, env), ty = typeOfVal(recv), ms = ctx.methods.get(name);
@@ -1580,10 +1580,29 @@ function evSecurity(n, env) {
   else { const hEnd = j + 1 < data.length ? data[j + 1].t : data[j].t + TFMS[tfk], last = ctx.candles[ctx.bar].t + ctx.ms >= hEnd; v = last ? arr[j] : (j > 0 ? arr[j - 1] : null); }
   if (v === undefined) return null; return v instanceof Tup ? new Tup(v.a.slice()) : v;
 }
+/* Recorte para corridas secundarias: solo se ejecutan las sentencias de las que dependen los argumentos de request.security
+   (cierre transitivo de nombres). El resto (tablas, plots, contadores…) no cambia lo que se anota, así que se omite. */
+const SLICE_DRAW = new Set(['plot', 'plotshape', 'plotchar', 'plotarrow', 'plotcandle', 'plotbar', 'bgcolor', 'barcolor', 'fill', 'hline', 'alertcondition', 'alert', 'indicator', 'strategy']);
+const sliceCache = new WeakMap();
+function sliceForSecurity(ast) {
+  if (sliceCache.has(ast)) return sliceCache.get(ast);
+  const refsOf = (node, out) => { if (Array.isArray(node)) { for (const x of node) refsOf(x, out); } else if (node && typeof node === 'object') { if (typeof node.name === 'string') out.add(node.name); if (Array.isArray(node.names)) for (const q of node.names) out.add(q); for (const k in node) if (k !== 'line' && typeof node[k] === 'object') refsOf(node[k], out); } return out; };
+  const defsOf = (node, out) => { if (Array.isArray(node)) { for (const x of node) defsOf(x, out); } else if (node && typeof node === 'object') { if ((node.k === 'decl' || node.k === 'assign' || node.k === 'fn') && typeof node.name === 'string') out.add(node.name); if (node.k === 'tdecl') for (const q of node.names) out.add(q); for (const k in node) if (k !== 'line' && typeof node[k] === 'object') defsOf(node[k], out); } return out; };
+  const hasSec = node => { if (Array.isArray(node)) return node.some(hasSec); if (!node || typeof node !== 'object') return false; if (node.k === 'call' && node.fn && node.fn.k === 'mem' && node.fn.prop === 'security' && node.fn.obj && node.fn.obj.name === 'request') return true; for (const k in node) if (k !== 'line' && typeof node[k] === 'object' && hasSec(node[k])) return true; return false; };
+  const DROP = new Set(['expr', 'decl', 'tdecl', 'assign', 'if', 'for', 'forin', 'while', 'switch']);
+  const info = ast.map(st => ({st, seed: hasSec(st), defs: defsOf(st, new Set()), refs: refsOf(st, new Set()), draw: st.k === 'expr' && st.e && st.e.k === 'call' && ((st.e.fn.k === 'id' && SLICE_DRAW.has(st.e.fn.name)) || (st.e.fn.k === 'mem' && st.e.fn.obj.k === 'id' && ['label', 'line', 'box', 'table', 'linefill', 'polyline', 'strategy'].includes(st.e.fn.obj.name)))}));
+  const keep = new Array(ast.length).fill(false), N = new Set();
+  info.forEach((x, i) => { if (!DROP.has(x.st.k) || x.seed) { keep[i] = true; for (const r of x.refs) N.add(r); } });
+  let changed = true;
+  while (changed) { changed = false;
+    info.forEach((x, i) => { if (keep[i] || x.draw) return; let hit = false; for (const d of x.defs) if (N.has(d)) { hit = true; break; } if (!hit && x.st.k === 'expr') for (const r of x.refs) if (N.has(r)) { hit = true; break; } if (hit) { keep[i] = true; changed = true; for (const r of x.refs) N.add(r); } });
+  }
+  const out = ast.filter((_, i) => keep[i]); sliceCache.set(ast, out); return out;
+}
 function runSecondary(parent, sym, tfk, key, data) {
   const c2 = {candles: data, n: data.length, bar: 0, steps: 0, deadline: parent.deadline, warnings: [], wkeys: new Set(), fns: parent.fns, types: parent.types, enums: parent.enums, methods: parent.methods, frames: new Map(), frameList: [], depth: 0, ctrl: null,
     legacy: parent.legacy, incomplete: false, interval: tfk, symbol: sym, mintick: parent.mintick, ms: TFMS[tfk], opts: {inputs: parent.opts.inputs}, pal: new Map(), out: freshOut(), secondary: true, rec: new Map(), secRuns: new Map(), ast: parent.ast};
-  loopProgram(parent.ast, c2);
+  loopProgram(sliceForSecurity(parent.ast), c2);
   const j = new Int32Array(parent.n); let k = -1;
   for (let i = 0; i < parent.n; i++) { const t = parent.candles[i].t; while (k + 1 < data.length && data[k + 1].t <= t) k++; j[i] = k; }
   return {rec: c2.rec, j};

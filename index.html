@@ -66,6 +66,7 @@
         <button id="deleteDraw" class="danger" hidden>🗑 Borrar</button>
         <button id="fitChart">⤢ Ajustar</button>
         <button id="fullscreen">⛶ Expandir</button>
+        <button id="paneSmall" title="Paneles más bajos" aria-label="Paneles más bajos">▤−</button><button id="paneBig" title="Paneles más altos" aria-label="Paneles más altos">▤+</button>
       </div>
       <div class="chart-area" id="chartArea">
         <div class="chart-label">
@@ -73,6 +74,7 @@
           <span id="ohlcText"></span>
         </div>
         <canvas id="priceCanvas"></canvas>
+        <div id="legendBox" class="legend-box"></div>
         <div id="chartFeedback" class="chart-feedback">Cargando velas de Binance…</div>
         <div id="drawHint" class="draw-hint" hidden><span id="drawHintText"></span><button id="cancelDraw">Cancelar</button></div>
         <div class="chart-controls">
@@ -163,6 +165,7 @@
 <script src="firebase-config.js"></script>
 <script src="indicators.js"></script>
 <script src="nova-nexus.js"></script>
+<script src="catalog.js"></script>
 <script src="pine.js"></script>
 <script src="pine-draw.js"></script>
   <script src="pine-settings.js"></script>
