@@ -88,3 +88,7 @@ Arrastra el borde entre *Seguimiento* y el gráfico, o entre el gráfico y *Indi
 ## Paneles redimensionables y aspecto del gráfico
 - Cada panel (volumen, RSI, MACD…, paneles de Pine) tiene un **asa en su borde** (una pastilla gris): arrástrala con el dedo o el ratón para agrandar o achicar ese panel; doble toque/clic = altura automática. Las alturas se recuerdan en el dispositivo. ▤− / ▤+ siguen escalando los paneles automáticos.
 - **🎨 Aspecto** (barra del gráfico): color de fondo, líneas horizontales/verticales (y su color), colores de cuerpo, borde y mecha de velas alcistas/bajistas, velas alcistas huecas y «restablecer». Se guarda en el estado (también se sincroniza con tu cuenta).
+
+## Ajustes por indicador desde la leyenda
+- El ⚙ junto al nombre de cada indicador abre **solo la configuración de ese indicador** (sin abrir la lista): parámetros y color en EMA/SMA/WMA, Bollinger, RSI, MACD, Estocástico, ATR, Supertrend, VWAP y OBV; Nova Nexus y los scripts de Pine abren su propia ventana. También hay ⚙ en cada fila de «Comunes». Las alertas con indicadores estándar siguen usando los valores clásicos.
+- Si un script Pine falla por tiempo, se reintenta una vez solo; en «Mis indicadores» la tarjeta muestra el error y un botón «↻ Reintentar».

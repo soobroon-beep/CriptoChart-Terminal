@@ -17,7 +17,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:true, nnEma:true, nnTp:true, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  light: false, chartStyle: {}, drawings: {}, pine: [], novaSaved: null, novaParams: {}, alerts: []
+  light: false, chartStyle: {}, stdParams: {}, drawings: {}, pine: [], novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -36,6 +36,25 @@ function sanChartStyle(c) {
   for (const k of ['gridH', 'gridV', 'hollow']) if (typeof c[k] === 'boolean') o[k] = c[k];
   return o;
 }
+const STD_SCHEMA = {
+  ema20: [['len', 'Período', 'int', 20, 1, 500], ['color', 'Color', 'color', '#f5c568']], ema50: [['len', 'Período', 'int', 50, 1, 500], ['color', 'Color', 'color', '#6ca5f9']],
+  sma200: [['len', 'Período', 'int', 200, 1, 1000], ['color', 'Color', 'color', '#b58dff']], wma20: [['len', 'Período', 'int', 20, 1, 500], ['color', 'Color', 'color', '#4dd0e1']],
+  bollinger: [['len', 'Período', 'int', 20, 2, 500], ['mult', 'Desviaciones', 'float', 2, .1, 10], ['color', 'Color', 'color', '#748bab']],
+  rsi: [['len', 'Período', 'int', 14, 2, 200], ['color', 'Color', 'color', '#bb9cff']],
+  macd: [['fast', 'Rápida', 'int', 12, 1, 200], ['slow', 'Lenta', 'int', 26, 2, 400], ['sig', 'Señal', 'int', 9, 1, 100]],
+  stoch: [['k', 'Longitud %K', 'int', 14, 1, 200], ['ks', 'Suavizado %K', 'int', 3, 1, 50], ['d', 'Suavizado %D', 'int', 3, 1, 50]],
+  atr: [['len', 'Período', 'int', 14, 1, 200], ['color', 'Color', 'color', '#e07b53']],
+  supertrend: [['len', 'Período ATR', 'int', 10, 1, 200], ['factor', 'Factor', 'float', 3, .1, 20]],
+  vwap: [['color', 'Color', 'color', '#ff8a65']], obv: [['color', 'Color', 'color', '#2ec4b6']]
+};
+const sp = (key, name) => { const v = state.stdParams && state.stdParams[key] && state.stdParams[key][name]; if (v !== undefined) return v; const e = (STD_SCHEMA[key] || []).find(x => x[0] === name); return e ? e[3] : undefined; };
+function sanStdParams(p) {
+  const o = {}; if (!p || typeof p !== 'object' || Array.isArray(p)) return o;
+  for (const key of Object.keys(STD_SCHEMA)) { const src = p[key]; if (!src || typeof src !== 'object') continue; const q = {};
+    for (const [nm, , type, def, mn, mx] of STD_SCHEMA[key]) { const v = src[nm]; if (type === 'color') { if (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) && v !== def) q[nm] = v; } else if (Number.isFinite(v)) { const x = type === 'int' ? Math.round(v) : v; if (x >= mn && x <= mx && x !== def) q[nm] = x; } }
+    if (Object.keys(q).length) o[key] = q; }
+  return o;
+}
 const cstyle = () => Object.assign({}, CHART_DEF, state.chartStyle || {});
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
@@ -44,7 +63,7 @@ function merge(s) {
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 60)) : {};
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
-  o.chartStyle = sanChartStyle(o.chartStyle);
+  o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
@@ -521,10 +540,10 @@ function rsi(xs, n = 14) {
   return out;
 }
 function recalc() {
-  const c = candles.map(x => x.c), n = c.length, m = sma(c, 20);
+  const c = candles.map(x => x.c), n = c.length, bl = sp('bollinger', 'len'), bm = sp('bollinger', 'mult'), m = sma(c, bl);
   const up = Array(n).fill(null), lo = Array(n).fill(null);
-  for (let i = 19; i < n; i++) { let s = 0; for (let j = i - 19; j <= i; j++) { const d = c[j] - m[i]; s += d * d; } const sd = Math.sqrt(s / 20); up[i] = m[i] + 2 * sd; lo[i] = m[i] - 2 * sd; }
-  ind = {ema20: ema(c, 20), ema50: ema(c, 50), sma200: sma(c, 200), bbU: up, bbL: lo, rsi: rsi(c, 14)};
+  for (let i = bl - 1; i < n; i++) { let s = 0; for (let j = i - bl + 1; j <= i; j++) { const d = c[j] - m[i]; s += d * d; } const sd = Math.sqrt(s / bl); up[i] = m[i] + bm * sd; lo[i] = m[i] - bm * sd; }
+  ind = {ema20: ema(c, sp('ema20', 'len')), ema50: ema(c, sp('ema50', 'len')), sma200: sma(c, sp('sma200', 'len')), bbU: up, bbL: lo, rsi: rsi(c, sp('rsi', 'len'))};
   ind.nn = null; calcNova(); calcExtra(); schedulePine();
 }
 const PANELS = ['macd', 'stoch', 'atr', 'obv'];
@@ -532,13 +551,13 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   const I = state.indicators, T = window.CCTIndicators, n = candles.length;
   if (!T || !n) return;
   const c = candles.map(x => x.c), iv = IV_MS[state.interval];
-  ind.wma20 = I.wma20 ? T.wma(c, 20) : null;
+  ind.wma20 = I.wma20 ? T.wma(c, sp('wma20', 'len')) : null;
   ind.vwap = I.vwap ? T.vwap(candles, iv) : null;
-  const st = I.supertrend ? T.supertrend(candles, 10, 3) : null; ind.stUp = st && st.up; ind.stDn = st && st.dn; ind.stDir = st && st.dir;
+  const st = I.supertrend ? T.supertrend(candles, sp('supertrend', 'len'), sp('supertrend', 'factor')) : null; ind.stUp = st && st.up; ind.stDn = st && st.dn; ind.stDir = st && st.dir;
   ind.cross = I.cross ? T.crosses(ind.ema20, ind.ema50) : null;
-  ind.macd = I.macd ? T.macd(c) : null;
-  ind.stoch = I.stoch ? T.stoch(candles) : null;
-  ind.atr = I.atr ? T.atr(candles, 14) : null;
+  ind.macd = I.macd ? T.macd(c, sp('macd', 'fast'), sp('macd', 'slow'), sp('macd', 'sig')) : null;
+  ind.stoch = I.stoch ? T.stoch(candles, sp('stoch', 'k'), sp('stoch', 'ks'), sp('stoch', 'd')) : null;
+  ind.atr = I.atr ? T.atr(candles, sp('atr', 'len')) : null;
   ind.obv = I.obv ? T.obv(candles) : null;
   const NP = novaP;
   ind.trail = I.nnTrail ? T.smoothTrail(candles, NP('trailLen'), NP('trailAtr'), NP('trailMult'), NP('trailSmooth')) : null;
@@ -612,7 +631,7 @@ let indTab = 'std';
 const indTabs = () => `<div class="ind-tabs"><button data-indtab="std" class="${indTab === 'std' ? 'active' : ''}">Comunes</button><button data-indtab="mine" class="${indTab === 'mine' ? 'active' : ''}">Mis indicadores</button></div>`;
 const indicatorRows = () => { document.body.dataset.indtab = indTab; return indTabs() + (indTab === 'std'
   ? indicatorMeta.filter(m => !m[0].startsWith('nn')).map(([key, title, desc]) =>
-    `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div>`).join('')
+    `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><div class="script-btns">${STD_SCHEMA[key] ? `<button class="small-button" data-std-set="${key}" aria-label="Ajustes de ${title}">⚙</button>` : ''}<button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div></div>`).join('')
   : novaCard() + catalogCards() + pineSection()); };
 document.addEventListener('change', e => { const s = e.target.closest('[data-pine-pane]'); if (!s) return; const p = state.pine.find(x => x.sid === s.dataset.pinePane); if (!p) return; if (s.value) p.pane = s.value; else delete p.pane; save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); scheduleRender(); });
 document.addEventListener('click', e => { const t = e.target.closest('[data-indtab]'); if (!t) return; indTab = t.dataset.indtab; renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); });
@@ -889,7 +908,7 @@ document.addEventListener('click', e => {
   }
   if (t === 'nova') { if (act === 'set') openNovaDialog(); else if (act === 'eye' || act === 'del') { novaToggleAll(false); novaAfter(); toast('Nova Nexus apagado: actívalo en Indicadores → Mis indicadores'); } return; }
   if (t === 'std') {
-    if (act === 'set') { indTab = 'std'; openSheet('indicators'); return; }
+    if (act === 'set') { openStdDialog(id); return; }
     state.indicators[id] = false; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast('Indicador apagado: puedes volver a activarlo en Indicadores');
   }
 });
@@ -910,6 +929,16 @@ function render() { renderCore(); syncLegend(); }
   box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
   box.addEventListener('dblclick', e => { const el = e.target.closest('.pane-grip'); if (!el) return; delete paneH[el.dataset.gk]; savePaneH(); legSig = ''; scheduleRender(); toast('Altura automática'); });
 })();
+function openStdDialog(key) {
+  const meta = indicatorMeta.find(m => m[0] === key), schema = STD_SCHEMA[key];
+  if (key === 'volume' || key === 'cross' || !schema) { if (key === 'volume') { openChartStyle(); toast('El volumen usa los colores de las velas (🎨 Aspecto)'); } else toast('Este indicador no tiene parámetros'); return; }
+  const inputs = schema.map(([nm, title, type, def, mn, mx]) => ({key: nm, title, type, def, min: mn, max: mx, value: sp(key, nm), group: 'PARÁMETROS'}));
+  CCTSettings.open({title: meta ? meta[1] : key, tabs: ['in'], note: 'Parámetros del indicador. Las alertas con este indicador siguen usando los valores clásicos.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
+    const q = {}; for (const i of inputs) { let v = res.inputs[i.key]; if (v === undefined) continue; if (i.type !== 'color') { v = +v; if (!Number.isFinite(v)) continue; v = Math.max(i.min, Math.min(i.max, v)); if (i.type === 'int') v = Math.round(v); } if (v !== i.def) q[i.key] = v; }
+    const sps = Object.assign({}, state.stdParams); if (Object.keys(q).length) sps[key] = q; else delete sps[key]; state.stdParams = sanStdParams(sps);
+    save(); if (candles.length) recalc(); scheduleRender(); toast('Configuración aplicada');
+  }});
+}
 function openChartStyle() {
   const cs = cstyle(); let bgDef = '#101725'; try { let n = $('#chartArea'); while (n) { const c = getComputedStyle(n).backgroundColor, m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(c); if (m && (m[4] === undefined || +m[4] > 0)) { bgDef = '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join(''); break; } n = n.parentElement; } } catch {}
   const lineDef = '#263244', P = (key, title, type, def, group, extra) => Object.assign({key, title, type, def, value: state.chartStyle && state.chartStyle[key] !== undefined ? state.chartStyle[key] : def, group}, extra || {});
@@ -966,13 +995,13 @@ function renderCore() {
   const pineOff = [];
   for (const {r} of pOver) { const c = CCTPineDraw.contrib(r, lo, hi, min, max); if (Number.isFinite(c.min)) { min = Math.min(min, c.min); max = Math.max(max, c.max); } pineOff.push(...c.off); }
   const overlays = [];
-  if (state.indicators.ema20) overlays.push(['EMA 20', ind.ema20, '#f5c568']);
-  if (state.indicators.ema50) overlays.push(['EMA 50', ind.ema50, '#6ca5f9']);
-  if (state.indicators.sma200) overlays.push(['SMA 200', ind.sma200, '#b58dff']);
-  if (state.indicators.wma20 && ind.wma20) overlays.push(['WMA 20', ind.wma20, '#4dd0e1']);
-  if (state.indicators.vwap && ind.vwap) overlays.push(['VWAP', ind.vwap, '#ff8a65']);
+  if (state.indicators.ema20) overlays.push([`EMA ${sp('ema20', 'len')}`, ind.ema20, sp('ema20', 'color'), false, 'ema20']);
+  if (state.indicators.ema50) overlays.push([`EMA ${sp('ema50', 'len')}`, ind.ema50, sp('ema50', 'color'), false, 'ema50']);
+  if (state.indicators.sma200) overlays.push([`SMA ${sp('sma200', 'len')}`, ind.sma200, sp('sma200', 'color'), false, 'sma200']);
+  if (state.indicators.wma20 && ind.wma20) overlays.push([`WMA ${sp('wma20', 'len')}`, ind.wma20, sp('wma20', 'color'), false, 'wma20']);
+  if (state.indicators.vwap && ind.vwap) overlays.push(['VWAP', ind.vwap, sp('vwap', 'color'), false, 'vwap']);
   if (state.indicators.supertrend && ind.stUp) overlays.push(['Supertrend ↑', ind.stUp, '#20bf9f'], ['Supertrend ↓', ind.stDn, '#f06b79']);
-  if (state.indicators.bollinger) overlays.push(['BB sup', ind.bbU, '#748bab', true], ['BB inf', ind.bbL, '#748bab', true]);
+  if (state.indicators.bollinger) overlays.push(['BB sup', ind.bbU, sp('bollinger', 'color'), true, 'bollinger'], ['BB inf', ind.bbL, sp('bollinger', 'color'), true]);
   for (const [, arr] of overlays) for (let i = lo; i < hi; i++) if (arr[i] != null) { if (arr[i] < min) min = arr[i]; if (arr[i] > max) max = arr[i]; }
   if (state.indicators.nnTrail && ind.trail) for (let i = lo; i < hi; i++) { const v = ind.trail.trail[i]; if (v != null) { if (v < min) min = v; if (v > max) max = v; } }
   const nn = ind.nn;
@@ -1068,7 +1097,7 @@ function renderCore() {
   }
   // leyenda de indicadores
   let ly2 = plotTop + 48; g.font = '10px system-ui';
-  for (const [name, arr, col] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); const tx = `${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`; g.fillStyle = col; g.fillText(tx, left + 8, ly2); const mk = indicatorMeta.find(m => m[1] === name) || (name === 'BB sup' ? indicatorMeta.find(m => m[0] === 'bollinger') : null); if (mk) legAt(tx, left + 8, ly2, {t: 'std', key: mk[0]}); ly2 += 13; }
+  for (const [name, arr, col, , okey] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); const tx = `${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`; g.fillStyle = col; g.fillText(tx, left + 8, ly2); if (okey) legAt(tx, left + 8, ly2, {t: 'std', key: okey}); ly2 += 13; }
 
   for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; g.fillText(tx, left + 8, ly2); legAt(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += 13; for (const it of CCTPineDraw.legend(r, n - 1).slice(0, 4)) { g.fillStyle = it.color; g.fillText(it.text, left + 8, ly2); ly2 += 13; } }
   for (const {p, r} of pHid) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)} (oculto)`; g.globalAlpha = .5; g.fillStyle = text; g.fillText(tx, left + 8, ly2); g.globalAlpha = 1; legAt(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); ly2 += 13; }
@@ -1088,11 +1117,11 @@ function renderCore() {
     const top = geo.rsiTop + 4, height = rsiH - 12;
     g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.rsiTop); g.lineTo(w - right + 2, geo.rsiTop); g.stroke();
     const lastR = [...ind.rsi].reverse().find(x => x != null);
-    { const tx = `RSI 14  ${lastR != null ? lastR.toFixed(1) : '—'}`; g.fillStyle = text; g.fillText(tx, left + 4, top + 9); legAt(tx, left + 4, top + 9, {t: 'std', key: 'rsi'}); }
+    { const tx = `RSI ${sp('rsi', 'len')}  ${lastR != null ? lastR.toFixed(1) : '—'}`; g.fillStyle = text; g.fillText(tx, left + 4, top + 9); legAt(tx, left + 4, top + 9, {t: 'std', key: 'rsi'}); }
     g.setLineDash([2, 3]);
     for (const r of [30, 70]) { const yy = top + (100 - r) / 100 * height; g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
     g.setLineDash([]);
-    g.strokeStyle = '#bb9cff'; g.lineWidth = 1.5; g.beginPath(); let on = false;
+    g.strokeStyle = sp('rsi', 'color'); g.lineWidth = 1.5; g.beginPath(); let on = false;
     for (let i = lo; i < hi; i++) { const v = ind.rsi[i]; if (v == null) { on = false; continue; } const yy = top + (100 - v) / 100 * height; if (!on) { g.moveTo(X(i), yy); on = true; } else g.lineTo(X(i), yy); }
     g.stroke();
   }
@@ -1126,7 +1155,7 @@ function renderCore() {
 function drawSubPanel(key, top0, H, lo, hi, o) {
   const {left, w, right, line, text} = o, top = top0 + 4, height = H - 10, fmtV = v => v == null ? '—' : Math.abs(v) >= 1000 ? v.toLocaleString('en-US', {maximumFractionDigits: 0}) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(6);
   const D = ind[key]; if (!D) return;
-  const series = key === 'macd' ? [[D.line, '#548fff'], [D.signal, '#f5a623']] : key === 'stoch' ? [[D.k, '#548fff'], [D.d, '#f5a623']] : [[D, key === 'atr' ? '#e07b53' : '#2ec4b6']];
+  const series = key === 'macd' ? [[D.line, '#548fff'], [D.signal, '#f5a623']] : key === 'stoch' ? [[D.k, '#548fff'], [D.d, '#f5a623']] : [[D, key === 'atr' ? sp('atr', 'color') : sp('obv', 'color')]];
   const hist = key === 'macd' ? D.hist : null;
   let mn = Infinity, mx = -Infinity;
   const take = arr => { for (let i = lo; i < hi; i++) { const v = arr[i]; if (v != null) { if (v < mn) mn = v; if (v > mx) mx = v; } } };
@@ -1140,7 +1169,7 @@ function drawSubPanel(key, top0, H, lo, hi, o) {
   g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
   g.font = '10px system-ui';
   const last = a => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; };
-  const label = {macd: 'MACD 12 26 9', stoch: 'Estoc 14 3 3', atr: 'ATR 14', obv: 'OBV'}[key];
+  const label = {macd: `MACD ${sp('macd', 'fast')} ${sp('macd', 'slow')} ${sp('macd', 'sig')}`, stoch: `Estoc ${sp('stoch', 'k')} ${sp('stoch', 'ks')} ${sp('stoch', 'd')}`, atr: `ATR ${sp('atr', 'len')}`, obv: 'OBV'}[key];
   { const tx = `${label}  ${series.map(([a]) => fmtV(last(a))).join('  ')}`; g.fillStyle = text; g.fillText(tx, left + 4, top + 9); legAt(tx, left + 4, top + 9, {t: 'std', key}); }
   if (key === 'stoch') {
     g.setLineDash([2, 3]);
@@ -1781,7 +1810,8 @@ async function pineRunOne(p) {
   const code = (scripts.find(x => x.id === p.sid) || {}).code; if (!code || !candles.length) return;
   const key = `${state.symbol}|${state.interval}|${candles[0].t}`; pineBusy[p.sid] = true;
   const res = await pineRunFull(code, {inputs: p.inputs, interval: state.interval, symbol: state.symbol, name: pineName(p.sid), timeLimitMs: 12000});
-  pineBusy[p.sid] = false; res._key = key; pineRes[p.sid] = res; if (res.stats) pineLastMs = Math.max(pineLastMs * .5, res.stats.ms); // los scripts pesados se recalculan con menos frecuencia
+  pineBusy[p.sid] = false; res._key = key; pineRes[p.sid] = res;
+  if (!res.ok && /tard/.test((res.error && res.error.msg) || '') && !pineRetried.has(p.sid)) { pineRetried.add(p.sid); setTimeout(() => { pineKey = ''; schedulePine(); }, 3000); } else if (res.ok) pineRetried.delete(p.sid); if (res.stats) pineLastMs = Math.max(pineLastMs * .5, res.stats.ms); // los scripts pesados se recalculan con menos frecuencia
   if (pineDirty[p.sid]) { pineDirty[p.sid] = false; pineKey = ''; schedulePine(); }
   if (currentView === 'indicatorView' || (sheetMode === 'indicators' && $('#sheet').classList.contains('open'))) { renderIndicators(); if (sheetMode === 'indicators') $('#sheetList').innerHTML = indicatorRows(); }
   scheduleRender();
@@ -1822,6 +1852,7 @@ function openPineDialog(sid) {
     save(); if (inChanged) { pineKey = ''; schedulePine(); } renderIndicators(); scheduleRender(); toast('Configuración aplicada');
   }}));
 }
+const pineRetried = new Set();
 function schedulePine() {
   if (!candles.length || !activePine().length) return;
   const key = `${state.symbol}|${state.interval}|${candles[0].t}|${candles.length}`, wait = key !== pineKey ? 0 : Math.max(0, Math.max(1500, 6 * pineLastMs) - (Date.now() - pineLast));
@@ -1849,9 +1880,10 @@ const catPineOf = c => { const sc = catScriptOf(c); return sc && state.pine.find
 function catalogCards() {
   return (window.CCTCatalog || []).map(c => {
     const p = catPineOf(c);
-    return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">⚙ Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
+    return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small><button class="small-button" data-pine-retry="${p.sid}">↻ Reintentar</button>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">⚙ Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
   }).join('');
 }
+document.addEventListener('click', e => { const b = e.target.closest('[data-std-set]'); if (b) openStdDialog(b.dataset.stdSet); const r = e.target.closest('[data-pine-retry]'); if (r) { delete pineRes[r.dataset.pineRetry]; pineKey = ''; schedulePine(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); } });
 document.addEventListener('click', async e => {
   const b = e.target.closest('[data-cat-add]'); if (!b) return;
   const c = (window.CCTCatalog || []).find(x => x.id === b.dataset.catAdd); if (!c) return;
