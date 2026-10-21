@@ -164,7 +164,9 @@
       for (const c of t.cells) { const fs = SZ[(c.size || 'small').replace(/^size\./, '')] || 9; g.font = fs + 'px system-ui'; const w = c.text ? g.measureText(c.text).width + 10 : 6; colW[c.c] = Math.max(colW[c.c] || 0, Math.min(w, 190)); rowH[c.r] = Math.max(rowH[c.r] || 0, fs + 7); }
       const cw = i => colW[i] || 0, rh = i => rowH[i] || 0; let W = 0, H = 0; for (let i = 0; i < t.cols; i++) W += cw(i); for (let i = 0; i < t.rows; i++) H += rh(i);
       if (!W || !H) continue;
-      const pos = t.pos, x0 = pos.includes('left') ? left + 6 : pos.includes('center') ? (left + right - W) / 2 : right - W - 6, y0 = pos.includes('top') ? top + 6 : pos.includes('middle') ? (top + bottom - H) / 2 : bottom - H - 6;
+      const k = Math.max(.4, Math.min(1, (bottom - top - 12) / H, (right - left - 12) / W)), pos = t.pos, Ws = W * k, Hs = H * k;
+      const ax = pos.includes('left') ? left + 6 : pos.includes('center') ? (left + right - Ws) / 2 : right - Ws - 6, ay = pos.includes('top') ? top + 6 : pos.includes('middle') ? (top + bottom - Hs) / 2 : bottom - Hs - 6;
+      g.save(); g.translate(ax, ay); g.scale(k, k); const x0 = 0, y0 = 0;
       if (t.bci !== null && t.bci !== undefined && P[t.bci]) { g.fillStyle = P[t.bci]; g.fillRect(x0, y0, W, H); }
       for (const c of t.cells) {
         let x = x0, y = y0; for (let i = 0; i < c.c; i++) x += cw(i); for (let i = 0; i < c.r; i++) y += rh(i);
@@ -174,6 +176,7 @@
         g.fillText(c.text.split('\n')[0], al === 'left' ? x + 4 : al === 'right' ? x + cw(c.c) - 4 : x + cw(c.c) / 2, y + rh(c.r) / 2, cw(c.c) - 4);
       }
       if (t.frame !== null && t.frame !== undefined && P[t.frame] && t.fw > 0) { g.strokeStyle = P[t.frame]; g.lineWidth = Math.min(3, t.fw); g.strokeRect(x0, y0, W, H); }
+      g.restore();
     }
     g.restore();
   }

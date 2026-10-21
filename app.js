@@ -898,10 +898,14 @@ function renderCore() {
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
   const left = 6, right = 64, axisH = 22, top0 = 6;
-  const psc = paneScale, rsiH = state.indicators.rsi ? Math.round(Math.max(70, h * .18 * Math.min(psc, 1.5))) : 0, volH = state.indicators.volume ? Math.round(Math.max(40, h * .12)) : 0;
+  const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH = state.indicators.rsi ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH = state.indicators.volume ? Math.round(Math.max(40, h * (hasTbl ? .07 : .12))) : 0;
   const panelKeys = [...PANELS.filter(k => state.indicators[k] && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
-  const panelBudget = Math.max(0, h * Math.min(.8, .58 + (psc - 1) * .25) - rsiH - volH);
-  const nPanels = panelKeys.length + pTop.length, panelH = nPanels ? Math.round(Math.max(40, Math.min(clamp(h * .16, 52, 110) * psc, panelBudget / nPanels))) : 0, extraH = panelH * panelKeys.length, topH = panelH * pTop.length, plotTop = top0 + topH;
+  const tblOnly = x => !!(x && x.r && x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length);
+  const wBot = panelKeys.map(k => k.startsWith('pine:') && tblOnly(pr.find(x => 'pine:' + x.p.sid === k)) ? 4 : 1), wTop = pTop.map(x => tblOnly(x) ? 4 : 1), wSum = wBot.concat(wTop).reduce((a, b) => a + b, 0);
+  const panelBudget = Math.max(0, Math.min(h - axisH - (wSum > panelKeys.length + pTop.length ? 120 : 170) - rsiH - volH, h * Math.min(.85, .6 + (psc - 1) * .25 + (wSum > panelKeys.length + pTop.length ? .2 : 0)) - rsiH - volH));
+  const unitH = wSum ? Math.max(56, Math.min(clamp(h * .16, 52, 110) * psc, panelBudget / wSum)) : 0, hBot = wBot.map(x => Math.round(Math.max(56, unitH * x))), hTop = wTop.map(x => Math.round(Math.max(56, unitH * x)));
+  const offOf = arr => arr.map((_, i) => arr.slice(0, i).reduce((a, b) => a + b, 0)), oBot = offOf(hBot), oTop = offOf(hTop);
+  const extraH = hBot.reduce((a, b) => a + b, 0), topH = hTop.reduce((a, b) => a + b, 0), plotTop = top0 + topH;
   const vpOn = !!(state.indicators.nnVP && ind.vp), gutter = vpOn ? clamp(Math.round((w - left - right) * .4), 110, 300) : 0; // margen derecho para el perfil
   const plotH = Math.max(80, h - axisH - rsiH - volH - extraH - plotTop), plotW = w - left - right - gutter;
   const count = clamp(visible, 15, 400);
@@ -1040,8 +1044,8 @@ function renderCore() {
     for (let i = lo; i < hi; i++) { const v = ind.rsi[i]; if (v == null) { on = false; continue; } const yy = top + (100 - v) / 100 * height; if (!on) { g.moveTo(X(i), yy); on = true; } else g.lineTo(X(i), yy); }
     g.stroke();
   }
-  panelKeys.forEach((k, idx) => k.startsWith('pine:') ? drawPinePane(pr.find(x => 'pine:' + x.p.sid === k), geo.extraTop + idx * panelH, panelH, lo, hi, {left, w, right, line, text, step, plotW}) : drawSubPanel(k, geo.extraTop + idx * panelH, panelH, lo, hi, {left, w, right, line, text}));
-  pTop.forEach((x, idx) => drawPinePane(x, top0 + idx * panelH, panelH, lo, hi, {left, w, right, line, text, step, plotW}));
+  panelKeys.forEach((k, idx) => k.startsWith('pine:') ? drawPinePane(pr.find(x => 'pine:' + x.p.sid === k), geo.extraTop + oBot[idx], hBot[idx], lo, hi, {left, w, right, line, text, step, plotW}) : drawSubPanel(k, geo.extraTop + oBot[idx], hBot[idx], lo, hi, {left, w, right, line, text}));
+  pTop.forEach((x, idx) => drawPinePane(x, top0 + oTop[idx], hTop[idx], lo, hi, {left, w, right, line, text, step, plotW}));
   if (pTop.length) { g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, plotTop); g.lineTo(w - right + 2, plotTop); g.stroke(); }
   if (vpOn) drawNovaVP(ind.vp, fg);
   if (state.indicators.nnLiq && ind.liq) drawNovaLiqTable(fg);
