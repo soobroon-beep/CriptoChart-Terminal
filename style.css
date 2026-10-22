@@ -198,3 +198,14 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
 .pane-grip{position:absolute;height:20px;pointer-events:auto;cursor:ns-resize;touch-action:none;z-index:3}.pane-grip::before{content:"";position:absolute;left:50%;top:7px;width:38px;height:4px;margin-left:-19px;border-radius:3px;background:var(--muted);opacity:.35;transition:opacity .15s,background .15s}
 .pane-grip:hover::before,.pane-grip.on::before{opacity:.9;background:var(--accent)}.legend-box.dragging .leg-row{opacity:0}
 @media(max-width:760px){.pane-grip{height:30px}.pane-grip::before{top:12px;width:46px;height:5px;margin-left:-23px;opacity:.5}}
+
+#brushOpts{display:inline-flex;align-items:center;gap:6px}
+#brushOpts button{padding:0;cursor:pointer;touch-action:manipulation}
+#brushOpts .bsw{width:20px;height:20px;border-radius:50%;border:2px solid var(--line)}
+#brushOpts .bsw.on{border-color:var(--text);box-shadow:0 0 0 2px var(--accent)}
+#brushOpts .bw{width:26px;height:22px;border-radius:7px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center}
+#brushOpts .bw i{display:block;width:16px;background:var(--text);border-radius:4px}
+#brushOpts .bw.on{border-color:var(--accent);background:var(--raised)}
+.chart-area.drawing[data-tool=brush]{cursor:crosshair}
+@media(max-width:760px){.draw-hint{flex-wrap:wrap;white-space:normal;justify-content:center;max-width:92%}#brushOpts .bsw{width:26px;height:26px}#brushOpts .bw{width:34px;height:28px}}
+.chart-area.drawing .pane-grip{pointer-events:none}

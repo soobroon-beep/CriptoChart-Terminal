@@ -17,7 +17,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  light: false, chartStyle: {}, stdParams: {}, drawings: {}, pine: [], novaSaved: null, novaParams: {}, alerts: []
+  light: false, chartStyle: {}, stdParams: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -63,6 +63,17 @@ function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
   if (!o.drawings || typeof o.drawings !== 'object' || Array.isArray(o.drawings)) o.drawings = {};
+  { // pincel: solo trazos bien formados y de tamaño acotado (el estado completo viaja en un documento de Firestore de máx. 1 MB)
+    const okPt = q => Array.isArray(q) && q.length === 2 && Number.isFinite(q[0]) && Number.isFinite(q[1]);
+    for (const k of Object.keys(o.drawings)) {
+      const arr = Array.isArray(o.drawings[k]) ? o.drawings[k] : [];
+      const clean = arr.filter(d => d && typeof d === 'object' && (d.type !== 'brush' || (Array.isArray(d.pts) && d.pts.length >= 2 && d.pts.length <= 400 && d.pts.every(okPt)))).slice(-300)
+        .map(d => d.type === 'brush' ? {id: String(d.id || '').slice(0, 16), type: 'brush', pts: d.pts, a: {t: d.pts[0][0], p: d.pts[0][1]}, col: /^#[0-9a-f]{6}$/i.test(d.col) ? d.col : '#e9c36e', w: Math.max(1, Math.min(14, +d.w || 3))} : d);
+      if (clean.length) o.drawings[k] = clean; else delete o.drawings[k];
+    }
+    const bq = o.brush && typeof o.brush === 'object' ? o.brush : {};
+    o.brush = {c: /^#[0-9a-f]{6}$/i.test(bq.c) ? bq.c : '#e9c36e', w: [2, 4, 7].includes(+bq.w) ? +bq.w : 3};
+  }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
@@ -86,7 +97,8 @@ let uid = cloudEnabled ? lsGet(LASTUID) : null, fbUser = null, auth = null, db =
 const storeKey = () => uid ? `${STORE}_${uid}` : STORE;
 const readLocal = key => { try { return JSON.parse(lsGet(key) || '{}'); } catch { return {}; } };
 let state = merge(readLocal(storeKey()));
-const save = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch {} cloudPush(); };
+const dirtyKey = () => uid ? `${STORE}_dirty_${uid}` : null;
+const save = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
 
 /* ───────── Utilidades ───────── */
 const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','⚛'],UNI:['Uniswap','🦄'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
@@ -695,6 +707,7 @@ const TOOLS = [
   ['marker', '◆ Marcador de máximo/mínimo', 'Toca un máximo o mínimo'],
   ['long', '▲ Posición Long', 'Entrada y objetivo arriba (stop a 2:1)'],
   ['short', '▼ Posición Short', 'Entrada y objetivo abajo (stop a 2:1)'],
+  ['brush', '🖌 Pincel', 'Dibuja a mano alzada sobre el gráfico'],
   ['clear', '✕ Borrar todos los dibujos', 'Solo de este activo']
 ];
 function renderSheet() {
@@ -756,6 +769,7 @@ const HINTS = {
   ray: two('Arrastra o toca el primer punto', 'Toca el segundo punto'),
   arrow: two('Arrastra o toca el inicio de la flecha', 'Toca la punta de la flecha'),
   measure: two('Arrastra o toca el punto de partida', 'Toca el punto final'),
+  brush: () => 'Pincel: dibuja con el dedo o el ratón',
   horizontal: () => 'Toca el precio donde quieres la línea',
   vertical: () => 'Toca la vela donde quieres la línea',
   text: () => 'Toca dónde quieres el texto',
@@ -768,12 +782,19 @@ const HINTS = {
   fibext: (p, p2) => p2 ? 'Toca el punto del retroceso' : p ? 'Toca el final del movimiento' : 'Arrastra o toca el inicio del movimiento'
 };
 function startTool(k) { drawTool = k; pending = null; pending2 = null; preview = null; selectedId = null; updateDrawUI(); scheduleRender(); }
+const BRUSH_COLORS = ['#e9c36e', '#f06b79', '#20bf9f', '#548fff', '#ffffff'], BRUSH_W = [2, 4, 7];
+function brushOptsHtml() { return `<span id="brushOpts">${BRUSH_COLORS.map(c => `<button class="bsw${state.brush.c === c ? ' on' : ''}" data-bc="${c}" style="background:${c}" aria-label="Color ${c}"></button>`).join('')}${BRUSH_W.map(w => `<button class="bw${state.brush.w === w ? ' on' : ''}" data-bw="${w}" aria-label="Grosor ${w}"><i style="height:${w}px"></i></button>`).join('')}</span>`; }
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-bc]'), w = e.target.closest('[data-bw]'); if (!c && !w) return;
+  if (c) state.brush.c = c.dataset.bc; else state.brush.w = +w.dataset.bw; save(); updateDrawUI();
+});
 function updateDrawUI() {
   $('#drawHint').hidden = !drawTool;
+  { const bo = $('#brushOpts'), want = drawTool === 'brush'; if (bo && !want) bo.remove(); else if (want) { const h = brushOptsHtml(); if (bo) bo.outerHTML = h; else $('#drawHintText').insertAdjacentHTML('afterend', h); } $('#cancelDraw').textContent = want ? 'Listo' : 'Cancelar'; }
   if (drawTool) $('#drawHintText').textContent = HINTS[drawTool](pending, pending2);
   $('#deleteDraw').hidden = !selectedId;
   $('#undoDraw').disabled = !getDrawings().length;
-  $('#chartArea').classList.toggle('drawing', !!drawTool);
+  $('#chartArea').classList.toggle('drawing', !!drawTool); $('#chartArea').dataset.tool = drawTool;
 }
 $('#cancelDraw').onclick = () => { drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); scheduleRender(); };
 $('#undoDraw').onclick = () => { const a = getDrawings().slice(); if (!a.length) return; a.pop(); setDrawings(a); selectedId = null; updateDrawUI(); render(); };
@@ -805,6 +826,7 @@ function snapPoint(pt) {
 }
 const px = a => ({x: X(idxOfTime(a.t)), y: Y(a.p)});
 function handlesOf(d) {
+  if (d.type === 'brush') return [];
   if (d.type === 'horizontal') return [{key: 'a', x: geo.left + geo.plotW / 2, y: Y(d.a.p)}];
   if (d.type === 'vertical') return [{key: 'a', x: X(idxOfTime(d.a.t)), y: geo.plotTop + geo.plotH / 2}];
   if (ONEPT.includes(d.type)) return [{key: 'a', ...px(d.a)}];
@@ -830,6 +852,7 @@ function segDist(p, a, b) {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 function distToDrawing(d, pt) {
+  if (d.type === 'brush') { let m = 1e9, prev = null; for (const q of d.pts) { const c = {x: X(idxOfTime(q[0])), y: Y(q[1])}; m = Math.min(m, prev ? segDist(pt, prev, c) : Math.hypot(pt.x - c.x, pt.y - c.y)); prev = c; } return Math.max(0, m - (d.w || 3) / 2); }
   if (d.type === 'horizontal') return Math.abs(pt.y - Y(d.a.p));
   if (d.type === 'vertical') return Math.abs(pt.x - X(idxOfTime(d.a.t)));
   if (d.type === 'text' || d.type === 'marker') {
@@ -879,6 +902,22 @@ function commitDrawing(a, b, c) {
   }
   setDrawings([...getDrawings(), d]);
   selectedId = d.id; drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); render();
+}
+
+// Simplificación Ramer–Douglas–Peucker en píxeles: trazos livianos (el estado viaja entero a la cuenta) sin perder la forma
+function rdp(P, eps) {
+  if (P.length < 3) return P; const keep = new Uint8Array(P.length); keep[0] = keep[P.length - 1] = 1; const st = [[0, P.length - 1]];
+  while (st.length) { const [i, j] = st.pop(); let m = 0, k = -1; for (let n = i + 1; n < j; n++) { const d = segDist(P[n], P[i], P[j]); if (d > m) { m = d; k = n; } } if (k >= 0 && m > eps) { keep[k] = 1; st.push([i, k], [k, j]); } }
+  return P.filter((_, i) => keep[i]);
+}
+function commitBrush(live) {
+  if (!live || live.length < 2 || !geo) return;
+  const P = live.map(q => ({x: X(idxOfTime(q[0])), y: Y(q[1]), q}));
+  let eps = 1.1, out = rdp(P, eps); while (out.length > 300 && eps < 20) out = rdp(P, eps *= 1.5);
+  if (out.length < 2) return;
+  const pts = out.map(o => [Math.round(o.q[0]), +(+o.q[1].toPrecision(8))]);
+  const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: 'brush', pts, a: {t: pts[0][0], p: pts[0][1]}, col: state.brush.c, w: state.brush.w};
+  setDrawings([...getDrawings(), d]); updateDrawUI();
 }
 
 /* ───────── Render del gráfico ───────── */
@@ -1129,6 +1168,7 @@ function renderCore() {
   for (const d of getDrawings()) drawShape(d, d.id === selectedId, drawCol, text);
   if (pending2) drawShape({id: '_', type: 'trend', a: pending2.a, b: pending2.b}, false, drawCol, text);
   if (preview) drawShape({id: '_', type: drawTool, a: preview.a, b: preview.b, c: preview.c}, false, drawCol, text);
+  if (brushLive && brushLive.length > 1) drawBrush({pts: brushLive, col: state.brush.c, w: state.brush.w}, false, drawCol);
   if (pending) { const P = px(pending); g.fillStyle = drawCol; g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
   g.restore();
 
@@ -1557,7 +1597,15 @@ function drawShapeExtra(d, a, b, rightX, col) {
     tag(`Stop ${fmt(q.stop)} (${pc(q.stop)})`, q.x1, q.yS + (q.yS < q.yE ? -11 : 11), rc);
   }
 }
+function drawBrush(d, selected, col) {
+  const P = d.pts.map(q => ({x: X(idxOfTime(q[0])), y: Y(q[1])})); if (P.length < 2) return;
+  g.save(); g.lineCap = 'round'; g.lineJoin = 'round'; g.setLineDash([]);
+  const trace = () => { g.beginPath(); g.moveTo(P[0].x, P[0].y); for (let i = 1; i < P.length - 1; i++) g.quadraticCurveTo(P[i].x, P[i].y, (P[i].x + P[i + 1].x) / 2, (P[i].y + P[i + 1].y) / 2); g.lineTo(P[P.length - 1].x, P[P.length - 1].y); };
+  if (selected) { g.strokeStyle = '#fff'; g.globalAlpha = .35; g.lineWidth = d.w + 6; trace(); g.stroke(); g.globalAlpha = 1; }
+  g.strokeStyle = d.col || col; g.lineWidth = d.w || 3; trace(); g.stroke(); g.restore();
+}
 function drawShape(d, selected, col, textCol) {
+  if (d.type === 'brush') { drawBrush(d, selected, col); return; }
   const a = d.type === 'horizontal' ? {x: 0, y: Y(d.a.p)} : px(d.a), b = d.b ? px(d.b) : null;
   g.strokeStyle = col; g.fillStyle = col; g.lineWidth = selected ? 2.2 : 1.5; g.setLineDash([]);
   const rightX = geo.w - geo.right;
@@ -1586,7 +1634,7 @@ function drawShape(d, selected, col, textCol) {
 
 /* ───────── Gestos: pan, pellizco, retícula, dibujo ───────── */
 const area = $('#chartArea'), ptrs = new Map();
-let gest = null, pinch = null, lastTap = null;
+let gest = null, pinch = null, lastTap = null, brushLive = null;
 const local = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
 area.addEventListener('pointerdown', e => {
   if (e.target.closest('.chart-controls,.draw-hint,.leg-row')) return;
@@ -1599,7 +1647,9 @@ area.addEventListener('pointerdown', e => {
   const onPriceAxis = pt.x >= geo.w - geo.right - 4 && pt.y <= geo.plotTop + geo.plotH + 8, onTimeAxis = pt.y >= geo.h - 34 && pt.x < geo.w - geo.right;
   if (onPriceAxis || onTimeAxis) { // arrastrar la barra derecha = escala de precio · barra inferior = escala de tiempo
     gest.mode = onPriceAxis ? 'scaleY' : 'scaleX'; gest.min0 = geo.min; gest.max0 = geo.max; gest.vis0 = visible; gest.pan1 = pan; cross = null;
-  } else if (drawTool) gest.start = snapPoint(pt);
+  } else if (drawTool === 'brush' && (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH || pt.x < geo.left || pt.x > geo.left + geo.plotW)) { gest.mode = 'ignore'; toast('El pincel dibuja sobre el gráfico de precio'); }
+  else if (drawTool === 'brush') { gest.mode = 'brush'; selectedId = null; brushLive = [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]; gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); }
+  else if (drawTool) gest.start = snapPoint(pt);
   else if (selectedId && gest.mode === 'pending') {
     const d = getDrawings().find(x => x.id === selectedId);
     const hnd = d && handlesOf(d).find(hh => Math.hypot(hh.x - pt.x, hh.y - pt.y) < 24);
@@ -1615,6 +1665,12 @@ area.addEventListener('pointermove', e => {
   if (!gest || e.pointerId !== gest.id || !geo) return;
   const pt = local(e);
   if (!gest.moved && Math.hypot(e.clientX - gest.x0, e.clientY - gest.y0) > 8) { gest.moved = true; clearTimeout(gest.timer); if (gest.mode === 'pending' && !drawTool) gest.mode = 'pan'; }
+  if (gest.mode === 'ignore') return;
+  if (gest.mode === 'brush') { // los eventos agrupados del navegador dan trazos más suaves en pantallas táctiles de alta frecuencia
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    for (const ev of (evs.length ? evs : [e])) { const q = local(ev); q.x = clamp(q.x, geo.left, geo.left + geo.plotW); q.y = clamp(q.y, geo.plotTop, geo.plotTop + geo.plotH); if (Math.hypot(q.x - gest.lx, q.y - gest.ly) < 2.5 || brushLive.length >= 1500) continue; gest.lx = q.x; gest.ly = q.y; brushLive.push([timeOfIdx(IDX(q.x)), PRICE(q.y)]); }
+    scheduleRender(); return;
+  }
   if (gest.mode === 'cross') { cross = pt; scheduleRender(); }
   else if (gest.mode === 'handle') {
     const arr = getDrawings(), d = arr.find(x => x.id === selectedId); if (!d) return;
@@ -1641,6 +1697,8 @@ function endPointer(e, cancelled) {
   if (pinch) { if (ptrs.size < 2) pinch = null; if (!ptrs.size) gest = null; return; }
   if (!had || !gest || e.pointerId !== gest.id) return;
   const gs = gest; gest = null; clearTimeout(gs.timer);
+  if (gs.mode === 'ignore') return;
+  if (gs.mode === 'brush') { const live = brushLive; brushLive = null; if (!cancelled) commitBrush(live); scheduleRender(); return; }
   if (cancelled) { cross = null; preview = null; scheduleRender(); return; }
   if (gs.mode === 'cross') { cross = null; scheduleRender(); return; }
   if (gs.mode === 'handle') { save(); render(); return; }
@@ -1667,7 +1725,7 @@ function endPointer(e, cancelled) {
 area.addEventListener('pointerup', e => endPointer(e, false));
 area.addEventListener('pointercancel', e => endPointer(e, true));
 function startPinch() {
-  if (gest) clearTimeout(gest.timer); gest = null; cross = null; preview = null;
+  if (gest) clearTimeout(gest.timer); gest = null; cross = null; preview = null; brushLive = null;
   const [a, b] = [...ptrs.values()], r = $('#priceCanvas').getBoundingClientRect(), cx = (a.x + b.x) / 2 - r.left;
   pinch = {d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, v0: visible, idx: IDX(cx)};
 }
@@ -2215,7 +2273,9 @@ async function onUser(user) {
   const ref = db.doc(CLOUD_DOC(uid));
   try {
     const snap = await ref.get();
-    if (snap.exists && snap.data().state) { lastRemote = snap.data().state; applyState(JSON.parse(lastRemote)); save(); }
+    const pendingLocal = (() => { try { return !!localStorage.getItem(dirtyKey()); } catch { return false; } })();
+    if (snap.exists && snap.data().state && pendingLocal) { lastRemote = snap.data().state; await cloudPushNow(); } // cambios hechos aquí que aún no habían subido: se conservan y se suben
+    else if (snap.exists && snap.data().state) { lastRemote = snap.data().state; applyState(JSON.parse(lastRemote)); save(); try { localStorage.removeItem(dirtyKey()); } catch {} }
     else { // primera vez en esta cuenta: se sube lo que ya había en este dispositivo
       const mine = JSON.stringify(state); lastRemote = mine; save();
       await ref.set({state: mine, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
@@ -2246,17 +2306,24 @@ async function onUser(user) {
 }
 const syncSummary = () => `${state.pine.length} script${state.pine.length === 1 ? '' : 's'} en el gráfico · ${scripts.length} guardado${scripts.length === 1 ? '' : 's'} · ${state.alerts.length} alerta${state.alerts.length === 1 ? '' : 's'}`;
 function refreshPineAfterSync() { renderIndicators(); countIndicators(); renderAlerts(); pineKey = ''; for (const k of Object.keys(pineRes)) if (!scripts.some(s => s.id === k)) delete pineRes[k]; schedulePine(); scheduleRender(); }
+const CLOUD_MAX = 950000; // Firestore limita cada documento a 1 MiB
+async function cloudPushNow() {
+  if (!uid || !db || !fbUser) return;
+  const str = JSON.stringify(state);
+  if (str === lastRemote) { try { localStorage.removeItem(dirtyKey()); } catch {} return; }
+  if (str.length > CLOUD_MAX) { syncStatus = 'Tu configuración es demasiado grande para la nube (' + Math.round(str.length / 1024) + ' KB). Borra algunos trazos del pincel: siguen guardados en este dispositivo.'; renderAccount(); return; }
+  const mine = uid; lastRemote = str;
+  try { await db.doc(CLOUD_DOC(mine)).set({state: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); if (uid === mine) { try { localStorage.removeItem(dirtyKey()); } catch {} syncStatus = 'Guardado en tu cuenta · ' + syncSummary(); } }
+  catch { syncStatus = 'No se pudo guardar en la nube. Se reintentará al próximo cambio.'; lastRemote = ''; }
+  renderAccount();
+}
 function cloudPush() {
   if (!uid || !db || !fbUser) return;
-  clearTimeout(pushTimer);
-  pushTimer = setTimeout(async () => {
-    const str = JSON.stringify(state); if (str === lastRemote) return;
-    lastRemote = str;
-    try { await db.doc(CLOUD_DOC(uid)).set({state: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); syncStatus = 'Guardado en tu cuenta · ' + syncSummary(); }
-    catch { syncStatus = 'No se pudo guardar en la nube. Se reintentará al próximo cambio.'; lastRemote = ''; }
-    renderAccount();
-  }, 1200);
+  clearTimeout(pushTimer); pushTimer = setTimeout(cloudPushNow, 1200);
 }
+// al cerrar o mandar la pestaña a segundo plano (móvil) se sube de inmediato lo pendiente, sin esperar el retardo
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { clearTimeout(pushTimer); cloudPushNow(); } });
+window.addEventListener('pagehide', () => { clearTimeout(pushTimer); cloudPushNow(); });
 async function initCloud() {
   renderAccount();
   if (!cloudEnabled) return;
