@@ -118,3 +118,9 @@ Arrastra el borde entre *Seguimiento* y el gráfico, o entre el gráfico y *Indi
 - El autoajuste vertical incluye las filas del perfil, para ver todos los niveles aunque las velas visibles cubran un rango de precio menor.
 - Pruebas: 2 nuevas en `tests/pine.test.js` (historial de campos de objeto y propiedades de texto de las cajas).
 
+
+## Noticias y calendario económico
+- `news.js`: noticias de cripto, bolsa y macro **solo en español** (CriptoNoticias, Cointelegraph ES, BeInCrypto ES, Investing ES, Bloomberg Línea, Expansión, Infobae). Se leen por RSS desde el navegador con cadena de rutas (directa → allorigins → codetabs → corsproxy → rss2json). Siempre ordenadas de más nueva a más vieja, sin duplicados, con etiqueta de categoría, «Alto impacto» y «NUEVA».
+- Se actualizan al abrir la sección, cada 2 min mientras está visible y al volver a la pestaña; se guarda caché local para mostrar algo al instante.
+- Pestaña **📅 Calendario económico** (widget gratuito de TradingView en español, sigue el tema claro/oscuro) con enlaces de respaldo.
+- Tests: `tests/news.test.js` (unitarios) y `tests/e2e/news.js` (Playwright con feeds simulados).
