@@ -117,7 +117,21 @@
       let x1 = X(b.l), x2 = X(b.r); if (b.extend === 'left' || b.extend === 'both') x1 = left; if (b.extend === 'right' || b.extend === 'both') x2 = right;
       const y1 = Y(b.t), y2 = Y(b.b); g.fillStyle = col(b.fci) || 'transparent'; g.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
       g.strokeStyle = col(b.bci) || '#2962FF'; g.lineWidth = Math.min(4, b.bw || 1); g.setLineDash(DASH[b.bstyle] || []); g.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)); g.setLineDash([]);
-      if (b.text) { g.fillStyle = col(b.tci) || '#fff'; g.font = '10px system-ui'; g.textAlign = 'center'; g.fillText(b.text, (x1 + x2) / 2, (y1 + y2) / 2 + 3); g.textAlign = 'left'; }
+      if (b.text) { // el texto se alinea (left/center/right), se ajusta al tamaño de la caja y se recorta dentro de ella, como en TradingView (antes se imprimía centrado y sin recortar, y las filas del perfil de volumen se montaban)
+        const bx = Math.min(x1, x2), bw = Math.abs(x2 - x1), by = Math.min(y1, y2), bh = Math.abs(y2 - y1);
+        if (bw >= 6 && bh >= 5) {
+          const FIXED = {tiny: 7, small: 9, normal: 11, large: 14, huge: 18}, auto = !FIXED[b.tz];
+          let fs = auto ? Math.max(5, Math.min(12, bh * .72)) : FIXED[b.tz];
+          g.save(); g.beginPath(); g.rect(bx, by, bw, bh); g.clip();
+          g.font = fs + 'px system-ui'; const tw = g.measureText(b.text).width;
+          if (auto && tw > bw - 6) { fs = Math.max(6, fs * (bw - 6) / tw); g.font = fs + 'px system-ui'; }
+          const al = b.th === 'left' ? 'left' : b.th === 'right' ? 'right' : 'center', tx = al === 'left' ? bx + 3 : al === 'right' ? bx + bw - 3 : bx + bw / 2;
+          const va = b.tv === 'top' ? 'top' : b.tv === 'bottom' ? 'bottom' : 'middle';
+          g.fillStyle = col(b.tci) || '#fff'; g.textAlign = al; g.textBaseline = va;
+          g.fillText(b.text, tx, va === 'top' ? by + 2 : va === 'bottom' ? by + bh - 2 : by + bh / 2 + .5);
+          g.restore();
+        }
+      }
     }
     for (const l of res.lines) {
       if (isn(l.x1) || isn(l.x2) || isn(l.y1) || isn(l.y2)) continue;

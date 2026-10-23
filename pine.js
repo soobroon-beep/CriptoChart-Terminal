@@ -496,6 +496,15 @@ function ev(n, env) {
         if (v) return off === null ? null : histAt(ctx, v, off);
         if (SERIES.has(o.name)) return off === null || off < 0 ? null : seriesAt(ctx, o.name, ctx.bar - off);
       }
+      if (o.k === 'mem' && o.obj.k === 'id') { // campo de un objeto con historial (b.h[k]): se toma el objeto tal como estaba k barras atrás.
+        // Antes solo se guardaba el valor cuando esta misma línea se ejecutaba en cada barra, así que dentro de «if barstate.islast» + bucle devolvía siempre la barra actual (p. ej. el perfil de volumen del Nova Nexus acumulaba todo en las 2 filas de arriba)
+        const bv = lookup(env, o.obj.name);
+        if (bv && bv.cur && typeof bv.cur === 'object' && bv.cur._t) {
+          if (off === null) return null;
+          const ob = histAt(ctx, bv, off); if (!ob || typeof ob !== 'object' || !ob._t) return null;
+          const x = ob[o.prop]; return x === undefined ? null : x;
+        }
+      }
       const val = ev(o, env);
       if (Array.isArray(val)) return off === null ? null : (val[off] === undefined ? null : val[off]);
       if (off === null) return null;
@@ -1201,8 +1210,10 @@ def('line.new', ['x1', 'y1', 'x2', 'y2', 'xloc', 'extend', 'color', 'style', 'wi
   const ctx = c.ctx, o = {_kind: 'line', x1: nv(a[0]), y1: nv(a[1]), x2: nv(a[2]), y2: nv(a[3]), xloc: String(a[4] || 'bar_index'), extend: String(a[5] || 'none'), ci: dcol(ctx, a[6], DEFCOL), style: String(a[7] || 'style_solid').replace(/^style_/, ''), w: a[8] || 1};
   keepLimit(ctx, ctx.out.lines, o, ctx.out.meta.maxLines || 50); return o;
 }, {lenient: true});
+// text_size / text_halign / text_valign de las cajas: se conservan normalizados («auto», «left», «center»…) para que el dibujo ajuste y alinee el texto dentro de cada caja
+const boxTxt = (v, kind) => { if (v === undefined || v === null) return undefined; const t = String(v).replace(/^(size|text)\./, '').replace(/^align_/, ''); return t || undefined; };
 def('box.new', ['left', 'top', 'right', 'bottom', 'border_color', 'border_width', 'border_style', 'extend', 'xloc', 'bgcolor', 'text', 'text_size', 'text_color', 'text_halign', 'text_valign', 'text_wrap', 'text_font_family', 'force_overlay', 'text_formatting'], (a, c) => {
-  const ctx = c.ctx, o = {_kind: 'box', l: nv(a[0]), t: nv(a[1]), r: nv(a[2]), b: nv(a[3]), bci: dcol(ctx, a[4], DEFCOL), bw: a[5] || 1, bstyle: String(a[6] || 'style_solid').replace(/^style_/, ''), extend: String(a[7] || 'none'), xloc: String(a[8] || 'bar_index'), fci: dcol(ctx, a[9], hexCol('2962FF1A')), text: a[10] === undefined ? '' : String(a[10]), tci: dcol(ctx, a[12], hexCol('FFFFFF'))};
+  const ctx = c.ctx, o = {_kind: 'box', l: nv(a[0]), t: nv(a[1]), r: nv(a[2]), b: nv(a[3]), bci: dcol(ctx, a[4], DEFCOL), bw: a[5] || 1, bstyle: String(a[6] || 'style_solid').replace(/^style_/, ''), extend: String(a[7] || 'none'), xloc: String(a[8] || 'bar_index'), fci: dcol(ctx, a[9], hexCol('2962FF1A')), text: a[10] === undefined ? '' : String(a[10]), tci: dcol(ctx, a[12], hexCol('FFFFFF')), tz: boxTxt(a[11], 'size'), th: boxTxt(a[13], 'halign'), tv: boxTxt(a[14], 'valign')};
   keepLimit(ctx, ctx.out.boxes, o, ctx.out.meta.maxBoxes || 50); return o;
 }, {lenient: true});
 def('linefill.new', ['line1', 'line2', 'color'], (a, c) => { const o = {_kind: 'linefill', l1: a[0], l2: a[1], ci: dcol(c.ctx, a[2], hexCol('2962FF4D'))}; c.ctx.out.linefills.push(o); if (c.ctx.out.linefills.length > 100) c.ctx.out.linefills.shift(); return o; }, {lenient: true});
@@ -1217,7 +1228,7 @@ function setters(kind, map) {
 const ST = (st, p) => (o, v, _, ctx) => { o[p] = String(v).replace(/^style_/, ''); };
 setters('label', {xloc: (o, v) => { o.xloc = String(v); }, yloc: (o, v) => { o.yloc = String(v); }, point: (o, pt) => { if (pt && pt._kind === 'point') { o.x = pt.i !== null ? pt.i : pt.x; o.y = pt.p; } }, x: (o, v) => { o.x = v; }, y: (o, v) => { o.y = nv(v); }, xy: (o, x, y) => { o.x = x; o.y = nv(y); }, text: (o, v) => { o.text = String(v); }, color: (o, v, _, ctx) => { o.ci = pal(ctx, v); }, textcolor: (o, v, _, ctx) => { o.tci = pal(ctx, v); }, style: ST(0, 'style'), size: (o, v) => { o.size = String(v); }, tooltip: () => {}, text_font_family: () => {}, textalign: () => {}});
 setters('line', {xloc: (o, v) => { o.xloc = String(v); }, first_point: (o, pt) => { if (pt && pt._kind === 'point') { o.x1 = pt.i; o.y1 = pt.p; } }, second_point: (o, pt) => { if (pt && pt._kind === 'point') { o.x2 = pt.i; o.y2 = pt.p; } }, x1: (o, v) => { o.x1 = v; }, y1: (o, v) => { o.y1 = nv(v); }, x2: (o, v) => { o.x2 = v; }, y2: (o, v) => { o.y2 = nv(v); }, xy1: (o, x, y) => { o.x1 = x; o.y1 = nv(y); }, xy2: (o, x, y) => { o.x2 = x; o.y2 = nv(y); }, color: (o, v, _, ctx) => { o.ci = pal(ctx, v); }, width: (o, v) => { o.w = v; }, style: ST(0, 'style'), extend: (o, v) => { o.extend = String(v); }});
-setters('box', {xloc: (o, v) => { o.xloc = String(v); }, border_style: (o, v) => { o.bstyle = String(v).replace(/^style_/, ''); }, text_size: () => {}, text_halign: () => {}, text_valign: () => {}, text_wrap: () => {}, text_font_family: () => {}, left: (o, v) => { o.l = v; }, right: (o, v) => { o.r = v; }, top: (o, v) => { o.t = nv(v); }, bottom: (o, v) => { o.b = nv(v); }, lefttop: (o, l, t) => { o.l = l; o.t = nv(t); }, rightbottom: (o, r, b) => { o.r = r; o.b = nv(b); }, bgcolor: (o, v, _, ctx) => { o.fci = pal(ctx, v); }, border_color: (o, v, _, ctx) => { o.bci = pal(ctx, v); }, border_width: (o, v) => { o.bw = v; }, extend: (o, v) => { o.extend = String(v); }, text: (o, v) => { o.text = String(v); }, text_color: (o, v, _, ctx) => { o.tci = pal(ctx, v); }});
+setters('box', {xloc: (o, v) => { o.xloc = String(v); }, border_style: (o, v) => { o.bstyle = String(v).replace(/^style_/, ''); }, text_size: (o, v) => { o.tz = boxTxt(v); }, text_halign: (o, v) => { o.th = boxTxt(v); }, text_valign: (o, v) => { o.tv = boxTxt(v); }, text_wrap: () => {}, text_font_family: () => {}, left: (o, v) => { o.l = v; }, right: (o, v) => { o.r = v; }, top: (o, v) => { o.t = nv(v); }, bottom: (o, v) => { o.b = nv(v); }, lefttop: (o, l, t) => { o.l = l; o.t = nv(t); }, rightbottom: (o, r, b) => { o.r = r; o.b = nv(b); }, bgcolor: (o, v, _, ctx) => { o.fci = pal(ctx, v); }, border_color: (o, v, _, ctx) => { o.bci = pal(ctx, v); }, border_width: (o, v) => { o.bw = v; }, extend: (o, v) => { o.extend = String(v); }, text: (o, v) => { o.text = String(v); }, text_color: (o, v, _, ctx) => { o.tci = pal(ctx, v); }});
 const getter = (kind, p, name) => def(`${kind}.get_${name || p}`, ['id'], a => a[0] && a[0]._kind === kind && a[0][p] !== undefined ? a[0][p] : null);
 ['x', 'y', 'text'].forEach(p => getter('label', p)); [['x1'], ['y1'], ['x2'], ['y2']].forEach(([p]) => getter('line', p));
 [['l', 'left'], ['t', 'top'], ['r', 'right'], ['b', 'bottom']].forEach(([p, n]) => getter('box', p, n));
@@ -1636,7 +1647,7 @@ function run(code, candles, opts) {
   const fills = o.fills.map(f => { const u = uniform(f.ci); const r = {a: f.a, b: f.b, hidden: f.hidden}; if (u !== undefined) r.cc = u; else r.ci = f.ci; return r; });
   const labels = o.labels.filter(l => !l.deleted).map(l => ({x: xi(l.x, l.xloc), y: l.y, text: l.text, yloc: l.yloc, ci: l.ci, style: l.style, tci: l.tci, size: l.size}));
   const lines = o.lines.filter(l => !l.deleted).map(l => ({x1: xi(l.x1, l.xloc), y1: l.y1, x2: xi(l.x2, l.xloc), y2: l.y2, extend: l.extend, ci: l.ci, style: l.style, w: l.w}));
-  const boxes = o.boxes.filter(b => !b.deleted).map(b => ({l: xi(b.l, b.xloc), t: b.t, r: xi(b.r, b.xloc), b: b.b, extend: b.extend, bci: b.bci, bw: b.bw, bstyle: b.bstyle, fci: b.fci, text: b.text, tci: b.tci}));
+  const boxes = o.boxes.filter(b => !b.deleted).map(b => ({l: xi(b.l, b.xloc), t: b.t, r: xi(b.r, b.xloc), b: b.b, extend: b.extend, bci: b.bci, bw: b.bw, bstyle: b.bstyle, fci: b.fci, text: b.text, tci: b.tci, tz: b.tz, th: b.th, tv: b.tv}));
   const polylines = o.polylines.filter(q => !q.deleted).map(q => ({pts: q.pts.map(pt => [pt.i !== null && q.xloc !== 'bar_time' ? pt.i : (pt.t !== null ? timeToIndex(ctx, pt.t) : pt.i), pt.p]), closed: q.closed, lci: q.lci, fci: q.fci, style: q.style, w: q.w}));
   const tables = o.tables.filter(t => !t.deleted).map(t => ({pos: t.pos, cols: t.cols, rows: t.rows, bci: t.bci, frame: t.frame, fw: t.fw, border: t.border, bw: t.bw, cells: [...t.cells.values()]}));
   const linefills = o.linefills.filter(f => !f.deleted && f.l1 && f.l2 && !f.l1.deleted && !f.l2.deleted).map(f => ({a: [f.l1.x1, f.l1.y1, f.l1.x2, f.l1.y2], b: [f.l2.x1, f.l2.y1, f.l2.x2, f.l2.y2], ci: f.ci}));

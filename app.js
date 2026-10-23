@@ -1068,7 +1068,16 @@ function renderCore() {
   }
   const offOf = arr => arr.map((_, i) => arr.slice(0, i).reduce((a, b) => a + b, 0)), oBot = offOf(hBot), oTop = offOf(hTop);
   const extraH = hBot.reduce((a, b) => a + b, 0), topH = hTop.reduce((a, b) => a + b, 0), plotTop = top0 + topH;
-  const vpOn = !!(state.indicators.nnVP && ind.vp), gutter = vpOn ? clamp(Math.round((w - left - right) * .4), 110, 300) : 0; // margen derecho para el perfil
+  // Espacio a la derecha de la última vela para lo que un script Pine dibuja en barras «futuras» (p. ej. el perfil de volumen del Nova Nexus,
+  // que se coloca varias decenas de barras después de la última vela). Se mide con lo que el script realmente genera, así que no se reserva nada si no hay nada ahí.
+  const aheadBars = (() => {
+    let m = 0; const N = n - 1, f = v => { if (Number.isFinite(v) && v > N && v < N + 400 && v - N > m) m = v - N; };
+    for (const {r} of pOver) { for (const b of r.boxes || []) { f(b.l); f(b.r); } for (const l of r.lines || []) { f(l.x1); f(l.x2); } for (const l of r.labels || []) f(l.x); for (const pl of r.polylines || []) for (const q of pl.pts || []) f(q && q[0]); }
+    return m;
+  })();
+  const plotW0 = w - left - right, count0 = clamp(visible, 15, 400);
+  const pineG = aheadBars ? clamp(Math.round(plotW0 * aheadBars / (count0 + aheadBars)) + 8, 0, Math.round(plotW0 * .5)) : 0;
+  const vpOn = !!(state.indicators.nnVP && ind.vp), gutter = vpOn ? clamp(Math.round((w - left - right) * .4), 110, 300) : pineG; // margen derecho para el perfil
   const plotH = Math.max(80, h - axisH - rsiH - volH - extraH - plotTop), plotW = w - left - right - gutter;
   const count = clamp(visible, 15, 400);
   pan = clamp(pan, -Math.floor(count * .4), Math.max(0, n - Math.ceil(count * .3)));
@@ -1080,6 +1089,8 @@ function renderCore() {
   for (let i = lo; i < hi; i++) { if (candles[i].l < min) min = candles[i].l; if (candles[i].h > max) max = candles[i].h; }
   const pineOff = [];
   for (const {r} of pOver) { const c = CCTPineDraw.contrib(r, lo, hi, min, max); if (Number.isFinite(c.min)) { min = Math.min(min, c.min); max = Math.max(max, c.max); } pineOff.push(...c.off); }
+  // cajas dibujadas en barras «futuras» (el perfil de volumen): su rango de precios entra en el autoajuste para que se vean todos los niveles y no solo los que caen en las velas visibles
+  for (const {r} of pOver) for (const b of r.boxes || []) { if (Math.max(b.l, b.r) > n + .5 && Math.max(b.l, b.r) < n + 400 && Number.isFinite(b.t) && Number.isFinite(b.b) && b.t > min / 3 && b.t < max * 3 && b.b > min / 3 && b.b < max * 3) { min = Math.min(min, b.t, b.b); max = Math.max(max, b.t, b.b); } }
   const overlays = [];
   if (state.indicators.ema20) overlays.push([`EMA ${sp('ema20', 'len')}`, ind.ema20, sp('ema20', 'color'), false, 'ema20', lineSty('ema20')]);
   if (state.indicators.ema50) overlays.push([`EMA ${sp('ema50', 'len')}`, ind.ema50, sp('ema50', 'color'), false, 'ema50', lineSty('ema50')]);
@@ -1118,7 +1129,7 @@ function renderCore() {
   }
   g.textAlign = 'left';
 
-  g.save(); g.beginPath(); g.rect(left, plotTop, plotW + 2, plotH); g.clip();
+  g.save(); g.beginPath(); g.rect(left, plotTop, plotW + 2 + (vpOn ? 0 : pineG), plotH); g.clip();
   // Nova Nexus · EMA Cloud (detrás de las velas)
   if (nn && state.indicators.nnEma) drawNovaCloud(nn, lo, hi, css);
   if (nn && nn.smc && state.indicators.nnOb) drawNovaOB(nn.smc);
@@ -1147,7 +1158,7 @@ function renderCore() {
     for (let i = lo; i < hi; i++) { if (arr[i] == null) { on = false; continue; } const xx = X(i), yy = Y(arr[i]); if (!on) { g.moveTo(xx, yy); on = true; } else g.lineTo(xx, yy); }
     g.stroke(); g.setLineDash([]);
   }
-  for (const {r} of pOver) CCTPineDraw.draw(g, r, {X, Y, lo, hi, left, right: left + plotW, top: plotTop, bottom: plotTop + plotH, step, candles, overlay: true});
+  for (const {r} of pOver) CCTPineDraw.draw(g, r, {X, Y, lo, hi, left, right: left + plotW + (vpOn ? 0 : pineG), top: plotTop, bottom: plotTop + plotH, step, candles, overlay: true});
   for (const {r} of pSub.concat(pTop)) if (r.strategy) CCTPineDraw.drawTrades(g, r.strategy, {X, Y, lo, hi, candles}); // estrategias con panel propio: las operaciones se marcan igual sobre el precio
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailLine(ind.trail, lo, hi);
   if (state.indicators.nnSR && ind.sr) drawNovaSRLabels(ind.sr, lo, hi);

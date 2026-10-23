@@ -112,3 +112,9 @@ Arrastra el borde entre *Seguimiento* y el gráfico, o entre el gráfico y *Indi
 - **No se pierde lo último que hiciste:** al cerrar la pestaña o mandarla a segundo plano se sube de inmediato lo pendiente (antes esperaba 1,2 s). Si este dispositivo tenía cambios que no alcanzaron a subir, al volver a abrir ganan esos cambios (no se pisan con la copia vieja de la nube). Si la configuración llegara a pasar del límite de 1 MiB de Firestore, la app lo avisa en Ajustes → cuenta en vez de fallar en silencio.
 - Se queda **solo en cada dispositivo** (a propósito, porque dependen del tamaño de pantalla): altura de los paneles y ancho de las columnas.
 - Prueba: `tests/e2e/brush-sync.js` (PC dibuja → cuenta → celular lo recibe → borrar en el celular se refleja en vivo en el PC).
+
+## Perfil de volumen del Nova Nexus (oct 2026)
+- **Causa del «perfil roto/cortado»:** (1) el motor de Pine devolvía siempre la vela actual en `b.h[k]` / `b.l[k]` (historial de un campo de objeto) cuando el código corría solo en la última barra, dentro de un bucle: todo el volumen caía en las 2 filas de arriba y las demás salían en 0. Ahora usa el objeto tal como estaba k barras atrás; el reparto por filas coincide con un cálculo independiente (diferencia máx. 0,4 pt %). (2) El perfil se dibuja en barras «futuras» a la derecha de la última vela y el gráfico no dejaba espacio ni lo recortaba bien: ahora reserva el margen que el script realmente usa. (3) Las cajas con texto se imprimían centradas y sin recorte, así que las 3 columnas (sentimiento | precios | volumen) se montaban: ahora se respeta `text_halign` / `text_size` / `text_valign`, el texto se ajusta al tamaño de la caja y se recorta dentro de ella.
+- El autoajuste vertical incluye las filas del perfil, para ver todos los niveles aunque las velas visibles cubran un rango de precio menor.
+- Pruebas: 2 nuevas en `tests/pine.test.js` (historial de campos de objeto y propiedades de texto de las cajas).
+

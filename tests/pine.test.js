@@ -255,3 +255,20 @@ test('request.security recortado da el mismo resultado que el script completo', 
   assert.ok(r.ok); const ref = P.run(hdr + 'plot(request.security("ETHUSDT", "1h", ta.ema(close, 4)))', cs, {symbol: 'BTCUSDT', interval: '1h', sec: {'ETHUSDT|1h': oth}});
   assert.deepEqual(r.plots[1].values, ref.plots[0].values);
 });
+test('historial de un campo de objeto (b.h[k]) dentro de if barstate.islast + bucle: usa la barra de hace k, no la actual', () => {
+  // regresión del perfil de volumen del Nova Nexus: acumulaba todo el volumen en las filas de la vela actual
+  const cs = Array.from({length: 30}, (_, i) => ({t: i * 36e5, o: 100 + i, h: 101 + i, l: 99 + i, c: 100 + i, v: 10}));
+  const r = vals('type bar\n    float h = high\n    float l = low\nbar b = bar.new()\nvar f = 0.0\nvar m = 0.0\nif barstate.islast\n    f := 0.0\n    for bI = 5 to 0\n        f += b.h[bI]\n        m += b.l[bI]\nplot(f)\nplot(m)\nplot(b.h[3])', cs);
+  assert.equal(r.plots[0].values[29], 130 + 129 + 128 + 127 + 126 + 125); // suma de high[0..5]
+  assert.equal(r.plots[1].values[29], 6 * 99 + (29 + 28 + 27 + 26 + 25 + 24)); // suma de low[0..5]
+  assert.equal(r.plots[2].values[29], 127);
+});
+test('cajas: se conservan text_halign, text_size y text_valign (columnas del perfil de volumen)', () => {
+  const cs = closes([1, 2, 3, 4]);
+  const r = vals('if barstate.islast\n    box.new(bar_index - 3, 4.0, bar_index, 1.0, text = "a", text_halign = text.align_left, text_size = size.small, text_valign = text.align_top)\n    box.new(bar_index - 3, 4.0, bar_index, 1.0, text = "b", text_halign = text.align_right, text_size = size.auto)\n    box.new(bar_index - 3, 4.0, bar_index, 1.0, text = "c")\nplot(close)', cs);
+  const [a, b, c] = r.boxes;
+  assert.deepEqual([a.th, a.tz, a.tv], ['left', 'small', 'top']);
+  assert.deepEqual([b.th, b.tz], ['right', 'auto']);
+  assert.equal(c.th, undefined);
+});
+
