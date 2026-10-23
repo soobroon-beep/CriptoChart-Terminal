@@ -464,7 +464,7 @@ async function loadCandles(silent = false) {
     if (sym !== state.symbol || tf !== state.interval) return;
     candles = data.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}));
     recalc();
-    if (!silent) { visible = defaultVisible(); pan = 0; }
+    if (!silent) { stopMotion(); visible = defaultVisible(); pan = 0; const ca = $('#chartArea'); if (ca) { ca.classList.remove('swap-in'); void ca.offsetWidth; ca.classList.add('swap-in'); } }
     setFeedback(''); updateChartHeader(); render(); connectWS();
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -922,6 +922,28 @@ function commitBrush(live) {
 
 /* ───────── Render del gráfico ───────── */
 let raf = 0;
+/* ───────── Movimiento fluido: inercia al desplazar y zoom/ajuste suavizados ───────── */
+const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+let glideRaf = 0, glideT = null, inertiaRaf = 0;
+function stopMotion() { cancelAnimationFrame(glideRaf); cancelAnimationFrame(inertiaRaf); glideRaf = inertiaRaf = 0; glideT = null; }
+function glide(t) { // t = {visible?, pan?}: se acerca al objetivo con suavizado exponencial
+  if (REDUCED) { if (t.visible != null) visible = t.visible; if (t.pan != null) pan = t.pan; render(); return; }
+  cancelAnimationFrame(inertiaRaf); glideT = Object.assign(glideT || {}, t); if (glideRaf) return;
+  let last = performance.now();
+  const step = now => {
+    const dt = Math.min(48, now - last); last = now; const k = 1 - Math.pow(.0009, dt / 1000); let done = true; const g = glideT;
+    if (g.visible != null) { visible += (g.visible - visible) * k; if (Math.abs(g.visible - visible) < .05) visible = g.visible; else done = false; }
+    if (g.pan != null) { pan += (g.pan - pan) * k; if (Math.abs(g.pan - pan) < .02) pan = g.pan; else done = false; }
+    render(); if (done) { glideRaf = 0; glideT = null; } else glideRaf = requestAnimationFrame(step);
+  };
+  glideRaf = requestAnimationFrame(step);
+}
+function inertia(v) { // v en velas/ms; se frena con fricción
+  if (REDUCED || Math.abs(v) < .004) return; cancelAnimationFrame(inertiaRaf); let last = performance.now();
+  const step = now => { const dt = Math.min(48, now - last); last = now; pan += v * dt; v *= Math.pow(.0035, dt / 1000);
+    render(); if (Math.abs(v) > .0015) inertiaRaf = requestAnimationFrame(step); else inertiaRaf = 0; };
+  inertiaRaf = requestAnimationFrame(step);
+}
 function scheduleRender() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
 let g = null;
 function setupCanvas() {
@@ -1647,7 +1669,7 @@ function drawShape(d, selected, col, textCol) {
 const area = $('#chartArea'), ptrs = new Map();
 let gest = null, pinch = null, lastTap = null, brushLive = null;
 const local = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
-area.addEventListener('pointerdown', e => {
+area.addEventListener('pointerdown', e => { stopMotion();
   if (e.target.closest('.chart-controls,.draw-hint,.leg-row')) return;
   try { area.setPointerCapture(e.pointerId); } catch {} ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   if (!geo) return;
@@ -1697,7 +1719,7 @@ area.addEventListener('pointermove', e => {
     const f = clamp(Math.exp((e.clientX - gest.x0) / 180), .1, 12); visible = clamp(gest.vis0 / f, 15, 400); scheduleRender();
   }
   else if (gest.mode === 'pan') {
-    pan = gest.pan0 + (e.clientX - gest.x0) / geo.step;
+    const p0 = pan; pan = gest.pan0 + (e.clientX - gest.x0) / geo.step; const tn = performance.now(); if (gest.tl) { const dt = tn - gest.tl; if (dt > 0) gest.vel = .6 * (gest.vel || 0) + .4 * ((pan - p0) / dt); } gest.tl = tn;
     if (priceMan) { if (gest.pm0 == null) gest.pm0 = {min: priceMan.min, max: priceMan.max}; const dy = (e.clientY - gest.y0) / geo.plotH * (gest.pm0.max - gest.pm0.min); priceMan = {min: gest.pm0.min + dy, max: gest.pm0.max + dy}; } // con escala manual también se mueve en vertical
     scheduleRender();
   }
@@ -1717,7 +1739,7 @@ function endPointer(e, cancelled) {
     if (!gs.moved) { const now = Date.now(); if (now - lastAxisTap < 320) { lastAxisTap = 0; if (gs.mode === 'scaleY') { priceMan = null; updateAutoBtn(); } else visible = defaultVisible(); render(); } else lastAxisTap = now; }
     return;
   }
-  if (gs.mode === 'pan') return;
+  if (gs.mode === 'pan') { if (!cancelled && gs.vel && performance.now() - (gs.tl || 0) < 90) inertia(gs.vel); return; }
   if (!geo) return;
   const pt = local(e);
   if (drawTool) {
@@ -1753,12 +1775,12 @@ area.addEventListener('pointermove', e => {
   cross = local(e); scheduleRender();
 });
 area.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !ptrs.size && cross) { cross = null; scheduleRender(); } });
-area.addEventListener('wheel', e => { e.preventDefault(); visible = clamp(visible * (e.deltaY > 0 ? 1.12 : .89), 15, 400); scheduleRender(); }, {passive: false});
-function fit() { visible = defaultVisible(); pan = 0; priceMan = null; updateAutoBtn(); render(); }
+area.addEventListener('wheel', e => { e.preventDefault(); cancelAnimationFrame(inertiaRaf); const base = glideT && glideT.visible != null ? glideT.visible : visible; glide({visible: clamp(base * (e.deltaY > 0 ? 1.12 : .89), 15, 400)}); }, {passive: false});
+function fit() { priceMan = null; updateAutoBtn(); glide({visible: defaultVisible(), pan: 0}); }
 function updateAutoBtn() { const b = $('#autoScale'); if (b) b.hidden = !priceMan; }
 $('#autoScale').onclick = () => { priceMan = null; updateAutoBtn(); render(); };
-$('#zoomIn').onclick = () => { visible = clamp(visible / 1.3, 15, 400); render(); };
-$('#zoomOut').onclick = () => { visible = clamp(visible * 1.3, 15, 400); render(); };
+$('#zoomIn').onclick = () => glide({visible: clamp((glideT && glideT.visible != null ? glideT.visible : visible) / 1.3, 15, 400)});
+$('#zoomOut').onclick = () => glide({visible: clamp((glideT && glideT.visible != null ? glideT.visible : visible) * 1.3, 15, 400)});
 $('#fitChart').onclick = fit;
 function syncFullscreenLabel() { $('#fullscreen').textContent = document.body.classList.contains('expanded') ? '⤓ Reducir' : '⛶ Expandir'; }
 const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };

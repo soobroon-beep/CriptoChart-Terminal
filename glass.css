@@ -1,0 +1,121 @@
+/* ═════ Liquid Glass · movimiento fluido (capa visual; no cambia la lógica) ═════ */
+:root{
+  --glass:rgba(22,32,52,.46);--glass-2:rgba(30,43,68,.58);--glass-line:rgba(255,255,255,.10);--glass-hi:rgba(255,255,255,.16);
+  --shine:linear-gradient(135deg,rgba(255,255,255,.14),rgba(255,255,255,0) 42%);
+  --blur:blur(22px) saturate(1.7);--blur-s:blur(12px) saturate(1.5);
+  --ease:cubic-bezier(.22,1,.36,1);--spring:cubic-bezier(.34,1.56,.64,1);
+  --shadow:0 10px 34px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.09);
+}
+.light{--glass:rgba(255,255,255,.55);--glass-2:rgba(255,255,255,.72);--glass-line:rgba(20,40,80,.10);--glass-hi:rgba(255,255,255,.9);
+  --shine:linear-gradient(135deg,rgba(255,255,255,.9),rgba(255,255,255,0) 45%);--shadow:0 10px 30px rgba(30,60,120,.14),inset 0 1px 0 rgba(255,255,255,.9)}
+
+/* Fondo ambiente: luces de color que flotan despacio detrás del cristal */
+body{background-image:radial-gradient(900px 600px at var(--mx,70%) var(--my,10%),rgba(84,143,255,.10),transparent 60%)}
+body::before,body::after{content:'';position:fixed;z-index:-1;pointer-events:none;border-radius:50%;filter:blur(70px);opacity:.55;will-change:transform}
+body::before{width:46vmax;height:46vmax;left:-12vmax;top:-14vmax;background:radial-gradient(circle,rgba(84,143,255,.55),transparent 65%);animation:orbA 26s ease-in-out infinite alternate}
+body::after{width:40vmax;height:40vmax;right:-10vmax;bottom:-12vmax;background:radial-gradient(circle,rgba(32,191,159,.38),transparent 65%);animation:orbB 32s ease-in-out infinite alternate}
+.light body::before,body.light::before{opacity:.35}body.light::after{opacity:.28}
+@keyframes orbA{to{transform:translate3d(18vmax,10vmax,0) scale(1.15)}}
+@keyframes orbB{to{transform:translate3d(-16vmax,-8vmax,0) scale(1.2)}}
+#app{position:relative;z-index:0}
+
+/* Barras y paneles de cristal */
+.topbar{background:var(--glass);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-bottom:1px solid var(--glass-line);position:relative;z-index:5;box-shadow:inset 0 -1px 0 rgba(255,255,255,.03)}
+.bottom-nav{position:relative;background:var(--glass);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-top:1px solid var(--glass-line);z-index:5}
+.bottom-nav button{position:relative;z-index:1;transition:color .3s var(--ease),transform .35s var(--spring)}
+.bottom-nav button span{transition:transform .4s var(--spring),filter .3s}
+.bottom-nav button:active span{transform:scale(.82)}
+.bottom-nav button.active span{transform:translateY(-2px) scale(1.12);filter:drop-shadow(0 0 8px var(--accent))}
+.bottom-nav::before{content:'';position:absolute;z-index:0;top:7px;bottom:calc(7px + env(safe-area-inset-bottom));left:0;width:var(--pill-w,0);transform:translateX(var(--pill-x,0));border-radius:16px;background:var(--glass-2);border:1px solid var(--glass-hi);box-shadow:var(--shadow);opacity:0;transition:transform .5s var(--spring),width .4s var(--ease),opacity .3s;margin:0 6px;box-sizing:border-box;width:calc(var(--pill-w,0px) - 12px);left:0}
+.bottom-nav.has-pill::before{opacity:1}
+@media(min-width:1024px){
+  #watchView,#newsView,#aiView,#settingsView,#alertsView{background:var(--glass);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-color:var(--glass-line)}
+  .side-tabs{background:var(--glass);-webkit-backdrop-filter:var(--blur-s);backdrop-filter:var(--blur-s);border-color:var(--glass-line)}
+  .side-tabs button{transition:background .35s var(--ease),color .3s,transform .3s var(--spring)}
+  .side-tabs button:hover{color:var(--text)}.side-tabs button:active{transform:scale(.95)}
+  .side-tabs button.active{background:var(--glass-2);box-shadow:var(--shadow)}
+}
+
+/* Tarjetas, filas y controles */
+.summary,.setting-row,.nw-item,.search,.script-row,.chart-toolbar button,.small-button,.icon-btn,.account-btn,.chart-controls button,.nw-tabs button,.nw-chips button,.nw-ref,.nw-more{
+  background:var(--glass);-webkit-backdrop-filter:var(--blur-s);backdrop-filter:var(--blur-s);border:1px solid var(--glass-line);box-shadow:var(--shadow)}
+.summary,.setting-row,.nw-item{background-image:var(--shine);border-radius:16px}
+.search{border-radius:14px;transition:box-shadow .3s var(--ease),border-color .3s}
+.search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(84,143,255,.22),var(--shadow)}
+.chart-toolbar{background:transparent;border-color:var(--glass-line)}
+.chart-toolbar button,.small-button,.icon-btn,.account-btn,.chart-controls button,.nw-ref{border-radius:12px}
+.timeframes button{transition:background .3s var(--ease),color .25s,transform .3s var(--spring)}
+.timeframes button.active{background:var(--glass-2);box-shadow:var(--shadow);border:1px solid var(--glass-hi)}
+.chart-foot,.chart-heading{background:transparent}
+.chart-foot{border-color:var(--glass-line)}
+.nw-tabs button.on{background:linear-gradient(135deg,var(--accent),#7aa9ff);color:#fff;border-color:transparent;box-shadow:0 6px 22px rgba(84,143,255,.45)}
+.nw-calbox{background:var(--glass);border-color:var(--glass-line);border-radius:16px;box-shadow:var(--shadow)}
+.watch-row{border-color:var(--glass-line);border-radius:12px;transition:background .25s var(--ease),transform .35s var(--spring)}
+.watch-row:hover{background:rgba(255,255,255,.05)}
+.watch-row:active{transform:scale(.985)}
+.primary{background:linear-gradient(135deg,var(--accent),#7aa9ff);box-shadow:0 10px 28px rgba(84,143,255,.4);border-radius:16px}
+.brand-icon{box-shadow:0 6px 22px rgba(84,143,255,.55),inset 0 1px 0 rgba(255,255,255,.4);animation:glow 4.5s ease-in-out infinite alternate}
+@keyframes glow{to{box-shadow:0 6px 30px rgba(122,169,255,.8),inset 0 1px 0 rgba(255,255,255,.5)}}
+.toggle{transition:background .35s var(--ease)}.toggle:after{transition:left .4s var(--spring),width .2s;box-shadow:0 2px 6px rgba(0,0,0,.35)}.toggle:active:after{width:24px}
+.toggle.on{box-shadow:0 0 14px rgba(84,143,255,.55)}
+
+/* Transiciones de pantalla y entradas escalonadas */
+.view.active:not(.chart-view){animation:viewIn .5s var(--ease) both}
+@keyframes viewIn{from{opacity:0;transform:translateY(14px) scale(.985);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+.chart-view.active{animation:chartIn .45s var(--ease) both}
+@keyframes chartIn{from{opacity:0;transform:scale(.99)}to{opacity:1;transform:none}}
+.chart-area.swap-in canvas{animation:swapIn .6s var(--ease) both}
+@keyframes swapIn{from{opacity:.0;transform:translateX(18px) scale(.985)}to{opacity:1;transform:none}}
+.nw-item{animation:itemIn .55s var(--ease) both}
+.nw-item:nth-child(2){animation-delay:.04s}.nw-item:nth-child(3){animation-delay:.08s}.nw-item:nth-child(4){animation-delay:.12s}.nw-item:nth-child(5){animation-delay:.16s}.nw-item:nth-child(n+6){animation-delay:.2s}
+@keyframes itemIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.nw-item:hover{transform:translateY(-2px);transition:transform .35s var(--spring);border-color:var(--glass-hi)}
+.nw-new{animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 5px rgba(32,191,159,.0),0 0 14px rgba(32,191,159,.8)}}
+.nw-status:not(.warn){position:relative}
+.live-dot.on{animation:live 2s ease-in-out infinite}
+@keyframes live{50%{box-shadow:0 0 0 5px rgba(32,191,159,0),0 0 12px var(--green)}}
+.connection.online{text-shadow:0 0 10px rgba(32,191,159,.6)}
+
+/* Hojas, diálogos y avisos de cristal con resorte */
+.sheet-backdrop{display:block;visibility:hidden;opacity:0;background:rgba(3,7,14,.45);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);transition:opacity .35s var(--ease),visibility 0s .35s}
+.sheet-backdrop.open{visibility:visible;opacity:1;transition:opacity .35s var(--ease)}
+.sheet{background:var(--glass-2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--glass-hi);border-bottom:0;box-shadow:0 -20px 60px rgba(0,0,0,.45),inset 0 1px 0 var(--glass-hi);transition:transform .55s var(--spring);border-radius:26px 26px 0 0}
+.sheet-handle{background:var(--glass-hi)}
+.sheet-item{border-color:var(--glass-line);transition:background .2s}.sheet-item:active{background:rgba(255,255,255,.08)}
+.cfg-overlay{background:rgba(3,7,14,.5);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);animation:fadeIn .3s var(--ease) both}
+.cfg-dlg{background:var(--glass-2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--glass-hi);border-radius:22px;animation:dlgIn .5s var(--spring) both}
+@keyframes fadeIn{from{opacity:0}}
+@keyframes dlgIn{from{opacity:0;transform:translateY(24px) scale(.94)}}
+#toast{background:var(--glass-2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--glass-hi);border-radius:16px;box-shadow:var(--shadow)}
+#toast[style*="block"],#toast.show{animation:toastIn .45s var(--spring) both}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(18px) scale(.9)}}
+.draw-hint{background:var(--glass-2);-webkit-backdrop-filter:var(--blur-s);backdrop-filter:var(--blur-s);border-radius:16px;box-shadow:var(--shadow)}
+
+/* Gráfico: leyenda e interfaz sobre el lienzo */
+.chart-feedback{background:var(--glass-2);-webkit-backdrop-filter:var(--blur-s);backdrop-filter:var(--blur-s);border:1px solid var(--glass-hi);border-radius:14px}
+.leg-row{-webkit-backdrop-filter:var(--blur-s);backdrop-filter:var(--blur-s);border-radius:10px;transition:background .25s,transform .3s var(--spring)}
+.leg-row:hover{background:rgba(255,255,255,.07)}
+#brushOpts,.pine-tip{-webkit-backdrop-filter:var(--blur-s);backdrop-filter:var(--blur-s)}
+.chart-controls button{transition:transform .3s var(--spring),background .25s}.chart-controls button:hover{background:var(--glass-2)}.chart-controls button:active{transform:scale(.88)}
+.chart-area{border-radius:0}
+
+/* Micro-interacciones: levantar al pasar, hundir al tocar, onda de luz */
+button{transition:transform .3s var(--spring),background-color .25s var(--ease),border-color .25s,box-shadow .3s var(--ease),color .25s}
+@media(hover:hover){.chart-toolbar button:hover,.small-button:hover,.icon-btn:hover,.account-btn:hover,.nw-ref:hover,.nw-chips button:hover,.nw-tabs button:hover{transform:translateY(-1px);background-color:var(--glass-2);border-color:var(--glass-hi)}}
+button:active:not(.toggle):not(.watch-row){transform:scale(.95)}
+button,.watch-row,.sheet-item,.setting-row,.small-button{position:relative;overflow:hidden}
+.chart-controls button,.chart-toolbar button,.leg-row button{overflow:visible}
+.rip::after{content:'';position:absolute;left:var(--rx,50%);top:var(--ry,50%);width:10px;height:10px;margin:-5px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.45),rgba(255,255,255,0) 70%);pointer-events:none;animation:rip .65s var(--ease) forwards}
+@keyframes rip{to{transform:scale(22);opacity:0}}
+.flash-up,.flash-down{will-change:color}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:8px;border:2px solid transparent;background-clip:padding-box}::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.26);background-clip:padding-box;border:2px solid transparent}
+::selection{background:rgba(84,143,255,.4)}
+
+/* Sin blur donde no hay soporte, y respeto a «reducir movimiento» */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  :root{--glass:var(--surface);--glass-2:var(--raised)}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
