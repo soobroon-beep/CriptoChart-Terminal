@@ -131,27 +131,37 @@
     allorigins: u => ({url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(bust(u)), json: false}),
     codetabs: u => ({url: 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(bust(u)), json: false}),
     corsproxy: u => ({url: 'https://corsproxy.io/?url=' + encodeURIComponent(bust(u)), json: false}),
-    rss2json: u => ({url: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(u), json: true})
+    rss2json: u => ({url: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(u), json: true}),
+    alloriginsjson: u => ({url: 'https://api.allorigins.win/get?url=' + encodeURIComponent(bust(u)), json: false, wrap: 'contents'}),
+    thingproxy: u => ({url: 'https://thingproxy.freeboard.io/fetch/' + bust(u), json: false}),
+    codetabs2: u => ({url: 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u), json: false})
   };
-  const ROUTE_ORDER = ['direct', 'allorigins', 'codetabs', 'corsproxy', 'rss2json'];
+  const ROUTE_ORDER = ['rss2json', 'direct', 'codetabs', 'allorigins', 'alloriginsjson', 'corsproxy', 'thingproxy', 'codetabs2'];
   const ls = {get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
   let goodRoute = {}; try { goodRoute = JSON.parse(ls.get('cct_news_route') || '{}') || {}; } catch {}
   async function fetchWithTimeout(url, ms) {
     const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, to = setTimeout(() => ctl && ctl.abort(), ms);
     try { const r = await fetch(url, {signal: ctl ? ctl.signal : undefined, cache: 'no-store'}); if (!r.ok) throw new Error('HTTP ' + r.status); return r; } finally { clearTimeout(to); }
   }
-  async function loadSource(src) {
+  // Las rutas se lanzan escalonadas (la que funcionó antes va primero) y gana la primera que devuelva ítems: así un proxy caído o lento no frena a los demás.
+  function loadSource(src) {
     const order = goodRoute[src.id] ? [goodRoute[src.id], ...ROUTE_ORDER.filter(r => r !== goodRoute[src.id])] : ROUTE_ORDER;
-    for (const name of order) {
-      try {
-        const rt = ROUTES[name](src.url), r = await fetchWithTimeout(rt.url, FETCH_TIMEOUT);
-        const items = rt.json ? parseRss2json(await r.json()) : parseFeed(await r.text());
-        if (!items.length) throw new Error('sin ítems');
-        if (goodRoute[src.id] !== name) { goodRoute[src.id] = name; ls.set('cct_news_route', JSON.stringify(goodRoute)); }
-        return items;
-      } catch { /* siguiente ruta */ }
-    }
-    return null;
+    return new Promise(resolve => {
+      let pending = order.length, won = false; const timers = [];
+      const fail = () => { if (--pending === 0 && !won) resolve(null); };
+      order.forEach((name, i) => timers.push(setTimeout(async () => {
+        if (won) return fail();
+        try {
+          const rt = ROUTES[name](src.url), r = await fetchWithTimeout(rt.url, FETCH_TIMEOUT); let items;
+          if (rt.json) items = parseRss2json(await r.json());
+          else if (rt.wrap) { const j = await r.json(); items = parseFeed(j && j[rt.wrap]); }
+          else items = parseFeed(await r.text());
+          if (!items.length) throw new Error('sin ítems');
+          if (!won) { won = true; timers.forEach(clearTimeout); if (goodRoute[src.id] !== name) { goodRoute[src.id] = name; ls.set('cct_news_route', JSON.stringify(goodRoute)); } resolve(items); }
+        } catch { fail(); }
+      }, i * 1200)));
+      // los temporizadores cancelados nunca llaman a fail(); por eso al ganar ya se resuelve y no se espera al resto
+    });
   }
 
   /* ───────── Interfaz ───────── */
@@ -228,13 +238,14 @@
   const isLight = () => document.body.classList.contains('light');
   function buildCalendar() {
     const box = $('#nwCalBox'); if (!box) return; const key = isLight() ? 'light' : 'dark'; if (st.calMade === key && box.querySelector('iframe')) return;
-    st.calMade = key; box.innerHTML = '<div class="nw-calload">Cargando calendario…</div>';
-    const wrap = document.createElement('div'); wrap.className = 'tradingview-widget-container'; wrap.style.cssText = 'width:100%;height:100%';
-    const inner = document.createElement('div'); inner.className = 'tradingview-widget-container__widget'; inner.style.cssText = 'width:100%;height:100%'; wrap.appendChild(inner);
+    st.calMade = key; box.innerHTML = '<div class="nw-calload" id="nwCalLoad">Cargando calendario…</div>';
+    const wrap = document.createElement('div'); wrap.className = 'tradingview-widget-container'; wrap.style.cssText = 'width:100%;height:600px';
+    const inner = document.createElement('div'); inner.className = 'tradingview-widget-container__widget'; inner.style.cssText = 'width:100%;height:600px'; wrap.appendChild(inner);
     const sc = document.createElement('script'); sc.type = 'text/javascript'; sc.async = true; sc.src = 'https://s3.tradingview.com/external-embedding/embed-widget-events.js';
-    sc.text = JSON.stringify({colorTheme: key, isTransparent: true, width: '100%', height: '100%', locale: 'es', importanceFilter: '-1,0,1', countryFilter: 'ar,au,br,ca,cn,fr,de,in,id,it,jp,kr,mx,ru,sa,za,tr,gb,us,eu'});
+    sc.text = JSON.stringify({colorTheme: key, isTransparent: false, width: '100%', height: '600', locale: 'es', importanceFilter: '-1,0,1', countryFilter: 'ar,au,br,ca,cn,fr,de,in,id,it,jp,kr,mx,ru,sa,za,tr,gb,us,eu'});
     sc.onerror = () => calFallback();
     wrap.appendChild(sc); box.appendChild(wrap);
+    const mo = new MutationObserver(() => { if (box.querySelector('iframe')) { const l = $('#nwCalLoad'); if (l) l.remove(); mo.disconnect(); } }); mo.observe(box, {childList: true, subtree: true});
     clearTimeout(st.calTo); st.calTo = setTimeout(() => { if (!box.querySelector('iframe')) calFallback(); }, 10000);
   }
   function calFallback() {

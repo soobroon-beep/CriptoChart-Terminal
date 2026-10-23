@@ -19,6 +19,7 @@ let round = 0;
   let t = await titles(); console.log(t);
   if (!t[0].startsWith('Wall Street') || t.some(x => /hits new high/.test(x))) throw new Error('orden o filtro de idioma incorrecto');
   await page.click('[data-nw-f="bolsa"]'); t = await titles(); if (t.length !== 1) throw new Error('filtro bolsa'); await page.click('[data-nw-f="todas"]');
+  await page.waitForFunction(() => !/Actualizando|Cargando/.test(document.querySelector('#nwStatus').textContent), null, {timeout: 40000});
   round = 1; await page.click('#nwRefresh'); await page.waitForFunction(() => document.querySelector('.nw-item h3').textContent.includes('máximo histórico'));
   console.log('nueva arriba OK', (await titles())[0]);
   await page.click('[data-nw-tab="cal"]'); await page.waitForSelector('#nwCal:not([hidden])');

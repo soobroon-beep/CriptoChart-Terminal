@@ -236,7 +236,8 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
 .nw-imp{color:var(--red);font-weight:700}.nw-new{background:var(--green);color:#000;padding:2px 6px;border-radius:4px;font-weight:800}
 .nw-time{margin-left:auto;color:var(--muted)}.nw-src{font-size:11px;color:var(--muted)}
 .nw-more{padding:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:8px;cursor:pointer}
+.nw-calload{position:absolute;inset:0 0 auto 0}
 .nw-empty,.nw-calload{padding:24px 12px;text-align:center;color:var(--muted);font-size:13px}.nw-calload.warn{color:var(--red)}
 .nw-calnote{font-size:12px;color:var(--muted);margin:0 0 8px}
-.nw-calbox{flex:1;min-height:420px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.nw-calbox{height:620px;flex:none;position:relative;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .nw-calfoot{display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;font-size:13px}.nw-calfoot a{color:var(--accent)}
