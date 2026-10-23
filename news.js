@@ -199,7 +199,7 @@
     const el = $('#nwStatus'); if (!el) return; let msg;
     if (st.loading && !st.items.length) msg = 'Cargando noticias…';
     else if (!st.items.length && !st.loading) msg = st.updated || st.fails ? 'No se pudieron cargar noticias ahora. Revisa tu conexión y toca «Actualizar».' : 'Sin noticias por ahora.';
-    else msg = (st.loading ? 'Actualizando… · ' : '') + (st.updated ? 'Actualizado ' + relTime(st.updated, now).replace('hace un momento', 'hace un momento') + (st.ok ? ` · ${st.ok} de ${SOURCES.length} fuentes` : ' (guardado)') : '') + ' · se actualiza sola cada 2 min';
+    else msg = (st.loading ? 'Actualizando… · ' : '') + (st.updated ? 'Actualizado ' + relTime(st.updated, now).replace('hace un momento', 'hace un momento') + (st.ok ? ` · ${st.ok} fuentes` : ' (guardado)') : '') + ' · se actualiza sola cada 2 min';
     el.textContent = msg; el.classList.toggle('warn', !st.items.length && !st.loading);
   }
   function renderList() {
@@ -222,12 +222,15 @@
     if (!force && st.updated && now0 - st.updated < 45e3) return; // recién actualizado
     st.loading = true; st.ok = 0; renderStatus(now0);
     const lists = {}; let done = 0;
-    await Promise.all(SOURCES.map(async src => {
+    // 1) Archivo generado por el servidor (mismo origen, sin CORS) → casi siempre funciona.
+    const stat = (async () => { try { const r = await fetchWithTimeout('news-data.json?_=' + Math.floor(Date.now() / 6e4), FETCH_TIMEOUT), j = await r.json(), n = Date.now();
+      const its = (j.items || []).filter(i => i && i.title && Number.isFinite(i.t) && n - i.t <= MAX_AGE_MS && looksSpanish(i.title)); if (its.length) { lists.static = its; st.ok++; st.staticAt = j.at || 0; st.per = Object.assign({}, st.per, lists); st.items = mergeItems(Object.values(lists), Date.now()); renderAll(); } } catch {} })();
+    await Promise.all([stat, ...SOURCES.map(async src => {
       const raw = await loadSource(src); done++;
       if (raw) { st.ok++; lists[src.id] = buildItems(raw, src, Date.now()); } else if (st.per[src.id]) lists[src.id] = st.per[src.id]; // si una fuente falla se conserva lo último que dio
       const all = Object.values(lists); if (all.length) { st.per = Object.assign({}, st.per, lists); st.items = mergeItems(all, Date.now()); renderAll(); } // se pinta a medida que llega cada fuente
-    }));
-    st.loading = false; st.per = Object.assign({}, st.per, lists);
+    })]);
+    st.loading = false; st.per = Object.assign({}, st.per, lists); if (Object.keys(lists).length) st.items = mergeItems(Object.values(lists), Date.now());
     if (st.ok) { st.updated = Date.now(); st.fails = 0; saveCache(); } else st.fails++;
     renderAll();
   }
