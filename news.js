@@ -282,5 +282,5 @@
     setTab(st.tab); schedule(); refresh(true);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
-  root.CCTNews = {refresh, setTab};
+  root.CCTNews = {refresh, setTab, items: () => st.items.slice()};
 })(typeof self !== 'undefined' ? self : this);

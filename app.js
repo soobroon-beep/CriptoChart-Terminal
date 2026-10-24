@@ -803,7 +803,7 @@ function updateDrawUI() {
 $('#cancelDraw').onclick = () => { drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); scheduleRender(); };
 const drawHist = {u: [], r: []}; // historial de cambios en los dibujos (por símbolo): Ctrl+Z / Ctrl+Y
 const snapDraw = () => { drawHist.u.push(JSON.stringify(getDrawings())); if (drawHist.u.length > 60) drawHist.u.shift(); drawHist.r.length = 0; };
-function undoDrawing() { if (!drawHist.u.length) { toast('No hay nada que deshacer'); return; } drawHist.r.push(JSON.stringify(getDrawings())); setDrawings(JSON.parse(drawHist.u.pop())); selectedId = null; updateDrawUI(); render(); }
+function undoDrawing() { if (!drawHist.u.length) { const a = getDrawings(); if (!a.length) { toast('No hay nada que deshacer'); return; } drawHist.r.push(JSON.stringify(a)); setDrawings(a.slice(0, -1)); selectedId = null; updateDrawUI(); render(); return; } drawHist.r.push(JSON.stringify(getDrawings())); setDrawings(JSON.parse(drawHist.u.pop())); selectedId = null; updateDrawUI(); render(); }
 function redoDrawing() { if (!drawHist.r.length) { toast('No hay nada que rehacer'); return; } drawHist.u.push(JSON.stringify(getDrawings())); setDrawings(JSON.parse(drawHist.r.pop())); selectedId = null; updateDrawUI(); render(); }
 function deleteSelected() { if (!selectedId) return; snapDraw(); setDrawings(getDrawings().filter(x => x.id !== selectedId)); selectedId = null; updateDrawUI(); render(); toast('Dibujo eliminado · Ctrl+Z para recuperarlo'); }
 $('#undoDraw').onclick = undoDrawing;
@@ -2477,6 +2477,29 @@ async function initCloud() {
 renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); updateDrawUI(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
 if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud();
+
+/* ───────── Contexto para la IA: lo que el usuario ve en el gráfico ───────── */
+window.CCT_getAIContext = function () {
+  const n = candles.length; if (n < 30) return null;
+  const lastV = a => { if (!a) return null; for (let i = a.length - 1; i >= 0; i--) if (a[i] != null && Number.isFinite(a[i])) return a[i]; return null; };
+  const active = Object.keys(state.indicators).filter(k => state.indicators[k]), values = {};
+  if (ind.vwap) values.vwap = lastV(ind.vwap);
+  if (ind.stDir) { const d = lastV(ind.stDir); if (d != null) values.supertrend = -d; } // en Supertrend, -1 = alcista
+  if (ind.trail && ind.trail.trend) { const t = ind.trail.trend[n - 1]; if (t) values.trailTrend = t; }
+  if (ind.stoch) values.stochK = lastV(ind.stoch.k);
+  if (ind.obv) values.obvSlope = ind.obv[n - 1] - ind.obv[Math.max(0, n - 21)];
+  const zones = {sup: [], res: []};
+  if (ind.sr && ind.sr.boxes) for (const b of ind.sr.boxes) { if (b.deleted) continue; (b.kind === 'sup' ? zones.sup : zones.res).push({top: Math.max(b.top, b.bot), bot: Math.min(b.top, b.bot)}); }
+  zones.sup = zones.sup.slice(-3); zones.res = zones.res.slice(-3);
+  const vp = ind.vp ? {poc: ind.vp.pocPrice, lo: ind.vp.lo, hi: ind.vp.hi} : null;
+  const pine = activePine().map(p => { const r = pineRes[p.sid], sc = scripts.find(x => x.id === p.sid); if (!r || !r.ok) return null;
+    const plots = (r.plots || []).slice(0, 8).map(pl => ({title: String(pl.title || '').slice(0, 30), value: lastV(pl.values)}));
+    const table = []; for (const t of (r.tables || []).slice(0, 3)) { const rows = {}; for (const c of t.cells || []) { if (c.text == null || String(c.text).trim() === '') continue; (rows[c.r] = rows[c.r] || []).push(String(c.text).replace(/\s+/g, ' ').trim().slice(0, 40)); } Object.keys(rows).sort((a, b) => a - b).slice(0, 14).forEach(k => table.push(rows[k].join(': '))); }
+    return {name: String((sc && sc.name) || (r.meta && r.meta.title) || 'Script').slice(0, 40), plots, table};
+  }).filter(Boolean).slice(0, 6);
+  const tk = tickers[state.symbol];
+  return {symbol: state.symbol, interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine};
+};
 /* ───────── Divisiones: 1 o 2 gráficos ───────── */
 const LAYOUTS = [['1', 'Un gráfico', '▢'], ['2v', 'Dos · lado a lado', '◫'], ['2h', 'Dos · arriba y abajo', '⬒']];
 function paneSrc() { return `index.html?pane=2&sym=${encodeURIComponent(state.symbol === 'ETHUSDT' ? 'BTCUSDT' : 'ETHUSDT')}&light=${state.light ? 1 : 0}`; }

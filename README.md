@@ -129,3 +129,9 @@ Arrastra el borde entre *Seguimiento* y el gráfico, o entre el gráfico y *Indi
 - `glass.css`: capa visual de cristal esmerilado (blur + saturación), tarjetas con brillo, hojas/diálogos con resorte, transiciones de pantalla, entradas escalonadas de noticias y micro-interacciones. Respeta `prefers-reduced-motion`.
 - `fx.js`: onda de luz al tocar, píldora de cristal deslizante en la barra inferior, (sin cambiar el fondo original).
 - `app.js`: el gráfico ahora tiene **inercia** al arrastrar, **zoom suavizado** (rueda, +/−, Ajustar) y animación de entrada al cambiar de activo o temporalidad.
+
+## Dibujos, tipos de vela, división y IA
+- **Dibujos:** al tocar un dibujo aparece una barra con colores, 🗑 Eliminar, ↶ deshacer y ↷ rehacer; con el pincel activo también salen ↶/↷ y «Borrar todo». Atajos: `Ctrl+Z` / `Ctrl+Y` (o `Ctrl+Shift+Z`), `Supr` borra el dibujo seleccionado. (Se corrigió además un bug: tras abrir «Dibujar» el siguiente toque en el gráfico anulaba la selección.)
+- **Tipos de vela** (botón «Velas»): velas, huecas, Heikin Ashi, barras OHLC, barras HLC, línea, área y escalonada.
+- **Diseño** (botón «Diseño»): 1 gráfico, 2 lado a lado (PC) o 2 arriba/abajo. El segundo gráfico es la misma app en un iframe con su propio estado (activo, indicadores y dibujos independientes; no se sincroniza con la cuenta).
+- **IA** (`ai.js`, `ai-ui.js`): analista de gráficos cripto. Lee velas, indicadores activos, zonas de Nova Nexus, perfil de volumen, scripts Pine, noticias y calendario (`calendar-data.json`, generado por el workflow junto a las noticias). Modo Local gratis y sin enviar datos; modo Claude opcional con tu clave (solo en el navegador) o con un servidor propio (`worker/ai-proxy.js`, Cloudflare Worker). Solo responde sobre cripto. Tests: `tests/ai.test.js`, `tests/e2e/ai.js`, `tests/e2e/layout-ctype-draw.js`.

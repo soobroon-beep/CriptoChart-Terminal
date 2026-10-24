@@ -126,3 +126,6 @@ button,.watch-row,.sheet-item,.setting-row,.small-button{position:relative;overf
 .pop-menu button span{width:22px;text-align:center;opacity:.85}
 .pop-menu button:hover{background:rgba(255,255,255,.08)}.pop-menu button.on{background:var(--accent);color:#fff}
 #pane2{background:transparent}
+.ai-msg.bot,.ai-cfg,.ai-chips button,.ai-form input,.ai-gear{background:var(--glass);-webkit-backdrop-filter:var(--blur-s);backdrop-filter:var(--blur-s);border-color:var(--glass-line)}
+.ai-msg.user{background:linear-gradient(135deg,var(--accent),#7aa9ff);box-shadow:0 6px 20px rgba(84,143,255,.35)}
+.ai-send{background:linear-gradient(135deg,var(--accent),#7aa9ff);box-shadow:0 6px 18px rgba(84,143,255,.4)}

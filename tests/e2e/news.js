@@ -9,6 +9,7 @@ let round = 0;
   await new Promise(r => srv.listen(0, r)); const port = srv.address().port;
   const br = await chromium.launch({executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox']}), page = await br.newPage({viewport: {width: 1300, height: 800}});
   await page.route('**/*', route => { const u = route.request().url();
+    if (u.includes('news-data.json')) return route.fulfill({status: 404, body: ''});
     if (u.startsWith('http://localhost')) return route.continue();
     if (u.includes('allorigins.win') && u.includes('criptonoticias')) return route.fulfill({body: feed(round ? [['Bitcoin rompe máximo histórico en el mercado', 1], ['Bitcoin sube con la inflación en el mercado', 90]] : [['Bitcoin sube con la inflación en el mercado', 90], ['Ethereum gana terreno en el mercado cripto', 200]]), headers: {'access-control-allow-origin': '*'}, contentType: 'application/xml'});
     if (u.includes('allorigins.win') && u.includes('investing')) return route.fulfill({body: feed([['Bitcoin hits new high says the Fed', 5], ['Wall Street cierra con alzas en el Nasdaq', 30]]), headers: {'access-control-allow-origin': '*'}});
