@@ -241,3 +241,24 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
 .nw-calnote{font-size:12px;color:var(--muted);margin:0 0 8px}
 .nw-calbox{height:620px;flex:none;position:relative;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .nw-calfoot{display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;font-size:13px}.nw-calfoot a{color:var(--accent)}
+
+/* ── Segundo gráfico (división) ── */
+#pane2{display:none;border:0;width:100%;height:100%;background:var(--bg);min-height:0}
+body.pane .topbar,body.pane .bottom-nav,body.pane .splitter,body.pane #watchView,body.pane #newsView,body.pane #aiView,body.pane #alertsView,body.pane #settingsView,body.pane #indicatorView{display:none!important}
+body.pane #layoutBtn{display:none}
+body.pane #app,body.pane main{max-width:none;border:0;margin:0}
+body.pane main{display:block!important}
+body.pane #chartView{display:flex!important;height:100dvh}
+@media(min-width:1024px){
+  body.split-v #pane2,body.split-h #pane2{display:block;grid-area:pane;border-left:1px solid var(--line)}
+  body.split-v main{grid-template-columns:var(--wl-w) minmax(0,1fr) minmax(0,1fr) var(--side-w);grid-template-areas:"watch chart pane side"}
+  body.split-h main{grid-template-rows:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"watch chart side" "watch pane side"}
+  body.split-h #pane2{border-left:0;border-top:1px solid var(--line)}
+  body.split-v.expanded main{grid-template-areas:"chart pane";grid-template-columns:1fr 1fr}
+  body.split-h.expanded main{grid-template-areas:"chart" "pane";grid-template-columns:1fr}
+}
+@media(max-width:1023px){
+  body.split-h.chart-mode main{display:flex;flex-direction:column}
+  body.split-h.chart-mode #chartView{flex:1 1 50%;height:auto;min-height:0}
+  body.split-h.chart-mode #pane2{display:block;flex:1 1 50%;border-top:1px solid var(--line)}
+}

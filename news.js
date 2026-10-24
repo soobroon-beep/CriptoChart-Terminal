@@ -264,6 +264,7 @@
   }
 
   function init() {
+    if (/[?&]pane=/.test(location.search)) return;
     rootEl = document.getElementById('newsRoot'); if (!rootEl) return;
     loadCache(); shell(); renderAll();
     rootEl.addEventListener('click', e => {

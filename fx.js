@@ -16,10 +16,6 @@
     const x = act.offsetLeft + 'px', w = act.offsetWidth + 'px'; if (nav.style.getPropertyValue('--pill-x') !== x) nav.style.setProperty('--pill-x', x); if (nav.style.getPropertyValue('--pill-w') !== w) nav.style.setProperty('--pill-w', w); if (!nav.classList.contains('has-pill')) nav.classList.add('has-pill');
   }
   if (nav) { new MutationObserver(recs => { if (recs.some(r => r.target !== nav)) movePill(); }).observe(nav, {subtree: true, attributes: true, attributeFilter: ['class']}); window.addEventListener('resize', movePill); setTimeout(movePill, 50); setTimeout(movePill, 400); }
-  // Luz suave que sigue al cursor en PC (se pinta en el fondo ambiente)
-  if (!reduced && window.matchMedia && matchMedia('(hover:hover)').matches) {
-    let raf = 0, x = 0, y = 0; document.addEventListener('pointermove', e => { x = e.clientX; y = e.clientY; if (!raf) raf = requestAnimationFrame(() => { raf = 0; document.documentElement.style.setProperty('--mx', x + 'px'); document.documentElement.style.setProperty('--my', y + 'px'); }); }, {passive: true});
-  }
   // Marca la barra superior cuando hay desplazamiento (cristal más marcado)
   document.addEventListener('scroll', e => { const t = e.target; if (t && t.classList && t.classList.contains('view')) t.classList.toggle('scrolled', t.scrollTop > 4); }, true);
 })();

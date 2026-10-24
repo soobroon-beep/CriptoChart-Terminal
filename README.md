@@ -126,6 +126,6 @@ Arrastra el borde entre *Seguimiento* y el gráfico, o entre el gráfico y *Indi
 - Tests: `tests/news.test.js` (unitarios) y `tests/e2e/news.js` (Playwright con feeds simulados).
 
 ## Liquid Glass y movimiento fluido
-- `glass.css`: capa visual de cristal esmerilado (blur + saturación), luces ambientales que flotan, tarjetas con brillo, hojas/diálogos con resorte, transiciones de pantalla, entradas escalonadas de noticias y micro-interacciones. Respeta `prefers-reduced-motion`.
-- `fx.js`: onda de luz al tocar, píldora de cristal deslizante en la barra inferior, luz que sigue al cursor.
+- `glass.css`: capa visual de cristal esmerilado (blur + saturación), tarjetas con brillo, hojas/diálogos con resorte, transiciones de pantalla, entradas escalonadas de noticias y micro-interacciones. Respeta `prefers-reduced-motion`.
+- `fx.js`: onda de luz al tocar, píldora de cristal deslizante en la barra inferior, (sin cambiar el fondo original).
 - `app.js`: el gráfico ahora tiene **inercia** al arrastrar, **zoom suavizado** (rueda, +/−, Ajustar) y animación de entrada al cambiar de activo o temporalidad.
