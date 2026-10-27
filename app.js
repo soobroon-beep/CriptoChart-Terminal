@@ -203,6 +203,79 @@ async function fetchTicker() {
   }
 }
 
+/* ───────── Top criptomonedas populares ─────────
+   Fuente: Binance Spot (pares USDT con más volumen) y CoinGecko «en tendencia» (de lo que más se busca/habla).
+   Semana y mes: rendimiento de las 30 monedas con más volumen, calculado con velas diarias reales. Solo para descubrir; no se ejecutan operaciones. */
+const POP_STABLE = new Set(['USDC', 'FDUSD', 'TUSD', 'USDP', 'DAI', 'BUSD', 'USDE', 'USDS', 'USD1', 'XUSD', 'PYUSD', 'BFUSD', 'EUR', 'AEUR', 'EURI', 'UST', 'USTC']);
+const POP_NOTES = {
+  hoy: 'Las más operadas en Binance en las últimas 24 h (por volumen).',
+  tend: 'Las que más se están buscando y comentando hoy (CoinGecko), disponibles en Binance Spot.',
+  sem: 'Entre las 30 con más volumen, las de mejor rendimiento en los últimos 7 días.',
+  mes: 'Entre las 30 con más volumen, las de mejor rendimiento en los últimos 30 días.'
+};
+let popTab = 'hoy', popAll = [], popTrend = [], popTrendTs = 0, popKl = {}, popKlTs = 0, popMore = false, popBusy = false, popErr = '';
+const popVol = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(0) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(0) + 'K' : String(Math.round(n));
+
+async function loadPopTickers() {
+  const data = await getJSON(`${API}/ticker/24hr`);
+  popAll = data.filter(t => /^[A-Z0-9]{2,12}USDT$/.test(t.symbol) && !POP_STABLE.has(base(t.symbol)) && +t.quoteVolume > 2e6 && +t.lastPrice > 0)
+    .sort((a, b) => +b.quoteVolume - +a.quoteVolume);
+  for (const t of popAll) tickers[t.symbol] = t; // así el gráfico también muestra su cabecera
+}
+async function loadPopTrend() {
+  if (popTrend.length && Date.now() - popTrendTs < 600000) return;
+  const r = await fetch('https://api.coingecko.com/api/v3/search/trending');
+  if (!r.ok) throw Error('CoinGecko HTTP ' + r.status);
+  const j = await r.json();
+  popTrend = (j.coins || []).map(c => String(c.item?.symbol || '').toUpperCase()).filter(Boolean);
+  popTrendTs = Date.now();
+}
+async function loadPopKl() {
+  if (Object.keys(popKl).length && Date.now() - popKlTs < 600000) return;
+  const res = await Promise.all(popAll.slice(0, 30).map(t => getJSON(`${API}/klines?symbol=${t.symbol}&interval=1d&limit=31`).then(k => [t.symbol, k.map(x => +x[4])]).catch(() => null)));
+  popKl = {}; for (const r of res) if (r && r[1].length >= 8) popKl[r[0]] = r[1];
+  popKlTs = Date.now();
+}
+function popRowsFor(tab) {
+  const by = new Map(popAll.map(t => [t.symbol, t]));
+  if (tab === 'hoy') return popAll.map(t => ({s: t.symbol, ch: +t.priceChangePercent, sub: 'Vol ' + popVol(+t.quoteVolume)}));
+  if (tab === 'tend') return popTrend.map((c, i) => by.get(c + 'USDT') ? {s: c + 'USDT', ch: +by.get(c + 'USDT').priceChangePercent, sub: `#${i + 1} en tendencia`} : null).filter(Boolean);
+  const back = tab === 'sem' ? 7 : 30;
+  return Object.entries(popKl).map(([s, c]) => {
+    if (c.length < back + 1) return null;
+    const now = +by.get(s)?.lastPrice || c[c.length - 1];
+    return {s, ch: (now / c[c.length - 1 - back] - 1) * 100, sub: tab === 'sem' ? '7 días' : '30 días'};
+  }).filter(Boolean).sort((a, b) => b.ch - a.ch);
+}
+function renderPop() {
+  const box = $('#popRows'); if (!box) return;
+  $$('#popTabs [data-pop]').forEach(b => b.classList.toggle('active', b.dataset.pop === popTab));
+  $('#popNote').textContent = popErr || (POP_NOTES[popTab] + ' No es una recomendación de inversión.');
+  const rows = popRowsFor(popTab), limit = popMore ? 30 : 10, shown = rows.slice(0, limit);
+  box.innerHTML = shown.map(r => {
+    const tracked = state.symbols.includes(r.s), p = +tickers[r.s]?.lastPrice;
+    return `<div class="watch-row pop-row" data-symbol="${r.s}" role="button" tabindex="0">${coinBadge(r.s)}<span class="row-main"><strong>${esc(base(r.s))}</strong><small>${esc(r.sub)}</small></span><span class="row-prices"><strong>${fmt(p)}</strong><small class="${r.ch >= 0 ? 'positive' : 'negative'}">${pct(r.ch)}</small></span>${tracked ? '<span class="pop-add done" title="Ya está en tu seguimiento">✓</span>' : `<button class="pop-add" data-padd="${r.s}" aria-label="Añadir ${esc(base(r.s))} a mi seguimiento" title="Añadir a mi seguimiento">＋</button>`}</div>`;
+  }).join('') || `<p class="small-note">${popBusy ? 'Cargando populares…' : 'No hay datos por ahora.'}</p>`;
+  $('#popMore').hidden = rows.length <= 10; $('#popMore').textContent = popMore ? 'Ver menos' : 'Ver más';
+}
+async function refreshPop() {
+  if (popBusy) return; popBusy = true; popErr = ''; renderPop();
+  try {
+    await loadPopTickers();
+    if (popTab === 'sem' || popTab === 'mes') await loadPopKl();
+    if (popTab === 'tend') await loadPopTrend();
+  } catch (e) { popErr = popTab === 'tend' ? 'No pude cargar las tendencias ahora. Prueba otra pestaña o reintenta en un momento.' : 'No pude cargar las populares. Revisa tu conexión.'; }
+  popBusy = false; renderPop();
+}
+$('#popTabs').addEventListener('click', e => { const b = e.target.closest('[data-pop]'); if (!b) return; popTab = b.dataset.pop; popMore = false; refreshPop(); });
+$('#popMore').onclick = () => { popMore = !popMore; renderPop(); };
+$('#popRows').addEventListener('click', e => {
+  const add = e.target.closest('[data-padd]'), row = e.target.closest('.pop-row');
+  if (add) { const s = add.dataset.padd; if (!state.symbols.includes(s)) { state.symbols.push(s); save(); renderWatch(); renderPop(); fetchTicker(); toast(`${base(s)} añadido a tu seguimiento`); } return; }
+  if (row) selectSymbol(row.dataset.symbol);
+});
+$('#popRows').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('pop-row')) { e.preventDefault(); selectSymbol(e.target.dataset.symbol); } });
+
 
 /* ───────── Alertas de precio ───────── */
 const alertPrice = {}; // último precio conocido por símbolo (para alertas fuera del seguimiento)
@@ -2476,7 +2549,7 @@ async function initCloud() {
 /* ───────── Arranque ───────── */
 renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); updateDrawUI(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
 if (isDesktop()) onLayoutChange();
-fetchTicker(); loadCandles(); initCloud();
+fetchTicker(); loadCandles(); initCloud(); refreshPop();
 
 /* ───────── Contexto para la IA: lo que el usuario ve en el gráfico ───────── */
 window.CCT_getAIContext = function () {
@@ -2531,6 +2604,7 @@ if (PANE) {
   applyLayout();
 }
 setInterval(fetchTicker, 30000);
+setInterval(() => { if (!document.hidden) refreshPop(); }, 120000);
 setInterval(() => { if (!document.hidden) checkAlertsPoll(); }, 10000);
 setInterval(() => { if (currentView === 'chartView' && !wsOpen && candles.length && !document.hidden) loadCandles(true); }, 20000);
 })();

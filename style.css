@@ -286,3 +286,17 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .ai-form input{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;color:var(--text);padding:12px;font-size:14px}
 .ai-send{width:46px;border:0;border-radius:12px;background:var(--accent);color:#fff;font-size:16px}.ai-send:disabled{opacity:.5}
 .ai-disc{font-size:10px;color:var(--muted);text-align:center;margin:0 0 4px}
+
+/* Top criptomonedas populares */
+.pop-section{margin-top:26px;padding-top:18px;border-top:1px solid var(--line)}
+.pop-head h2{margin:2px 0 12px;font-size:18px}
+.pop-tabs{display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;scrollbar-width:none}
+.pop-tabs::-webkit-scrollbar{display:none}
+.pop-tabs button{flex:1 1 auto;background:var(--surface);color:var(--muted);border:1px solid var(--line);padding:9px 3px;border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+.pop-tabs button.active{background:var(--raised);color:var(--text);border-color:var(--accent)}
+.pop-row .pop-add{flex:0 0 auto;width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--text);font-size:16px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin-left:2px}
+.pop-row .pop-add:hover{border-color:var(--accent);color:var(--accent)}
+.pop-row .pop-add.done{color:var(--green);border-color:transparent;background:none;cursor:default}
+.pop-more{width:100%;margin-top:10px}
+.pop-row .row-main{min-width:0}
+.pop-row .row-main small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

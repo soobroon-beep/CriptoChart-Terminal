@@ -48,6 +48,20 @@
       <div class="list-heading"><span>ACTIVO</span><span>ÚLTIMO PRECIO / 24H</span></div>
       <div id="watchRows" class="watch-rows"></div>
       <p class="small-note">Cotizaciones públicas de Binance Spot. No se ejecutan operaciones. Toca un activo para abrir su gráfico.</p>
+
+      <!-- Top criptomonedas populares (descubrir qué tradear) -->
+      <div class="pop-section" id="popSection">
+        <div class="pop-head"><div><div class="eyebrow">DESCUBRIR</div><h2>Top criptomonedas populares</h2></div></div>
+        <div class="pop-tabs" id="popTabs" role="tablist">
+          <button class="active" data-pop="hoy" role="tab">Hoy</button>
+          <button data-pop="tend" role="tab">Tendencia</button>
+          <button data-pop="sem" role="tab">Semana</button>
+          <button data-pop="mes" role="tab">Mes</button>
+        </div>
+        <div id="popRows" class="watch-rows"></div>
+        <button class="small-button pop-more" id="popMore" hidden>Ver más</button>
+        <p class="small-note" id="popNote"></p>
+      </div>
     </section>
 
     <!-- 2 · GRÁFICO -->
