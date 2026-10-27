@@ -217,7 +217,7 @@
     else if (st === 'diamond') { g.beginPath(); g.moveTo(x, y - sz); g.lineTo(x + sz, y); g.lineTo(x, y + sz); g.lineTo(x - sz, y); g.closePath(); g.fill(); }
     else if (st === 'cross') { g.beginPath(); g.moveTo(x - sz, y); g.lineTo(x + sz, y); g.moveTo(x, y - sz); g.lineTo(x, y + sz); g.stroke(); }
     else if (st === 'flag') { g.beginPath(); g.moveTo(x - sz * .6, y + sz); g.lineTo(x - sz * .6, y - sz); g.stroke(); g.fillRect(x - sz * .6, y - sz, sz * 1.5, sz); }
-    else if (st === 'labelup' || st === 'labeldown') { drawLabel(g, {text: text || '', size: s.size, style: st === 'labelup' ? 'label_up' : 'label_down'}, x, y + (st === 'labelup' ? -sz : sz), color, tcolor, st === 'labelup' ? 'up' : 'down'); return; }
+    else if (st === 'labelup' || st === 'labeldown') { drawLabel(g, {text: text || '', size: s.size, style: st === 'labelup' ? 'label_up' : 'label_down'}, x, y + (st === 'labelup' ? -sz : sz), color || undefined, tcolor, st === 'labelup' ? 'up' : 'down'); return; }
     else { g.beginPath(); g.moveTo(x - sz, y - sz); g.lineTo(x + sz, y + sz); g.moveTo(x + sz, y - sz); g.lineTo(x - sz, y + sz); g.stroke(); } // xcross
     if (text && s.kind !== 'char' || (text && s.kind === 'char')) { g.fillStyle = tcolor || color; g.font = '10px system-ui'; g.textAlign = 'center'; g.fillText(text, x, dir <= 0 ? y - sz - 3 : y + sz + 11); }
     g.textAlign = 'left';
@@ -229,8 +229,10 @@
     let bx = x - w / 2, by = y - h - 5; // "down": la etiqueta queda encima del punto
     if (st === 'up') by = y + 5; else if (st === 'left') { bx = x + 5; by = y - h / 2; } else if (st === 'right') { bx = x - w - 5; by = y - h / 2; } else if (st === 'center') by = y - h / 2;
     else if (st === 'lower_left') { bx = x - w; by = y + 3; } else if (st === 'lower_right') { bx = x; by = y + 3; } else if (st === 'upper_left') { bx = x - w; by = y - h - 3; } else if (st === 'upper_right') { bx = x; by = y - h - 3; }
+    if (bg !== null) { // color = na en Pine → etiqueta sin fondo ni puntero (solo el texto)
     g.fillStyle = bg || '#2962FF'; g.beginPath(); (g.roundRect ? g.roundRect(bx, by, w, h, 3) : g.rect(bx, by, w, h)); g.fill();
     if (st === 'down' || st === 'up') { g.beginPath(); if (st === 'down') { g.moveTo(x - 4, by + h); g.lineTo(x + 4, by + h); g.lineTo(x, by + h + 5); } else { g.moveTo(x - 4, by); g.lineTo(x + 4, by); g.lineTo(x, by - 5); } g.closePath(); g.fill(); }
+    }
     g.fillStyle = fg || '#fff'; g.textAlign = 'left'; lines.forEach((t, k) => g.fillText(t, bx + pad, by + pad + fs - 2 + k * (fs + 2)));
   }
   root.CCTPineDraw = {draw, range, drawTrades, contrib, legend, fmtV};
