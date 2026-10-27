@@ -1,0 +1,9 @@
+.brand-icon{padding:0;overflow:hidden;background:#fff}.brand-icon img{width:100%;height:100%;display:block}
+.pwa-card{padding:16px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.pwa-preview{display:flex;align-items:center;gap:12px}.pwa-preview img{border-radius:14px;flex-shrink:0}.pwa-preview b{font-size:14px}.pwa-preview small{display:block;color:var(--muted);font-size:12px;margin-top:5px}
+.pwa-icons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pwa-icon-option{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:7px;border:2px solid transparent;background:var(--raised);color:var(--text);border-radius:10px;padding:10px 4px;min-width:0}
+.pwa-icon-option img{border-radius:11px;max-width:100%;height:auto}.pwa-icon-option span{font-size:10px;line-height:1.4;overflow-wrap:anywhere}.pwa-icon-option[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.pwa-card .primary{margin-top:16px}.pwa-card details{font-size:12px;line-height:1.65;color:var(--muted)}.pwa-card summary{cursor:pointer;color:var(--text);padding:8px 0}.pwa-card #updateApp{margin-top:14px;width:100%}
+#pwaOffline{background:#5f3e0d;color:#fff;padding:8px 14px;text-align:center;font-size:12px;flex-shrink:0}
+@media(display-mode:standalone){.topbar{padding-top:calc(8px + env(safe-area-inset-top));height:calc(62px + env(safe-area-inset-top));min-height:calc(62px + env(safe-area-inset-top))}.chart-mode:not(.expanded) .chart-view .chart-heading{padding-top:calc(8px + env(safe-area-inset-top))}}

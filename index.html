@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+
+
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#090e19">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CryptoChart">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script src="pwa-icons.js"></script>
+<noscript><link rel="manifest" href="manifests/principal.webmanifest"><link rel="apple-touch-icon" href="icons/principal-180.png"></noscript>
+<title>CryptoChart Terminal · Mobile</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="glass.css">
+<link rel="stylesheet" href="pwa.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon"><img data-app-icon src="icons/principal-192.png" alt="CryptoChart" width="34" height="34"></div>
+      <div><strong>CRYPTO<span>CHART</span></strong><small>TERMINAL <i>• MOBILE</i></small></div>
+    </div>
+    <div class="top-actions">
+      <div class="side-tabs"><button data-side="newsView" class="active">▤ Noticias</button><button data-side="aiView">✦ IA</button><button data-side="alertsView">◔ Alertas</button><button data-side="settingsView">⚙ Ajustes</button></div>
+      <span id="connection" class="connection">● Conectando</span>
+      <button id="accountBtn" class="account-btn" hidden>Iniciar sesión</button>
+      <button id="settingsBtn" class="icon-btn" title="Ajustes" aria-label="Ajustes">⚙</button>
+      <button id="themeBtn" title="Cambiar tema" class="icon-btn">◐</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="splitter" id="splitL" role="separator" aria-orientation="vertical" title="Arrastra para cambiar el ancho · doble clic: ocultar/mostrar"><button class="split-btn" id="splitLBtn" aria-label="Ocultar o mostrar seguimiento">‹</button></div>
+    <div class="splitter" id="splitR" role="separator" aria-orientation="vertical" title="Arrastra para cambiar el ancho · doble clic: ocultar/mostrar"><button class="split-btn" id="splitRBtn" aria-label="Ocultar o mostrar panel derecho">›</button></div>
+    <!-- 1 · SEGUIMIENTO -->
+    <section class="view active" id="watchView">
+      <div class="view-head">
+        <div><div class="eyebrow">MERCADOS / BINANCE SPOT</div><h1>Mi seguimiento</h1></div>
+        <div class="head-actions">
+          <button class="small-button" id="editWatch">Editar</button>
+          <button class="small-button" id="addAsset">＋ Añadir</button>
+        </div>
+      </div>
+      <div class="summary">
+        <div><span>Activos</span><strong id="totalAssets">6</strong></div>
+        <div><span>Ganando 24h</span><strong id="winners">—</strong></div>
+        <div><span>Perdiendo 24h</span><strong id="losers">—</strong></div>
+      </div>
+      <div class="search"><span>⌕</span><input id="searchCoins" type="search" placeholder="Buscar BTC, ETH, SOL..." autocomplete="off"></div>
+      <div class="list-heading"><span>ACTIVO</span><span>ÚLTIMO PRECIO / 24H</span></div>
+      <div id="watchRows" class="watch-rows"></div>
+      <p class="small-note">Cotizaciones públicas de Binance Spot. No se ejecutan operaciones. Toca un activo para abrir su gráfico.</p>
+
+      <!-- Top criptomonedas populares (descubrir qué tradear) -->
+      <div class="pop-section" id="popSection">
+        <div class="pop-head"><div><div class="eyebrow">DESCUBRIR</div><h2>Top criptomonedas populares</h2></div></div>
+        <div class="pop-tabs" id="popTabs" role="tablist">
+          <button class="active" data-pop="hoy" role="tab">Hoy</button>
+          <button data-pop="tend" role="tab">Tendencia</button>
+          <button data-pop="sem" role="tab">Semana</button>
+          <button data-pop="mes" role="tab">Mes</button>
+        </div>
+        <div id="popRows" class="watch-rows"></div>
+        <button class="small-button pop-more" id="popMore" hidden>Ver más</button>
+        <p class="small-note" id="popNote"></p>
+      </div>
+    </section>
+
+    <!-- 2 · GRÁFICO -->
+    <section class="view chart-view" id="chartView">
+      <div class="chart-heading">
+        <button id="symbolButton" class="symbol-button">
+          <span id="coinIcon" class="coin-icon">₿</span>
+          <span><strong id="coinTitle">BTC / USDT</strong><small>BINANCE · SPOT ▾</small></span>
+        </button>
+        <div class="priceblock"><strong id="lastPrice">—</strong><small id="dayChange">—</small></div>
+      </div>
+      <div class="timeframes" id="timeframes"></div>
+      <div class="chart-toolbar">
+        <button id="tfBtn" class="tf-btn" aria-haspopup="true" aria-expanded="false" title="Temporalidad">1h ▾</button>
+        <button data-panel="indicators">ƒx <span id="indicatorCount">Indicadores</span></button>
+        <button data-panel="tools">✎ Dibujar</button>
+        <button id="undoDraw" title="Deshacer">↶</button>
+        <button id="deleteDraw" class="danger" hidden>🗑 Borrar</button>
+        <button id="moreBtn" class="more-btn" aria-haspopup="true" aria-expanded="false" aria-label="Más opciones" title="Más opciones">⋯</button>
+        <span class="more-group" id="moreGroup">
+          <button id="fitChart">⤢ Ajustar</button>
+          <button id="fullscreen">⛶ Expandir</button>
+          <button id="layoutBtn" title="Dividir el gráfico">▢ Diseño</button>
+          <button id="ctypeBtn" title="Tipo de vela">🕯 Velas</button>
+          <button id="chartStyleBtn" title="Aspecto del gráfico">🎨 Aspecto</button>
+          <button id="paneSmall" title="Paneles más bajos" aria-label="Paneles más bajos">▤−<span class="more-lbl"> Paneles</span></button><button id="paneBig" title="Paneles más altos" aria-label="Paneles más altos">▤+<span class="more-lbl"> Paneles</span></button>
+        </span>
+      </div>
+      <div class="chart-area" id="chartArea">
+        <div class="chart-label">
+          <strong id="chartLabel">BTCUSDT</strong> <span id="intervalLabel">1h</span> <span id="liveDot" class="live-dot" title="Tiempo real"></span>
+          <span id="ohlcText"></span>
+        </div>
+        <canvas id="priceCanvas"></canvas>
+        <div id="legendBox" class="legend-box"></div>
+        <div id="chartFeedback" class="chart-feedback">Cargando velas de Binance…</div>
+        <div id="drawHint" class="draw-hint" hidden><span id="drawHintText"></span><button id="cancelDraw">Cancelar</button></div>
+        <div class="chart-controls">
+          <button id="autoScale" class="auto-scale" aria-label="Escala automática" title="Volver a escala automática" hidden>A</button>
+          <button id="zoomOut" aria-label="Alejar">−</button>
+          <button id="zoomIn" aria-label="Acercar">＋</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 · INDICADORES -->
+    <section class="view" id="indicatorView">
+      <div class="view-head"><div><div class="eyebrow">ANÁLISIS TÉCNICO</div><h1>Indicadores</h1></div></div>
+      <p class="intro">Activa indicadores y aparecerán directamente en el gráfico. Los cambios se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.</p>
+      <div id="indicatorList" class="settings-list"></div>
+      <div class="legacy-scripts">
+      <div class="section-label">MIS SCRIPTS</div>
+      <div id="scriptList" class="settings-list"></div>
+      <div class="script-actions"><label class="small-button" for="scriptFile">＋ Importar archivo</label><button class="small-button" id="pasteScript">Pegar código</button></div>
+      <input type="file" id="scriptFile" accept=".pine,.txt,text/plain" hidden>
+      <p class="small-note">Los scripts de Pine se guardan en este dispositivo y en tu cuenta de Google (nunca en el repositorio público). Por ahora solo se guardan y se pueden consultar: dibujarlos en el gráfico móvil requiere portar su lógica.</p>
+      </div>
+      <button class="primary" id="goChart">Ver gráfico →</button>
+    </section>
+
+    <section class="view" id="newsView">
+      <div class="view-head"><div><div class="eyebrow">MERCADO</div><h1>Noticias</h1></div></div>
+      <div id="newsRoot"></div>
+    </section>
+
+    <section class="view" id="aiView">
+      <div class="view-head"><div><div class="eyebrow">ASISTENTE</div><h1>IA</h1></div></div>
+      <div id="aiRoot"></div>
+    </section>
+
+    <section class="view" id="alertsView">
+      <div class="view-head"><div><div class="eyebrow">AVISOS</div><h1>Alertas</h1></div></div>
+      <div class="alert-form">
+        <select id="alSym" aria-label="Activo"></select>
+        <input id="alPrice" inputmode="decimal" placeholder="Precio objetivo" aria-label="Precio objetivo">
+        <input id="alNote" maxlength="80" placeholder="Nota (opcional)" aria-label="Nota">
+        <button class="primary" id="alAdd" style="margin-top:0">＋ Crear alerta de precio</button>
+        <button class="small-button" id="alInd" style="padding:14px;font-size:14px">ƒx Crear alerta con indicador</button>
+      </div>
+      <div id="alertList" class="settings-list"></div>
+      <p class="small-note">Las alertas se revisan mientras la app está abierta (cada pocos segundos, o al instante con el gráfico en vivo). Avisan con mensaje, sonido y vibración; las notificaciones del sistema requieren tu permiso. No ejecutan órdenes. Se guardan en este dispositivo y en tu cuenta si iniciaste sesión.</p>
+    </section>
+
+    <!-- 4 · AJUSTES -->
+    <section class="view" id="settingsView">
+      <div class="view-head"><div><div class="eyebrow">ESPACIO DE TRABAJO</div><h1>Configuración</h1></div></div>
+      <div class="section-label">CUENTA</div>
+      <div id="accountBox"></div>
+      <div class="section-label">APARIENCIA</div>
+      <div class="setting-row">
+        <div><b>Tema</b><small>Interfaz clara u oscura</small></div>
+        <button id="themeSetting" class="small-button">Cambiar</button>
+      </div>
+      <div id="appInstall"></div>
+      <div class="section-label">DATOS Y SEGUIMIENTO</div>
+      <div class="setting-row">
+        <div><b>Fuente de precios</b><small>Binance Spot · API pública y WebSocket</small></div>
+        <span class="pill">Solo lectura</span>
+      </div>
+      <button class="setting-row action-row" id="exportData"><span>Exportar mi configuración (JSON)</span><span>↗</span></button>
+      <label class="setting-row action-row" for="importFile"><span>Importar configuración (JSON)</span><span>↙</span></label>
+      <input type="file" id="importFile" accept="application/json" hidden>
+      <p class="small-note">Los dibujos, indicadores, temporalidad y seguimiento se guardan en este dispositivo y, si inicias sesión con Google, también en tu cuenta. Viajan en la exportación JSON. Esta interfaz móvil todavía no incluye el intérprete Pine ni las alertas del proyecto original. No se simulan cotizaciones.</p>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Navegación">
+    <button data-view="watchView" class="active"><span>☷</span><small>Seguimiento</small></button>
+    <button data-view="chartView"><span>▥</span><small>Gráfico</small></button>
+    <button data-view="newsView"><span>▤</span><small>Noticias</small></button>
+    <button data-view="aiView"><span>✦</span><small>IA</small></button>
+    <button data-view="alertsView"><span>◔</span><small>Alertas</small></button>
+  </nav>
+
+  <div class="sheet-backdrop" id="sheetBackdrop"></div>
+  <div id="sheet" class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-top"><strong id="sheetTitle">Seleccionar activo</strong><button id="closeSheet" aria-label="Cerrar">✕</button></div>
+    <input id="sheetSearch" placeholder="Buscar por símbolo, ej. AVAX" autocomplete="off">
+    <div id="sheetList" class="sheet-list"></div>
+  </div>
+  <div id="toast" role="status"></div>
+</div>
+<script src="firebase-config.js"></script>
+<script src="indicators.js"></script>
+<script src="nova-nexus.js"></script>
+<script src="catalog.js"></script>
+<script src="pine.js"></script>
+<script src="pine-draw.js"></script>
+  <script src="pine-settings.js"></script>
+<script src="news.js"></script>
+<script src="ai.js"></script>
+<script src="ai-ui.js"></script>
+<script src="fx.js"></script>
+<script src="app.js"></script>
+<script src="pwa.js"></script>
+</body>
+</html>
