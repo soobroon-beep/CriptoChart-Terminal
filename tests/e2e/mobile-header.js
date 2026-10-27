@@ -1,0 +1,44 @@
+/* Prueba e2e: cabecera compacta del gráfico en móvil (temporalidad y opciones en menús). Uso: node mobile-header.js [carpeta] [captura] */
+const {chromium} = require('playwright-core'); const http = require('http'), fs = require('fs'), path = require('path');
+const root = path.resolve(process.argv[2] || path.join(__dirname, '..', '..')) + '/';
+const mime = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json'};
+const SYMS = ['BTC', 'ETH', 'ZEC'], t24 = SYMS.map((b, i) => ({symbol: b + 'USDT', lastPrice: String(1300 - i * 100), priceChangePercent: '4.06', quoteVolume: String(9e9 - i)}));
+const kl = () => Array.from({length: 300}, (_, i) => { const t = Date.now() - (300 - i) * 3600e3, p = 1200 + Math.sin(i / 9) * 90 + i * .3; return [t, p, p + 25, p - 25, p + (i % 3 - 1) * 8, 100, t + 3599e3]; });
+let fail = 0; const ok = (c, m) => { console.log((c ? 'OK   ' : 'FALLA') + ' ' + m); if (!c) fail = 1; };
+(async () => {
+  const srv = http.createServer((q, r) => { const f = root + (q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]); fs.readFile(f, (e, d) => { if (e) { r.statusCode = 404; return r.end(); } r.setHeader('content-type', mime[path.extname(f)] || 'text/plain'); r.end(d); }); });
+  await new Promise(r => srv.listen(0, r)); const port = srv.address().port;
+  const br = await chromium.launch({executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox']}), ctx = await br.newContext({viewport: {width: +(process.env.W || 412), height: 860}, deviceScaleFactor: 2, hasTouch: true, isMobile: true}), page = await ctx.newPage();
+  const json = (route, body) => route.fulfill({body: JSON.stringify(body), contentType: 'application/json', headers: {'access-control-allow-origin': '*'}});
+  await page.route('**/*', route => { const u = route.request().url();
+    if (u.startsWith('http://localhost')) return route.continue();
+    if (u.includes('/klines')) return json(route, kl());
+    if (u.includes('/ticker/24hr')) return json(route, t24);
+    if (u.includes('/ticker/price')) return json(route, {price: '1300'});
+    return route.abort(); });
+  await ctx.addInitScript(() => { try { localStorage.setItem('cct_mobile_v1', JSON.stringify({symbol: 'ZECUSDT', interval: '4h', symbols: ['BTCUSDT', 'ETHUSDT', 'ZECUSDT']})); } catch {} });
+  await page.goto(`http://localhost:${port}/`); await page.waitForSelector('#watchView.active');
+  await page.click('.bottom-nav [data-view="chartView"]'); await page.waitForTimeout(900);
+  const h = await page.evaluate(() => ({area: document.querySelector('#chartArea').getBoundingClientRect().height, top: document.querySelector('#chartArea').getBoundingClientRect().top}));
+  console.log('INFO área del gráfico: ' + Math.round(h.area) + 'px, empieza en y=' + Math.round(h.top));
+  if (process.argv[4] === 'baseline') { await br.close(); srv.close(); return; }
+  ok(h.top < 130, 'la cabecera ocupa menos de 130px (empieza en ' + Math.round(h.top) + ')');
+  ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'sin scroll horizontal de página');
+  ok((await page.textContent('#tfBtn')).startsWith('4h'), 'el botón muestra la temporalidad actual (4h)');
+  ok(await page.isHidden('#timeframes') && await page.isHidden('#fitChart'), 'temporalidades y opciones secundarias empiezan ocultas');
+  await page.screenshot({path: process.argv[3] || '/tmp/mh-closed.png'});
+  await page.click('#tfBtn'); ok(await page.isVisible('#timeframes'), 'tocar la temporalidad abre el menú');
+  await page.screenshot({path: (process.argv[3] || '/tmp/mh.png').replace('.png', '-tf.png')});
+  await page.click('#timeframes [data-tf="1d"]'); await page.waitForTimeout(400);
+  ok(await page.isHidden('#timeframes') && (await page.textContent('#tfBtn')).startsWith('1d') && await page.evaluate(() => JSON.parse(localStorage.getItem('cct_mobile_v1')).interval) === '1d', 'elegir 1d cambia la temporalidad y cierra el menú');
+  await page.click('#moreBtn'); ok(await page.isVisible('#fitChart') && await page.isVisible('#fullscreen') && await page.isVisible('#ctypeBtn'), '⋯ muestra Ajustar, Expandir, Velas…');
+  await page.screenshot({path: (process.argv[3] || '/tmp/mh.png').replace('.png', '-more.png')});
+  await page.click('#paneBig'); ok(await page.isVisible('#fitChart'), '▤+ mantiene el menú abierto');
+  await page.click('#fullscreen'); await page.waitForTimeout(300);
+  ok(await page.evaluate(() => document.body.classList.contains('expanded')) && await page.isHidden('#fitChart'), 'Expandir funciona y cierra el menú');
+  await page.click('#moreBtn'); await page.click('#fullscreen'); await page.waitForTimeout(300);
+  await page.click('#moreBtn'); await page.click('#ctypeBtn'); await page.waitForSelector('#ctypeMenu'); await page.click('#ctypeMenu button:nth-child(2)'); await page.waitForTimeout(300);
+  ok(await page.$('#ctypeMenu') === null && await page.isHidden('#fitChart'), 'Velas: elegir un tipo aplica y cierra todo');
+  ok(await page.evaluate(() => { const r = document.querySelector('#moreBtn').getBoundingClientRect(); return r.right <= innerWidth && r.left >= 0; }), '⋯ siempre visible dentro de la pantalla');
+  await br.close(); srv.close(); process.exit(fail);
+})().catch(e => { console.error(e); process.exit(1); });

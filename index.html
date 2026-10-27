@@ -75,16 +75,20 @@
       </div>
       <div class="timeframes" id="timeframes"></div>
       <div class="chart-toolbar">
+        <button id="tfBtn" class="tf-btn" aria-haspopup="true" aria-expanded="false" title="Temporalidad">1h ▾</button>
         <button data-panel="indicators">ƒx <span id="indicatorCount">Indicadores</span></button>
         <button data-panel="tools">✎ Dibujar</button>
         <button id="undoDraw" title="Deshacer">↶</button>
         <button id="deleteDraw" class="danger" hidden>🗑 Borrar</button>
-        <button id="fitChart">⤢ Ajustar</button>
-        <button id="fullscreen">⛶ Expandir</button>
-        <button id="layoutBtn" title="Dividir el gráfico">▢ Diseño</button>
-        <button id="ctypeBtn" title="Tipo de vela">🕯 Velas</button>
-        <button id="chartStyleBtn" title="Aspecto del gráfico">🎨 Aspecto</button>
-        <button id="paneSmall" title="Paneles más bajos" aria-label="Paneles más bajos">▤−</button><button id="paneBig" title="Paneles más altos" aria-label="Paneles más altos">▤+</button>
+        <button id="moreBtn" class="more-btn" aria-haspopup="true" aria-expanded="false" aria-label="Más opciones" title="Más opciones">⋯</button>
+        <span class="more-group" id="moreGroup">
+          <button id="fitChart">⤢ Ajustar</button>
+          <button id="fullscreen">⛶ Expandir</button>
+          <button id="layoutBtn" title="Dividir el gráfico">▢ Diseño</button>
+          <button id="ctypeBtn" title="Tipo de vela">🕯 Velas</button>
+          <button id="chartStyleBtn" title="Aspecto del gráfico">🎨 Aspecto</button>
+          <button id="paneSmall" title="Paneles más bajos" aria-label="Paneles más bajos">▤−<span class="more-lbl"> Paneles</span></button><button id="paneBig" title="Paneles más altos" aria-label="Paneles más altos">▤+<span class="more-lbl"> Paneles</span></button>
+        </span>
       </div>
       <div class="chart-area" id="chartArea">
         <div class="chart-label">

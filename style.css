@@ -300,3 +300,29 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .pop-more{width:100%;margin-top:10px}
 .pop-row .row-main{min-width:0}
 .pop-row .row-main small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Cabecera del gráfico compacta en móvil/tablet: más espacio para las velas */
+.tf-btn,.more-btn{display:none}
+.more-group{display:contents}
+.more-lbl{display:none}
+@media(max-width:1023px){
+  .chart-view{position:relative}
+  .chart-view .chart-heading{min-height:42px;padding:4px 12px;gap:6px}
+  .chart-view .coin-icon{width:28px;height:28px;font-size:15px}
+  .chart-view .symbol-button{gap:8px}
+  .chart-view .symbol-button strong,.chart-view .priceblock strong{font-size:15px}
+  .chart-view .symbol-button small,.chart-view .priceblock small{font-size:10px;margin-top:1px}
+  .chart-view .timeframes{display:none;position:absolute;left:8px;right:8px;z-index:30;grid-template-columns:repeat(5,1fr);gap:6px;padding:10px;background:var(--raised);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.55)}
+  .chart-view.tf-open .timeframes{display:grid}
+  .chart-view .timeframes button{padding:11px 0;text-align:center;background:var(--surface);border:1px solid var(--line);font-size:13px}
+  .chart-view .timeframes button.active{border-color:var(--accent)}
+  .chart-toolbar{padding:4px 10px;border-top:0}
+  .chart-toolbar .tf-btn,.chart-toolbar .more-btn{display:inline-block}
+  .chart-toolbar .tf-btn{color:var(--accent);font-weight:700}
+  .chart-toolbar .more-btn{position:sticky;right:0;margin-left:auto;font-size:15px;line-height:1;padding:5px 11px;background:var(--surface)}
+  .chart-view.more-open .chart-toolbar .more-btn{border-color:var(--accent);color:var(--accent)}
+  .chart-view .more-group{display:none}
+  .chart-view.more-open .more-group{display:grid;grid-template-columns:1fr 1fr;gap:6px;position:absolute;right:8px;z-index:30;width:min(300px,calc(100% - 16px));padding:10px;background:var(--raised);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.55)}
+  .chart-view .more-lbl{display:inline}
+  .chart-view .more-group button{width:100%;padding:12px 8px;font-size:12px;text-align:center}
+}

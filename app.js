@@ -513,7 +513,26 @@ function setFeedback(t) { $('#chartFeedback').textContent = t; }
 function defaultVisible() { const w = $('#chartArea').clientWidth || 360; return clamp(Math.round((w - 70) / (isDesktop() ? 7 : 5.5)), 40, 260); }
 function renderFrames() {
   $('#timeframes').innerHTML = INTERVALS.map(t => `<button class="${t === state.interval ? 'active' : ''}" data-tf="${t}">${t}</button>`).join('');
+  const tfb = $('#tfBtn'); if (tfb) tfb.textContent = state.interval + ' ▾';
 }
+/* Móvil/tablet: la temporalidad y las opciones secundarias van en menús desplegables para dejar más sitio al gráfico (en escritorio siguen en la barra) */
+(() => {
+  const view = $('#chartView'), tb = view.querySelector('.chart-toolbar'), tf = $('#tfBtn'), more = $('#moreBtn');
+  const close = () => { view.classList.remove('tf-open', 'more-open'); tf.setAttribute('aria-expanded', 'false'); more.setAttribute('aria-expanded', 'false'); };
+  const toggle = (cls, btn, panel) => {
+    const was = view.classList.contains(cls); close(); if (was) return;
+    panel.style.top = (tb.offsetTop + tb.offsetHeight + 4) + 'px'; view.classList.add(cls); btn.setAttribute('aria-expanded', 'true');
+  };
+  tf.onclick = e => { e.stopPropagation(); toggle('tf-open', tf, $('#timeframes')); };
+  more.onclick = e => { e.stopPropagation(); toggle('more-open', more, $('#moreGroup')); };
+  document.addEventListener('click', e => {
+    if (!view.classList.contains('tf-open') && !view.classList.contains('more-open')) return;
+    if (e.target.closest && e.target.closest('#paneSmall,#paneBig')) return; // se pueden pulsar varias veces seguidas
+    close();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  window.addEventListener('resize', close);
+})();
 $('#timeframes').addEventListener('click', e => {
   const b = e.target.closest('[data-tf]'); if (!b) return;
   state.interval = b.dataset.tf; save(); renderFrames(); clearTransient(); loadCandles();
