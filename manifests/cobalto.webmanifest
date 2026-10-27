@@ -1,0 +1,32 @@
+{
+  "id": "../",
+  "name": "CryptoChart Terminal",
+  "short_name": "CryptoChart",
+  "lang": "es",
+  "description": "Gráficos, seguimiento e indicadores de criptomonedas.",
+  "start_url": "../?appIcon=cobalto",
+  "scope": "../",
+  "display": "standalone",
+  "background_color": "#090e19",
+  "theme_color": "#090e19",
+  "icons": [
+    {
+      "src": "../icons/cobalto-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/cobalto-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/cobalto-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
