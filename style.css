@@ -379,3 +379,27 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .leg-row button svg{display:block;margin:auto}
 @media(max-width:760px){.chart-label .leg-toggle{height:24px;font-size:12px;padding:0 9px 0 11px}}
 .ai-brief{width:100%;margin:0 0 8px;padding:11px 14px;font-size:14px}
+
+/* ── Screener (dentro de Alertas) ── */
+.scr-entry{width:100%;display:flex;align-items:center;gap:14px;text-align:left;padding:14px 16px;margin:0 0 12px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 16%,var(--surface)),var(--surface));color:var(--text)}
+.scr-entry-ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent);flex:none}
+.scr-entry-tx{flex:1;display:flex;flex-direction:column;gap:2px}.scr-entry-tx b{font-size:15px}.scr-entry-tx small{color:var(--muted);font-size:12px;line-height:1.4}
+.scr-dlg{max-width:520px;width:100%}.scr-tfs{display:flex;gap:6px;align-items:center;margin-bottom:10px}
+.scr-tfs button{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:9px;padding:7px 11px;font-size:12px;font-weight:600}
+.scr-tfs button.on{background:var(--accent);border-color:var(--accent);color:#fff}.scr-tfs .scr-refresh{margin-left:auto;display:grid;place-items:center;padding:7px 9px}
+.scr-chips{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;scrollbar-width:none}
+.scr-chips button{flex:none;display:flex;gap:6px;align-items:center;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;padding:6px 12px;font-size:12px}
+.scr-chips button i{font-style:normal;font-size:10px;color:var(--muted)}.scr-chips button.on{border-color:var(--accent);color:var(--accent);background:var(--raised)}
+.scr-prog{height:3px;background:var(--raised);border-radius:3px;overflow:hidden;margin-bottom:6px}.scr-prog i{display:block;height:100%;background:var(--accent);transition:width .3s}
+.scr-note{display:block;color:var(--muted);font-size:11px;line-height:1.5;margin:8px 0}
+.scr-list{display:flex;flex-direction:column;gap:6px}
+.scr-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text)}
+.scr-row:active{background:var(--raised)}.scr-coin{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}.scr-coin b{font-size:14px}.scr-coin small{color:var(--muted);font-size:11px}
+.scr-px{display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-size:12px;font-weight:600}.scr-go{color:var(--muted);display:grid}
+.scr-badge{display:inline-flex;align-items:center;gap:5px;border-radius:8px;padding:3px 8px;font-size:11px}.scr-badge i{font-style:normal;opacity:.75;font-size:10px}
+.scr-badge.long{background:rgba(0,230,118,.14);color:#00e676}.scr-badge.short{background:rgba(255,45,85,.14);color:#ff2d55}.scr-badge.rng{background:rgba(179,102,255,.16);color:#b366ff}
+.scr-none{color:var(--muted);font-size:11px;font-weight:500}.scr-empty{padding:30px 10px;text-align:center;color:var(--muted);font-size:13px}
+/* ── IA: botón Brief del día ── */
+.ai-top-r{display:flex;gap:8px;align-items:center}
+.ai-brief{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px 0 10px;border-radius:10px;border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));background:color-mix(in srgb,var(--accent) 14%,var(--surface));color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.01em}
+.ai-brief:disabled{opacity:.5}

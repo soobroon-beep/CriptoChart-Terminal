@@ -2289,6 +2289,7 @@ if (window.ResizeObserver) new ResizeObserver(() => scheduleRender()).observe(ar
 window.addEventListener('resize', scheduleRender);
 
 /* ───────── Tema, exportar e importar ───────── */
+window.addEventListener('cct-theme', () => { try { if (typeof render === 'function' && candles) render(); } catch {} });
 function theme() { if (typeof pushPaneTheme === 'function') pushPaneTheme(); document.body.classList.toggle('light', !!state.light); document.documentElement.style.colorScheme = state.light ? 'light' : 'dark'; render(); }
 const srcBtn = $('#sourceSetting');
 if (srcBtn) { const paint = () => { srcBtn.textContent = state.source === 'bybit' ? 'Bybit Spot' : 'Binance Spot'; }; paint(); srcBtn.onclick = () => { state.source = state.source === 'bybit' ? 'binance' : 'bybit'; save(); paint(); closeWS(); candles = []; ind = {}; loadCandles(); }; window.__paintSource = paint; }
@@ -2543,7 +2544,7 @@ function catPreviewSvg(id) {
 }
 const catPineOf = c => state.pine.find(p => p.sid === 'cat:' + c.id);
 function catalogCards() {
-  return (window.CCTCatalog || []).map(c => {
+  return (window.CCTCatalog || []).filter(c => c.id !== 'nova-scr').map(c => {
     const p = catPineOf(c);
     return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small><button class="small-button" data-pine-retry="${p.sid}">↻ Reintentar</button>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">⚙ Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
   }).join('');
@@ -2925,6 +2926,21 @@ fetchTicker(); loadCandles(); initCloud(); refreshPop();
 /* Solo para pruebas automáticas: se activa añadiendo ?cct_debug=1 a la dirección */
 if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
 
+/* ───────── Puente para el Screener (screener.js) ───────── */
+window.CCT_host = {
+  interval: () => state.interval,
+  async top(n) { try { if (!popAll.length) await loadPopTickers(); } catch {} return popAll.slice(0, n).map(t => ({symbol: t.symbol, price: +t.lastPrice, chg: +t.priceChangePercent})); },
+  async klines(sym, itv) {
+    if (state.source === 'bybit' && BY_IV[itv]) { try { return await fetchKlinesBybit(sym, itv, 300); } catch {} }
+    return (await getJSON(`${API}/klines?symbol=${sym}&interval=${itv}&limit=300`)).map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}));
+  },
+  openSignal(sym, itv) { // abre el gráfico de la moneda con Nova Nexus activo para ver la señal
+    if (INTERVALS.includes(itv)) state.interval = itv;
+    const p = state.pine.find(x => x.sid === 'cat:nova-nexus'); if (p) p.on = true; else if (state.pine.length < 12) state.pine.unshift({sid: 'cat:nova-nexus', on: true, inputs: {}});
+    if (!state.symbols.includes(sym)) state.symbols.push(sym);
+    renderFrames(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); selectSymbol(sym);
+  }
+};
 /* ───────── Instantánea del mercado para el «Brief del día» de la IA (las 25 monedas con más volumen en Binance Spot) ───────── */
 window.CCT_getMarketSnapshot = async function () {
   try { if (!popAll.length) await loadPopTickers(); } catch {}

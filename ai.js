@@ -173,8 +173,8 @@
   function secCalendar(C, now) {
     if (!C) return '**Calendario económico:** sin datos disponibles por ahora (puedes consultarlo en la pestaña «Calendario económico» de Noticias).';
     const L = ['**Calendario económico (EE. UU., Eurozona, Reino Unido, Japón, China):**'];
-    if (C.soonHigh.length) L.push(`⚠ **Evento de alto impacto en menos de 24 h:** ${C.soonHigh.map(e => C.name(e) + ' (' + whenStr(e.t, now) + ')').join('; ')}. Alrededor de estos datos la volatilidad sube y los niveles técnicos fallan más; conviene reducir tamaño o esperar.`);
-    if (C.upcoming.length) L.push(...C.upcoming.slice(0, 6).map(e => `- ${C.imp(e) === 2 ? '🔴' : '🟠'} ${C.name(e)} · ${C.country(e)} · ${whenStr(e.t, now)}${e.forecast ? ' · previsión ' + e.forecast : ''}${e.previous ? ' · previo ' + e.previous : ''}`)); else L.push('- No hay eventos relevantes en las próximas 72 h.');
+    if (C.soonHigh.length) L.push(`**Atención · evento de alto impacto en menos de 24 h:** ${C.soonHigh.map(e => C.name(e) + ' (' + whenStr(e.t, now) + ')').join('; ')}. Alrededor de estos datos la volatilidad sube y los niveles técnicos fallan más; conviene reducir tamaño o esperar.`);
+    if (C.upcoming.length) L.push(...C.upcoming.slice(0, 6).map(e => `- [${C.imp(e) === 2 ? 'Alto' : 'Medio'}] ${C.name(e)} · ${C.country(e)} · ${whenStr(e.t, now)}${e.forecast ? ' · previsión ' + e.forecast : ''}${e.previous ? ' · previo ' + e.previous : ''}`)); else L.push('- No hay eventos relevantes en las próximas 72 h.');
     if (C.recent.length) L.push('Recientes: ' + C.recent.slice(0, 3).map(e => `${C.name(e)} → real ${e.actual}${e.forecast ? ' vs prev. ' + e.forecast : ''}`).join('; ') + '.');
     return L.join('\n');
   }
@@ -202,7 +202,7 @@
   function briefLocal(ctx, extra) {
     extra = extra || {}; const now = extra.now || Date.now(), M = Array.isArray(extra.market) ? extra.market.filter(x => x && Number.isFinite(x.chg24h)) : [];
     const A = ctx ? analyze(ctx) : null, N = newsFor(extra.news, 'BTC', now), C = calendarFor(extra.calendar, now), L = [], pts = [];
-    L.push('### 📰 Brief del día · mercado cripto');
+    L.push('### Brief del día · mercado cripto');
     if (M.length) {
       const up = M.filter(x => x.chg24h > 0).length, dn = M.length - up, avg = M.reduce((a, b) => a + b.chg24h, 0) / M.length, by = [...M].sort((a, b) => b.chg24h - a.chg24h);
       const btc = M.find(x => x.symbol === 'BTC'), eth = M.find(x => x.symbol === 'ETH');
@@ -212,7 +212,7 @@
       if (btc && eth && M.length > 5) { const alts = M.filter(x => !['BTC', 'ETH'].includes(x.symbol)), am = alts.reduce((a, b) => a + b.chg24h, 0) / (alts.length || 1); L.push(am > btc.chg24h + .5 ? 'Las altcoins van **mejor que BTC** hoy (apetito por riesgo).' : am < btc.chg24h - .5 ? 'Las altcoins van **peor que BTC** hoy (el dinero se refugia en BTC).' : 'Altcoins y BTC se mueven parecido hoy.'); }
     } else L.push('**Mercado:** no pude leer las cotizaciones generales en este momento.');
     if (N && N.top.length) {
-      const ic = s => s > 0 ? '🟢' : s < 0 ? '🔴' : '⚪', tone = N.tone === 'positivo' ? 12 : N.tone === 'negativo' ? -12 : 0; pts.push([tone, 'tono de las noticias ' + N.tone]);
+      const ic = s => s > 0 ? '▲' : s < 0 ? '▼' : '•', tone = N.tone === 'positivo' ? 12 : N.tone === 'negativo' ? -12 : 0; pts.push([tone, 'tono de las noticias ' + N.tone]);
       L.push(`**Noticias del día · tono ${N.tone}:**`, ...N.top.slice(0, 4).map(i => `- ${ic(i.s)} ${i.title} _(${i.src})_`));
     } else L.push('**Noticias:** aún no hay noticias cargadas (abre la sección Noticias para actualizarlas).');
     if (C) {
@@ -225,8 +225,8 @@
       if (A.resists[0] || A.supports[0]) L.push(`Niveles a vigilar: ${A.resists[0] ? 'resistencia ' + fp(A.resists[0].p) : ''}${A.resists[0] && A.supports[0] ? ' · ' : ''}${A.supports[0] ? 'soporte ' + fp(A.supports[0].p) : ''}.`);
     }
     const tot = pts.reduce((a, b) => a + b[0], 0), lean = tot >= 22 ? 'alcista' : tot >= 8 ? 'ligeramente alcista' : tot <= -22 ? 'bajista' : tot <= -8 ? 'ligeramente bajista' : 'lateral / sin ventaja clara';
-    L.push('### 🎯 Hacia dónde se inclina el mercado', `**Lectura: ${lean}** (puntaje combinado ${tot > 0 ? '+' : ''}${tot}).`, 'Factores: ' + (pts.length ? pts.map(p => p[1]).join('; ') : 'datos insuficientes') + '.');
-    L.push(C && C.soonHigh.length ? '⚠ Con un dato macro de alto impacto en menos de 24 h, conviene esperar a la reacción antes de apostar por una dirección.' : 'Si el precio rompe el nivel clave con volumen, la lectura gana fuerza; si lo pierde, se invalida.');
+    L.push('### Hacia dónde se inclina el mercado', `**Lectura: ${lean}** (puntaje combinado ${tot > 0 ? '+' : ''}${tot}).`, 'Factores: ' + (pts.length ? pts.map(p => p[1]).join('; ') : 'datos insuficientes') + '.');
+    L.push(C && C.soonHigh.length ? 'Atención: con un dato macro de alto impacto en menos de 24 h, conviene esperar a la reacción antes de apostar por una dirección.' : 'Si el precio rompe el nivel clave con volumen, la lectura gana fuerza; si lo pierde, se invalida.');
     return L.join('\n\n') + '\n\n' + DISC;
   }
   function answerLocal(question, ctx, extra) {

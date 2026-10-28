@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="glass.css">
 <link rel="stylesheet" href="pwa.css">
+<link rel="stylesheet" href="themes.css">
 </head>
 <body>
 <div id="app">
@@ -142,6 +143,7 @@
 
     <section class="view" id="alertsView">
       <div class="view-head"><div><div class="eyebrow">AVISOS</div><h1>Alertas</h1></div></div>
+      <button class="scr-entry" id="scrOpen" type="button"><span class="scr-entry-ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M7 15l3-4 3 2 4-5"/></svg></span><span class="scr-entry-tx"><b>Screener</b><small>Top 50 criptos con señales Long, Short y Rango de Nova Nexus</small></span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
       <div class="alert-form">
         <select id="alSym" aria-label="Activo"></select>
         <input id="alPrice" inputmode="decimal" placeholder="Precio objetivo" aria-label="Precio objetivo">
@@ -205,6 +207,7 @@
 <script src="ai-ui.js"></script>
 <script src="fx.js"></script>
 <script src="app.js"></script>
+<script src="screener.js"></script>
 <script src="pwa.js"></script>
 </body>
 </html>

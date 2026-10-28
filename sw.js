@@ -1,9 +1,9 @@
 'use strict';
 // Bump this version when changing cached application files. No API responses or account data are cached.
-const CACHE = 'cct-shell-v4';
+const CACHE = 'cct-shell-v5';
 const ROOT = new URL('./', self.location.href);
-const SHELL = ['index.html', 'style.css', 'glass.css', 'pwa.css', 'pwa-icons.js', 'pwa.js',
-  'app.js', 'firebase-config.js', 'indicators.js', 'nova-nexus.js', 'catalog.js', 'pine.js',
+const SHELL = ['index.html', 'style.css', 'glass.css', 'pwa.css', 'themes.css', 'pwa-icons.js', 'pwa.js',
+  'app.js', 'screener.js', 'firebase-config.js', 'indicators.js', 'nova-nexus.js', 'catalog.js', 'pine.js',
   'pine-draw.js', 'pine-settings.js', 'news.js', 'ai.js', 'ai-ui.js', 'fx.js'];
 const ASSETS = new Set(SHELL.map(p => new URL(p, ROOT).href));
 self.addEventListener('install', event => {

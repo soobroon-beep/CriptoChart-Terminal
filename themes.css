@@ -1,0 +1,23 @@
+/* Temas de color: cambian con el ícono elegido en Ajustes → Aplicación. Solo variables; el diseño no cambia. */
+html[data-theme="turquesa"]{--bg:#081112;--surface:#0e1b1c;--raised:#142527;--line:#213b3d;--nav:#0b1718;--muted:#93acae;--text:#f2f7f8;--accent:#22d3c5;--glass:rgba(17,37,39,.50);--glass-2:rgba(22,47,49,.62)}
+html[data-theme="turquesa"] body.light{--bg:#f3fbfb;--surface:#fff;--raised:#e9f5f7;--line:#d8e8e9;--nav:#fff;--text:#152628;--muted:#5a7072;--accent:#0e8f86}
+html[data-theme="naranja"]{--bg:#110c09;--surface:#1b130f;--raised:#251b16;--line:#392d25;--nav:#17100c;--muted:#ae9d93;--text:#f8f4f2;--accent:#ff7a1a;--glass:rgba(36,26,20,.50);--glass-2:rgba(46,33,25,.62)}
+html[data-theme="naranja"] body.light{--bg:#fbf6f4;--surface:#fff;--raised:#f6eeea;--line:#e9ded8;--nav:#fff;--text:#281c15;--muted:#72635a;--accent:#d9560a}
+html[data-theme="cobalto"]{--bg:#080b13;--surface:#0d121d;--raised:#121928;--line:#20293f;--nav:#0a0f19;--muted:#939cae;--text:#f2f4f8;--accent:#4f8cff;--glass:rgba(16,24,40,.50);--glass-2:rgba(21,30,51,.62)}
+html[data-theme="cobalto"] body.light{--bg:#f3f6fc;--surface:#fff;--raised:#e9edf7;--line:#d8dde9;--nav:#fff;--text:#151b28;--muted:#5a6272;--accent:#2358d6}
+html[data-theme="lavanda"]{--bg:#0b0912;--surface:#120e1b;--raised:#1a1526;--line:#2a233b;--nav:#0f0b17;--muted:#9b93ae;--text:#f4f2f8;--accent:#a78bfa;--glass:rgba(24,19,38,.50);--glass-2:rgba(31,24,48,.62)}
+html[data-theme="lavanda"] body.light{--bg:#f6f4fb;--surface:#fff;--raised:#ede9f6;--line:#ddd8e9;--nav:#fff;--text:#1b1528;--muted:#615a72;--accent:#6d4fd8}
+html[data-theme="lima"]{--bg:#0f110a;--surface:#171a10;--raised:#202317;--line:#323727;--nav:#13160d;--muted:#a6ae93;--text:#f6f8f2;--accent:#b5e53a;--glass:rgba(31,35,21,.50);--glass-2:rgba(39,45,26,.62)}
+html[data-theme="lima"] body.light{--bg:#f9faf4;--surface:#fff;--raised:#f2f5ea;--line:#e4e9d8;--nav:#fff;--text:#222815;--muted:#6b725a;--accent:#6b8a0c}
+html[data-theme="durazno"]{--bg:#120a09;--surface:#1b110f;--raised:#251815;--line:#3a2824;--nav:#170e0c;--muted:#ae9893;--text:#f8f3f2;--accent:#ff9585;--glass:rgba(37,22,19,.50);--glass-2:rgba(47,28,24,.62)}
+html[data-theme="durazno"] body.light{--bg:#fbf5f4;--surface:#fff;--raised:#f6ebe9;--line:#e9dbd8;--nav:#fff;--text:#281815;--muted:#725e5a;--accent:#d4513f}
+html[data-theme="bosque"]{--bg:#09120e;--surface:#0e1b17;--raised:#152620;--line:#233b32;--nav:#0b1713;--muted:#93aea4;--text:#f2f8f6;--accent:#2fd397;--glass:rgba(19,38,31,.50);--glass-2:rgba(24,48,39,.62)}
+html[data-theme="bosque"] body.light{--bg:#f4fbf8;--surface:#fff;--raised:#e9f6f1;--line:#d8e9e3;--nav:#fff;--text:#152821;--muted:#5a7269;--accent:#0d8a5d}
+html[data-theme="fucsia"]{--bg:#120912;--surface:#1b0e1b;--raised:#261526;--line:#3b233b;--nav:#170b17;--muted:#ae93ae;--text:#f8f2f8;--accent:#e879f9;--glass:rgba(38,19,38,.50);--glass-2:rgba(48,24,48,.62)}
+html[data-theme="fucsia"] body.light{--bg:#fbf4fb;--surface:#fff;--raised:#f6e9f6;--line:#e9d8e9;--nav:#fff;--text:#281528;--muted:#725a72;--accent:#b02bc4}
+html[data-theme="menta"]{--bg:#0a110d;--surface:#101a15;--raised:#17241d;--line:#26382f;--nav:#0c1611;--muted:#93aea1;--text:#f2f8f5;--accent:#7be8b5;--glass:rgba(20,36,28,.50);--glass-2:rgba(26,46,36,.62)}
+html[data-theme="menta"] body.light{--bg:#f4fbf7;--surface:#fff;--raised:#eaf6f0;--line:#d8e9e0;--nav:#fff;--text:#15281f;--muted:#5a7266;--accent:#1f9a68}
+html[data-theme="arena"]{--bg:#100e0a;--surface:#191611;--raised:#221f18;--line:#353129;--nav:#15120e;--muted:#aea493;--text:#f8f6f2;--accent:#e0b97a;--glass:rgba(34,30,22,.50);--glass-2:rgba(44,38,28,.62)}
+html[data-theme="arena"] body.light{--bg:#faf8f5;--surface:#fff;--raised:#f5f1eb;--line:#e9e3d8;--nav:#fff;--text:#282115;--muted:#72695a;--accent:#a8742a}
+html[data-theme="vortex"]{--bg:#0f0d0c;--surface:#161413;--raised:#1f1d1c;--line:#302f2f;--nav:#131110;--muted:#ae9b93;--text:#f8f4f2;--accent:#ff5a14;--glass:rgba(31,27,25,.50);--glass-2:rgba(39,34,32,.62)}
+html[data-theme="vortex"] body.light{--bg:#f9f7f5;--surface:#fff;--raised:#f3eeed;--line:#e9ddd8;--nav:#fff;--text:#281b15;--muted:#72615a;--accent:#d93f00}

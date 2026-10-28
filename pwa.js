@@ -10,7 +10,7 @@
     <div class="section-label">APLICACIÓN EN TU CELULAR</div>
     <div class="pwa-card">
       <div class="pwa-preview"><img data-app-icon width="64" height="64" alt="Ícono seleccionado"><div><b>VORTEX</b><small id="appIconName"></small></div></div>
-      <p class="small-note">Elige el ícono antes de instalar. Tu selección se guarda en este navegador.</p>
+      <p class="small-note">Elige el ícono y el color de la app (se aplica al instante); el ícono se usa al instalar. Tu selección se guarda en este navegador.</p>
       <div class="pwa-icons" role="group" aria-label="Ícono de la aplicación"></div>
       <button class="primary" id="installApp" type="button">Instalar aplicación</button>
       <p id="installStatus" class="small-note" role="status" aria-live="polite"></p>

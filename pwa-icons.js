@@ -26,6 +26,9 @@
     link('manifest', 'appManifest', `manifests/${id}.webmanifest`);
     link('apple-touch-icon', 'appTouchIcon', `icons/${id}-180.png`, '180x180');
     link('icon', 'appFavicon', `icons/${id}-192.png`, '192x192');
+    document.documentElement.dataset.theme = id; // el ícono también define el tema de color de la app (themes.css)
+    const mt = document.querySelector('meta[name=theme-color]'); if (mt) { const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(); if (bg) mt.content = bg; }
+    try { window.dispatchEvent(new Event('cct-theme')); } catch {}
     document.querySelectorAll('[data-app-icon]').forEach(img => { img.src = `icons/${id}-192.png`; });
     return true;
   }
