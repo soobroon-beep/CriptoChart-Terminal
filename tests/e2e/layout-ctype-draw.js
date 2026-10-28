@@ -61,6 +61,7 @@ const ok = (c, m) => { console.log((c ? 'OK    · ' : 'FALLA · ') + m); if (!c)
   // ── móvil
   ({page, errs} = await mk({width: 400, height: 840}));
   await page.click('[data-view="chartView"]'); await page.waitForTimeout(500);
+  await page.click('#moreBtn'); // en móvil las opciones secundarias están en el menú ⋯
   await page.click('#layoutBtn'); ok(!(await page.$('#layoutMenu [data-ly="2v"]')), 'en móvil no se ofrece lado a lado'); await page.click('#layoutMenu [data-ly="2h"]'); await page.waitForTimeout(2500);
   ok(await page.evaluate(() => { const a = document.querySelector('#chartView').getBoundingClientRect(), b = document.querySelector('#pane2').getBoundingClientRect(); return a.height > 150 && b.height > 150 && b.top >= a.bottom - 2; }), 'móvil: dos gráficos apilados');
   await page.screenshot({path: out + 'split_mobile.png'});

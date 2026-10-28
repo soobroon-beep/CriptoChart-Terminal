@@ -11,7 +11,12 @@ const PANE = /[?&]pane=/.test(location.search); // segundo gráfico: la misma ap
 const STORE = PANE ? 'cct_pane2_v1' : 'cct_mobile_v1';
 const FIB = [0, .236, .382, .5, .618, .786, 1];
 const FIBEXT = [0, .618, 1, 1.272, 1.618, 2.618];
-const ONEPT = ['horizontal', 'vertical', 'text', 'marker'], THREEPT = ['channel', 'fibext'];
+const ONEPT = ['horizontal', 'vertical', 'text', 'marker', 'hray', 'crossline', 'note', 'label', 'arrowup', 'arrowdown'], THREEPT = ['channel', 'fibext', 'pitchfork', 'triangle'];
+/* Patrones de varios puntos: se toca cada punto en orden (n = cuántos) */
+const MULTI = {
+  xabcd: {n: 5, labels: ['X', 'A', 'B', 'C', 'D']}, abcd: {n: 4, labels: ['A', 'B', 'C', 'D']}, trianglep: {n: 4, labels: ['A', 'B', 'C', 'D']},
+  hs: {n: 7, labels: ['', 'Hombro', '', 'Cabeza', '', 'Hombro', '']}, impulse: {n: 6, labels: ['0', '1', '2', '3', '4', '5']}, abc: {n: 4, labels: ['0', 'A', 'B', 'C']}
+};
 
 /* ───────── Estado persistente ───────── */
 const defaults = {
@@ -69,8 +74,8 @@ function merge(s) {
     const okPt = q => Array.isArray(q) && q.length === 2 && Number.isFinite(q[0]) && Number.isFinite(q[1]);
     for (const k of Object.keys(o.drawings)) {
       const arr = Array.isArray(o.drawings[k]) ? o.drawings[k] : [];
-      const clean = arr.filter(d => d && typeof d === 'object' && (d.type !== 'brush' || (Array.isArray(d.pts) && d.pts.length >= 2 && d.pts.length <= 400 && d.pts.every(okPt)))).slice(-300)
-        .map(d => d.type === 'brush' ? {id: String(d.id || '').slice(0, 16), type: 'brush', pts: d.pts, a: {t: d.pts[0][0], p: d.pts[0][1]}, col: /^#[0-9a-f]{6}$/i.test(d.col) ? d.col : '#e9c36e', w: Math.max(1, Math.min(14, +d.w || 3))} : (d.col != null && !/^#[0-9a-f]{6}$/i.test(d.col) ? (({col, ...r}) => r)(d) : d));
+      const clean = arr.filter(d => d && typeof d === 'object' && (d.type === 'brush' ? (Array.isArray(d.pts) && d.pts.length >= 2 && d.pts.length <= 400 && d.pts.every(okPt)) : (d.pts == null || (Array.isArray(d.pts) && d.pts.length >= 2 && d.pts.length <= 12 && d.pts.every(q => q && Number.isFinite(q.t) && Number.isFinite(q.p)))))).slice(-300)
+        .map(d => d.type === 'brush' ? {id: String(d.id || '').slice(0, 16), type: 'brush', pts: d.pts, a: {t: d.pts[0][0], p: d.pts[0][1]}, col: /^#[0-9a-f]{6}$/i.test(d.col) ? d.col : '#e9c36e', w: Math.max(1, Math.min(24, +d.w || 3)), ...(d.hl === true ? {hl: true} : {})} : (d.col != null && !/^#[0-9a-f]{6}$/i.test(d.col) ? (({col, ...r}) => r)(d) : d));
       if (clean.length) o.drawings[k] = clean; else delete o.drawings[k];
     }
     const bq = o.brush && typeof o.brush === 'object' ? o.brush : {};
@@ -121,7 +126,7 @@ let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null
 let currentView = 'watchView', sheetMode = 'select', editMode = false;
 let pineLastMs = 0, pineRes = {}, pineBusy = {}, pineDirty = {}, pineLast = 0, pineTimer = 0, pineKey = '', pineDraft = {name: '', code: ''}, pineSetSid = null, pineWorker = null, pineNoWorker = false, pineSeq = 0;
 const PINE_MAX = 6;
-let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null;
+let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null, multi = [];
 let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
 let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0;
 const lastShown = {};
@@ -135,7 +140,7 @@ function setSide(id) {
 }
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
-    if (id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView') { setSide(id); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
+    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView') { setSide(id); if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
     id = 'chartView';
   }
   currentView = id;
@@ -153,7 +158,7 @@ $$('.bottom-nav button').forEach(b => b.addEventListener('click', () => switchVi
 $('#settingsBtn').onclick = () => switchView('settingsView');
 $$('.side-tabs button').forEach(b => b.addEventListener('click', () => setSide(b.dataset.side)));
 function onLayoutChange() {
-  if (isDesktop()) { setSide(document.body.dataset.side || 'newsView'); switchView('chartView'); }
+  if (isDesktop()) { setSide(document.body.dataset.side || 'watchView'); switchView('chartView'); }
   else { delete document.body.dataset.side; document.body.classList.remove('expanded'); switchView('watchView'); }
   requestAnimationFrame(() => { if (candles.length) { visible = defaultVisible(); pan = 0; } render(); });
 }
@@ -787,24 +792,117 @@ function openSheet(mode = 'select') {
   renderSheet();
 }
 function closeSheet() { $('#sheetBackdrop').classList.remove('open'); $('#sheet').classList.remove('open'); }
-const TOOLS = [
-  ['trend', '↗ Línea de tendencia', 'Arrastra o toca dos puntos'],
-  ['ray', '⟶ Rayo', 'Dos puntos; la línea sigue hacia la derecha'],
-  ['horizontal', '— Línea horizontal', 'Toca un precio'],
-  ['vertical', '| Línea vertical', 'Toca una vela'],
-  ['rect', '▭ Rectángulo', 'Arrastra o toca dos esquinas'],
-  ['channel', '⫽ Canal paralelo', 'Dos puntos y un tercero para el ancho'],
-  ['arrow', '➚ Flecha', 'Arrastra o toca inicio y punta'],
-  ['text', 'T Texto', 'Toca dónde quieres escribir'],
-  ['measure', '↔ Medición', 'Precio, % y velas entre dos puntos'],
-  ['fib', '≋ Retroceso de Fibonacci', 'Arrastra o toca inicio y fin del movimiento'],
-  ['fibext', '≋ Extensión de Fibonacci', 'Tres puntos: inicio, fin y retroceso'],
-  ['marker', '◆ Marcador de máximo/mínimo', 'Toca un máximo o mínimo'],
-  ['long', '▲ Posición Long', 'Entrada y objetivo arriba (stop a 2:1)'],
-  ['short', '▼ Posición Short', 'Entrada y objetivo abajo (stop a 2:1)'],
-  ['brush', '🖌 Pincel', 'Dibuja a mano alzada sobre el gráfico'],
-  ['clear', '✕ Borrar todos los dibujos', 'Solo de este activo']
+/* ───────── Catálogo de herramientas de dibujo (estilo TradingView) ─────────
+   Cada grupo = un botón en la barra izquierda (escritorio) y una sección en la hoja «Dibujar» (móvil).
+   Herramienta: [clave, nombre, ayuda, icono SVG] */
+const SV = (inner, s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+const DOT = (x, y) => `<circle cx="${x}" cy="${y}" r="1.7" fill="currentColor" stroke="none"/>`;
+const IC = {
+  cursor: '<path d="m6 4 12 7-5.2 1.6L11 18z"/>',
+  trend: '<path d="M5 19 19 5"/>' + DOT(5, 19) + DOT(19, 5),
+  ray: DOT(5, 18) + '<path d="M5 18 21 6M17 5.5 21 6l-1.3 4"/>',
+  info: '<path d="M4 18 15 7"/><rect x="11" y="11" width="9" height="7" rx="1.5"/><path d="M13 14.5h5"/>',
+  extended: '<path d="M3 21 21 3"/>' + DOT(9, 15) + DOT(15, 9),
+  angle: '<path d="M4 19h16M4 19 17 8M12 19a8 8 0 0 0-2.4-5.6"/>',
+  horizontal: '<path d="M3 12h18"/>' + DOT(12, 12),
+  hray: DOT(5, 12) + '<path d="M5 12h16M17 8.5l4 3.5-4 3.5"/>',
+  vertical: '<path d="M12 3v18"/>' + DOT(12, 12),
+  crossline: '<path d="M3 12h18M12 3v18"/>' + DOT(12, 12),
+  channel: '<path d="M4 14 18 4M6 20 20 10"/>',
+  pitchfork: '<path d="M4 20l6-8M10 12 21 6M10 12h11M10 12l11 7"/>',
+  fib: '<path d="M3 5h18M3 10h18M3 14h18M3 19h18"/><path d="m6 19 12-14" stroke-dasharray="2 2"/>',
+  fibext: '<path d="M3 6h18M3 11h18M3 16h18"/><path d="m5 20 4-11 4 6" />',
+  fibtime: '<path d="M4 4v16M8 4v16M13 4v16M21 4v16"/>',
+  fibfan: '<path d="M4 20 20 4M4 20 20 9M4 20 20 14M4 20h16"/>',
+  fibcircle: '<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="9"/>',
+  xabcd: '<path d="m3 18 4-12 5 9 4-8 5 11"/>',
+  abcd: '<path d="M4 18 9 7l6 8 5-9"/>',
+  trianglep: '<path d="M3 6l18 4M3 18l18-4M3 6v12"/>',
+  hs: '<path d="m2 17 4-7 3 5 3-10 3 10 3-5 4 7"/>',
+  impulse: '<path d="m3 20 4-8 2 3 6-10 2 4 5-5"/>',
+  abc: '<path d="m4 6 5 12 4-8 7 10"/>',
+  long: '<rect x="5" y="4" width="14" height="8" fill="currentColor" fill-opacity=".25"/><rect x="5" y="12" width="14" height="6"/>',
+  short: '<rect x="5" y="6" width="14" height="6"/><rect x="5" y="12" width="14" height="8" fill="currentColor" fill-opacity=".25"/>',
+  measure: '<path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3"/>',
+  pricerange: '<path d="M12 4v16M9 7l3-3 3 3M9 17l3 3 3-3M5 4h14M5 20h14"/>',
+  daterange: '<path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3M4 5v14M20 5v14"/>',
+  brush: '<path d="m4 20 1-4L16 5l3 3L8 19zM14 7l3 3"/>',
+  highlighter: '<path d="m5 17 3-1 9-9-2-2-9 9zM13 5l6 6M4 21h8"/>',
+  rect: '<rect x="4" y="6" width="16" height="12" rx="1"/>',
+  ellipse: '<ellipse cx="12" cy="12" rx="9" ry="6"/>',
+  triangle: '<path d="M12 4 21 19H3z"/>',
+  text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
+  note: '<path d="M4 5h16v11H11l-4 4v-4H4z"/>',
+  label: '<path d="M3 12 8 6h13v12H8z"/>',
+  arrow: '<path d="M5 19 19 5M10 5h9v9"/>',
+  arrowup: '<path d="M12 20V6M6 12l6-6 6 6"/>',
+  arrowdown: '<path d="M12 4v14M6 12l6 6 6-6"/>',
+  marker: '<path d="M12 21 6 11a6 6 0 1 1 12 0z"/><circle cx="12" cy="10" r="2"/>',
+  magnet: '<path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4zM6 8h4M14 8h4"/>',
+  keep: '<path d="M9 4h6v5l3 4H6l3-4zM12 13v7"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeoff: '<path d="M3 3l18 18M10.6 6.1A9.6 9.6 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3.2 3.9M6.5 7.6A16 16 0 0 0 2 12s4 7 10 7a9.5 9.5 0 0 0 4.2-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'
+};
+const TOOL_GROUPS = [
+  {id: 'lines', name: 'Líneas', tools: [
+    ['trend', 'Línea de tendencia', 'Arrastra o toca dos puntos', IC.trend],
+    ['ray', 'Rayo', 'Dos puntos; la línea sigue hacia la derecha', IC.ray],
+    ['info', 'Línea de información', 'Tendencia con variación, % y velas', IC.info],
+    ['extended', 'Línea extendida', 'Dos puntos; la línea sigue en ambos sentidos', IC.extended],
+    ['angle', 'Ángulo de tendencia', 'Dos puntos; muestra el ángulo', IC.angle],
+    ['horizontal', 'Línea horizontal', 'Toca un precio', IC.horizontal],
+    ['hray', 'Rayo horizontal', 'Toca un punto; sigue hacia la derecha', IC.hray],
+    ['vertical', 'Línea vertical', 'Toca una vela', IC.vertical],
+    ['crossline', 'Línea cruzada', 'Toca un punto: horizontal y vertical', IC.crossline],
+    ['channel', 'Canal paralelo', 'Dos puntos y un tercero para el ancho', IC.channel]
+  ]},
+  {id: 'fib', name: 'Fibonacci y horquillas', tools: [
+    ['fib', 'Retroceso de Fibonacci', 'Inicio y fin del movimiento', IC.fib],
+    ['fibext', 'Extensión de Fibonacci', 'Tres puntos: inicio, fin y retroceso', IC.fibext],
+    ['fibtime', 'Zonas de tiempo de Fibonacci', 'Dos puntos; marca 1, 2, 3, 5, 8, 13…', IC.fibtime],
+    ['fibfan', 'Abanico de Fibonacci', 'Dos puntos; abanico de velocidad', IC.fibfan],
+    ['fibcircle', 'Círculos de Fibonacci', 'Dos puntos; círculos concéntricos', IC.fibcircle],
+    ['pitchfork', 'Horquilla de Andrews', 'Tres puntos: mango y dos extremos', IC.pitchfork]
+  ]},
+  {id: 'patterns', name: 'Patrones de gráficos', tools: [
+    ['xabcd', 'Patrón XABCD', 'Toca 5 puntos: X, A, B, C, D', IC.xabcd],
+    ['abcd', 'Patrón ABCD', 'Toca 4 puntos: A, B, C, D', IC.abcd],
+    ['trianglep', 'Patrón de triángulo', 'Toca 4 puntos: dos líneas que convergen', IC.trianglep],
+    ['hs', 'Cabeza y hombros', 'Toca 7 puntos del patrón', IC.hs],
+    ['impulse', 'Onda de impulso (1-5)', 'Toca 6 puntos: 0 a 5', IC.impulse],
+    ['abc', 'Onda correctiva (ABC)', 'Toca 4 puntos: 0, A, B, C', IC.abc]
+  ]},
+  {id: 'proj', name: 'Proyección y medición', tools: [
+    ['long', 'Posición Long', 'Entrada y objetivo arriba (stop a 2:1)', IC.long],
+    ['short', 'Posición Short', 'Entrada y objetivo abajo (stop a 2:1)', IC.short],
+    ['measure', 'Medición', 'Precio, % y velas entre dos puntos', IC.measure],
+    ['pricerange', 'Rango de precio', 'Diferencia de precio entre dos puntos', IC.pricerange],
+    ['daterange', 'Rango de fechas', 'Velas y tiempo entre dos puntos', IC.daterange]
+  ]},
+  {id: 'shapes', name: 'Pincel y formas', tools: [
+    ['brush', 'Pincel', 'Dibuja a mano alzada sobre el gráfico', IC.brush],
+    ['highlighter', 'Resaltador', 'Trazo ancho y translúcido', IC.highlighter],
+    ['rect', 'Rectángulo', 'Dos esquinas', IC.rect],
+    ['ellipse', 'Elipse', 'Dos esquinas del recuadro', IC.ellipse],
+    ['triangle', 'Triángulo', 'Tres puntos', IC.triangle]
+  ]},
+  {id: 'notes', name: 'Texto y notas', tools: [
+    ['text', 'Texto', 'Toca dónde quieres escribir', IC.text],
+    ['note', 'Nota', 'Globo de nota con texto', IC.note],
+    ['label', 'Etiqueta de precio', 'Toca un punto: muestra su precio', IC.label],
+    ['arrow', 'Flecha', 'Inicio y punta', IC.arrow],
+    ['arrowup', 'Flecha arriba', 'Toca un punto', IC.arrowup],
+    ['arrowdown', 'Flecha abajo', 'Toca un punto', IC.arrowdown],
+    ['marker', 'Marcador de máximo/mínimo', 'Toca un máximo o mínimo', IC.marker]
+  ]}
 ];
+/* Opciones de la barra: imán (ajusta a O/H/L/C), mantener herramienta, bloquear y ocultar dibujos */
+const DOPT_KEY = 'cct_dopts_v1';
+const DOPT = Object.assign({magnet: true, stay: false, lock: false, hide: false}, (() => { try { return JSON.parse(lsGet(DOPT_KEY) || '{}') || {}; } catch { return {}; } })());
+const saveDopt = () => { try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} };
+const isBrushTool = t => t === 'brush' || t === 'highlighter';
 function renderSheet() {
   const list = $('#sheetList');
   if (sheetMode === 'indicators') { list.innerHTML = indicatorRows(); return; }
@@ -822,11 +920,12 @@ function renderSheet() {
     return;
   }
   if (sheetMode === 'tools') {
-    list.innerHTML = TOOLS.map(([k, t, d]) => `<button class="sheet-item" data-tool="${k}"><span>${t}</span><small>${d}</small></button>`).join('');
+    list.innerHTML = TOOL_GROUPS.map(gr => `<div class="section-label">${esc(gr.name).toUpperCase()}</div>` + gr.tools.map(([k, t, d, ic]) => `<button class="sheet-item" data-tool="${k}"><span class="tool-line"><span class="ti">${SV(ic, 18)}</span>${esc(t)}</span><small>${esc(d)}</small></button>`).join('')).join('')
+      + `<div class="section-label">OPCIONES</div><button class="sheet-item" data-tool="clear"><span class="tool-line"><span class="ti">${SV(IC.trash, 18)}</span>Borrar todos los dibujos</span><small>Solo de este activo</small></button>`;
     $$('.sheet-item[data-tool]').forEach(b => b.onclick = () => {
       const k = b.dataset.tool; closeSheet();
       if (k === 'clear') { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); toast('Dibujos borrados'); }
-      else startTool(k);
+      else pickTool(k);
     });
     return;
   }
@@ -857,7 +956,7 @@ function selectSymbol(s) {
 /* ───────── Dibujos (anclados a tiempo y precio, guardados por activo) ───────── */
 const getDrawings = () => state.drawings[state.symbol] || [];
 const setDrawings = arr => { if (arr.length) state.drawings[state.symbol] = arr; else delete state.drawings[state.symbol]; save(); };
-function clearTransient() { drawHist.u.length = drawHist.r.length = 0; drawTool = ''; pending = null; pending2 = null; preview = null; selectedId = null; cross = null; priceMan = null; updateAutoBtn(); updateDrawUI(); }
+function clearTransient() { drawHist.u.length = drawHist.r.length = 0; drawTool = ''; pending = null; pending2 = null; multi = []; preview = null; selectedId = null; cross = null; priceMan = null; updateAutoBtn(); updateDrawUI(); }
 const two = (first, second) => p => p ? second : first;
 const HINTS = {
   trend: two('Arrastra o toca el primer punto', 'Toca el segundo punto'),
@@ -876,7 +975,17 @@ const HINTS = {
   channel: (p, p2) => p2 ? 'Toca el tercer punto (ancho del canal)' : p ? 'Toca el segundo punto' : 'Arrastra o toca el primer punto',
   fibext: (p, p2) => p2 ? 'Toca el punto del retroceso' : p ? 'Toca el final del movimiento' : 'Arrastra o toca el inicio del movimiento'
 };
-function startTool(k) { drawTool = k; pending = null; pending2 = null; preview = null; selectedId = null; updateDrawUI(); scheduleRender(); }
+const TWO = two('Arrastra o toca el primer punto', 'Toca el segundo punto');
+Object.assign(HINTS, {
+  highlighter: () => 'Resaltador: dibuja con el dedo o el ratón',
+  info: TWO, extended: TWO, angle: TWO, fibtime: TWO, fibfan: TWO, fibcircle: TWO, pricerange: TWO, daterange: TWO, ellipse: TWO,
+  hray: () => 'Toca el punto donde empieza el rayo', crossline: () => 'Toca el punto donde se cruzan las líneas', note: () => 'Toca dónde va la nota',
+  label: () => 'Toca el punto a etiquetar', arrowup: () => 'Toca el punto al que apunta la flecha', arrowdown: () => 'Toca el punto al que apunta la flecha',
+  pitchfork: (p, p2) => p2 ? 'Toca el tercer punto' : p ? 'Toca el segundo punto' : 'Arrastra o toca el primer punto (mango)',
+  triangle: (p, p2) => p2 ? 'Toca el tercer vértice' : p ? 'Toca el segundo vértice' : 'Arrastra o toca el primer vértice'
+});
+for (const k of Object.keys(MULTI)) HINTS[k] = () => `Toca el punto ${Math.min(multi.length + 1, MULTI[k].n)} de ${MULTI[k].n}${MULTI[k].labels[multi.length] ? ' (' + MULTI[k].labels[multi.length] + ')' : ''}`;
+function startTool(k) { drawTool = k; pending = null; pending2 = null; multi = []; preview = null; selectedId = null; updateDrawUI(); scheduleRender(); }
 const BRUSH_COLORS = ['#e9c36e', '#f06b79', '#20bf9f', '#548fff', '#ffffff'], BRUSH_W = [2, 4, 7];
 function brushOptsHtml() { return `<span id="brushOpts">${BRUSH_COLORS.map(c => `<button class="bsw${state.brush.c === c ? ' on' : ''}" data-bc="${c}" style="background:${c}" aria-label="Color ${c}"></button>`).join('')}${BRUSH_W.map(w => `<button class="bw${state.brush.w === w ? ' on' : ''}" data-bw="${w}" aria-label="Grosor ${w}"><i style="height:${w}px"></i></button>`).join('')}</span>`; }
 document.addEventListener('click', e => {
@@ -885,14 +994,15 @@ document.addEventListener('click', e => {
 });
 function updateDrawUI() {
   $('#drawHint').hidden = !drawTool;
-  { const bo = $('#brushOpts'), want = drawTool === 'brush'; if (bo && !want) bo.remove(); else if (want) { const h = brushOptsHtml(); if (bo) bo.outerHTML = h; else $('#drawHintText').insertAdjacentHTML('afterend', h); } $('#cancelDraw').textContent = want ? 'Listo' : 'Cancelar'; }
-  if (drawTool) $('#drawHintText').textContent = HINTS[drawTool](pending, pending2);
+  { const bo = $('#brushOpts'), want = isBrushTool(drawTool); if (bo && !want) bo.remove(); else if (want) { const h = brushOptsHtml(); if (bo) bo.outerHTML = h; else $('#drawHintText').insertAdjacentHTML('afterend', h); } $('#cancelDraw').textContent = want ? 'Listo' : 'Cancelar'; }
+  if (drawTool) $('#drawHintText').textContent = (HINTS[drawTool] || HINTS.trend)(pending, pending2);
   $('#deleteDraw').hidden = !selectedId;
   $('#undoDraw').disabled = !drawHist.u.length && !getDrawings().length;
   renderSelBar();
   $('#chartArea').classList.toggle('drawing', !!drawTool); $('#chartArea').dataset.tool = drawTool;
+  syncRail();
 }
-$('#cancelDraw').onclick = () => { drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); scheduleRender(); };
+$('#cancelDraw').onclick = () => { drawTool = ''; pending = null; pending2 = null; multi = []; preview = null; updateDrawUI(); scheduleRender(); };
 const drawHist = {u: [], r: []}; // historial de cambios en los dibujos (por símbolo): Ctrl+Z / Ctrl+Y
 const snapDraw = () => { drawHist.u.push(JSON.stringify(getDrawings())); if (drawHist.u.length > 60) drawHist.u.shift(); drawHist.r.length = 0; };
 function undoDrawing() { if (!drawHist.u.length) { const a = getDrawings(); if (!a.length) { toast('No hay nada que deshacer'); return; } drawHist.r.push(JSON.stringify(a)); setDrawings(a.slice(0, -1)); selectedId = null; updateDrawUI(); render(); return; } drawHist.r.push(JSON.stringify(getDrawings())); setDrawings(JSON.parse(drawHist.u.pop())); selectedId = null; updateDrawUI(); render(); }
@@ -903,7 +1013,7 @@ $('#deleteDraw').onclick = deleteSelected;
 /* Barra flotante sobre el gráfico: aparece al tocar un dibujo (color · borrar · deshacer · rehacer) y al usar el pincel */
 const SEL_COLORS = ['#e9c36e', '#f06b79', '#20bf9f', '#548fff', '#ffffff', '#b07cff'];
 function renderSelBar() {
-  let bar = $('#selBar'); const d = selectedId && getDrawings().find(x => x.id === selectedId), show = !!d || drawTool === 'brush';
+  let bar = $('#selBar'); const d = selectedId && getDrawings().find(x => x.id === selectedId), show = !!d || isBrushTool(drawTool);
   if (!show) { if (bar) bar.remove(); return; }
   if (!bar) { bar = document.createElement('div'); bar.id = 'selBar'; bar.className = 'sel-bar'; $('#chartArea').appendChild(bar); }
   const cur = d ? (d.col || cstyle().draw || '#e9c36e') : state.brush.c;
@@ -915,6 +1025,80 @@ document.addEventListener('click', e => {
   const k = sa.dataset.sa; if (k === 'undo') undoDrawing(); else if (k === 'redo') redoDrawing(); else if (k === 'del') deleteSelected();
   else if (k === 'clear') { if (!getDrawings().length) return toast('No hay dibujos'); if (confirm('¿Borrar todos los dibujos de este gráfico? (Ctrl+Z los recupera)')) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); } }
 });
+
+/* ───────── Barra izquierda de herramientas de dibujo (escritorio, estilo TradingView) ───────── */
+const RAIL_KEY = 'cct_railLast_v1';
+let railLast = {}; try { railLast = JSON.parse(lsGet(RAIL_KEY) || '{}') || {}; } catch {}
+const groupOf = k => TOOL_GROUPS.find(gr => gr.tools.some(t => t[0] === k));
+const toolOf = k => { for (const gr of TOOL_GROUPS) { const t = gr.tools.find(x => x[0] === k); if (t) return t; } return null; };
+const lastOf = gr => (railLast[gr.id] && gr.tools.some(t => t[0] === railLast[gr.id])) ? railLast[gr.id] : gr.tools[0][0];
+const RAIL_OPTS = [['magnet', 'Imán: ajusta a máximo, mínimo, apertura y cierre', IC.magnet], ['stay', 'Mantener la herramienta activa después de dibujar', IC.keep], ['lock', 'Bloquear dibujos (no se seleccionan ni se mueven)', IC.lock], ['hide', 'Ocultar dibujos', IC.eye], ['clear', 'Borrar todos los dibujos de este activo', IC.trash]];
+function buildRail() {
+  const rail = $('#toolRail'); if (!rail) return;
+  rail.innerHTML = `<button class="rail-btn" data-rail="cursor" title="Cursor (Esc)" aria-label="Cursor">${SV(IC.cursor)}</button><div class="rail-sep"></div>`
+    + TOOL_GROUPS.map(gr => { const t = toolOf(lastOf(gr)); return `<button class="rail-btn grp" data-group="${gr.id}" data-last="${t[0]}" title="${esc(t[1])}" aria-label="${esc(gr.name)}">${SV(t[3])}<i class="caret" data-fly="${gr.id}" title="${esc(gr.name)}: ver todas"></i></button>`; }).join('')
+    + `<div class="rail-spacer"></div><div class="rail-sep"></div>`
+    + RAIL_OPTS.map(([k, t, ic]) => `<button class="rail-btn" data-opt="${k}" title="${esc(t)}" aria-label="${esc(t)}">${SV(ic)}</button>`).join('');
+  syncRail();
+}
+function syncRail() {
+  const rail = $('#toolRail'); if (!rail || !rail.firstChild) return;
+  const cg = drawTool ? groupOf(drawTool) : null;
+  rail.querySelector('[data-rail="cursor"]').classList.toggle('on', !drawTool);
+  rail.querySelectorAll('[data-group]').forEach(b => {
+    const gr = TOOL_GROUPS.find(x => x.id === b.dataset.group), active = !!cg && cg.id === gr.id, k = active ? drawTool : lastOf(gr), t = toolOf(k);
+    b.classList.toggle('on', active);
+    if (b.dataset.last !== k || !b.querySelector('svg')) { b.dataset.last = k; const old = b.querySelector('svg'); if (old) old.outerHTML = SV(t[3]); }
+    b.title = t[1];
+  });
+  rail.querySelectorAll('[data-opt]').forEach(b => { const k = b.dataset.opt; if (k === 'clear') return; b.classList.toggle('on', !!DOPT[k]); if (k === 'hide') { const want = DOPT.hide ? IC.eyeoff : IC.eye; if (b.dataset.ic !== (DOPT.hide ? '1' : '0')) { b.dataset.ic = DOPT.hide ? '1' : '0'; b.querySelector('svg').outerHTML = SV(want); } } });
+}
+function closeFly() { const f = $('#railFly'); if (f) f.remove(); }
+function openFly(id, btn) {
+  const old = $('#railFly'); if (old) { const same = old.dataset.g === id; old.remove(); if (same) return; }
+  const gr = TOOL_GROUPS.find(x => x.id === id); if (!gr) return;
+  const f = document.createElement('div'); f.id = 'railFly'; f.className = 'rail-fly'; f.dataset.g = id;
+  f.innerHTML = `<h4>${esc(gr.name)}</h4>` + gr.tools.map(([k, t, d, ic]) => `<button data-rtool="${k}" title="${esc(d)}" class="${drawTool === k ? 'on' : ''}"><span class="ti">${SV(ic, 20)}</span><span class="tn">${esc(t)}</span></button>`).join('');
+  document.body.appendChild(f);
+  const r = btn.getBoundingClientRect(); f.style.left = (r.right + 6) + 'px'; f.style.top = Math.max(8, Math.min(innerHeight - f.offsetHeight - 8, r.top)) + 'px';
+}
+function pickTool(k) {
+  const gr = groupOf(k); if (!gr) return;
+  railLast[gr.id] = k; try { localStorage.setItem(RAIL_KEY, JSON.stringify(railLast)); } catch {}
+  if (DOPT.hide) { DOPT.hide = false; saveDopt(); render(); }
+  startTool(k);
+}
+function cancelTool() { drawTool = ''; pending = null; pending2 = null; multi = []; preview = null; updateDrawUI(); scheduleRender(); }
+function clearAllDrawings() {
+  if (!getDrawings().length) { toast('No hay dibujos en este gráfico'); return; }
+  if (confirm('¿Borrar todos los dibujos de este gráfico? (Ctrl+Z los recupera)')) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); }
+}
+const OPT_MSG = {magnet: ['Imán desactivado', 'Imán activado: se ajusta a máximos, mínimos y cierres'], stay: ['La herramienta se desactiva tras dibujar', 'Herramienta fija: sigue activa tras dibujar'], lock: ['Dibujos desbloqueados', 'Dibujos bloqueados: no se pueden seleccionar'], hide: ['Dibujos visibles', 'Dibujos ocultos']};
+function toggleOpt(k) {
+  if (k === 'clear') { clearAllDrawings(); return; }
+  DOPT[k] = !DOPT[k]; saveDopt();
+  if (k === 'lock' && DOPT.lock) { selectedId = null; updateDrawUI(); }
+  if (k === 'hide' && DOPT.hide) { selectedId = null; updateDrawUI(); }
+  syncRail(); render(); toast(OPT_MSG[k][DOPT[k] ? 1 : 0]);
+}
+(() => {
+  const rail = $('#toolRail'); if (!rail) return;
+  rail.addEventListener('click', e => {
+    const cav = e.target.closest('[data-fly]'), grp = e.target.closest('[data-group]'), opt = e.target.closest('[data-opt]');
+    if (cav) { openFly(cav.dataset.fly, cav.closest('.rail-btn')); return; }
+    closeFly();
+    if (grp) { pickTool(grp.dataset.last); return; }
+    if (opt) { toggleOpt(opt.dataset.opt); return; }
+    if (e.target.closest('[data-rail="cursor"]')) cancelTool();
+  });
+  rail.addEventListener('contextmenu', e => { const grp = e.target.closest('[data-group]'); if (!grp) return; e.preventDefault(); openFly(grp.dataset.group, grp); });
+  document.addEventListener('click', e => {
+    const it = e.target.closest('#railFly [data-rtool]'); if (it) { const k = it.dataset.rtool; closeFly(); pickTool(k); return; }
+    if (!e.target.closest('#railFly,#toolRail')) closeFly();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFly(); });
+  window.addEventListener('resize', closeFly);
+})();
 
 function idxOfTime(t) {
   const n = candles.length; if (!n) return 0; const iv = IV_MS[state.interval];
@@ -937,12 +1121,25 @@ const PRICE = y => geo.max - (y - geo.plotTop) / geo.plotH * (geo.max - geo.min)
 function snapPoint(pt) {
   const i = Math.round(IDX(pt.x)); let p = PRICE(pt.y);
   const c = candles[i];
-  if (c) { let best = null, bd = 14; for (const v of [c.o, c.h, c.l, c.c]) { const dd = Math.abs(Y(v) - pt.y); if (dd < bd) { bd = dd; best = v; } } if (best != null) p = best; }
+  if (c && DOPT.magnet) { let best = null, bd = 14; for (const v of [c.o, c.h, c.l, c.c]) { const dd = Math.abs(Y(v) - pt.y); if (dd < bd) { bd = dd; best = v; } } if (best != null) p = best; }
   return {t: timeOfIdx(i), p};
 }
 const px = a => ({x: X(idxOfTime(a.t)), y: Y(a.p)});
+/* Geometría de las herramientas nuevas: Fibonacci (tiempo, abanico, círculos), horquilla, triángulo, elipse y patrones de varios puntos */
+const FIBTIME = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55], FANLV = [.25, .382, .5, .618, .75, 1], FIBCIRC = [.382, .5, .618, .786, 1, 1.272, 1.618];
+const ptsPx = d => (d.pts || []).map(px);
+const farPt = (a, b, k = 1) => { const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1; return {x: a.x + dx / L * 5000 * k, y: a.y + dy / L * 5000 * k}; };
+function pitchRays(d) { // horquilla de Andrews: mediana desde A por el punto medio de B–C, y paralelas por B y C
+  const A = px(d.a), B = px(d.b), C = px(d.c), M = {x: (B.x + C.x) / 2, y: (B.y + C.y) / 2}, dx = M.x - A.x, dy = M.y - A.y, L = Math.hypot(dx, dy) || 1;
+  return [A, B, C].map(P => [P, {x: P.x + dx / L * 5000, y: P.y + dy / L * 5000}]);
+}
+function fanRays(d) { const A = px(d.a), B = px(d.b); return FANLV.map(lv => [A, farPt(A, {x: B.x, y: A.y + (B.y - A.y) * lv})]); }
+function fibCircle(d) { const A = px(d.a), B = px(d.b); return {m: {x: (A.x + B.x) / 2, y: (A.y + B.y) / 2}, R: Math.hypot(B.x - A.x, B.y - A.y) / 2}; }
+const inTri = (p, a, b, c) => { const s = (p1, p2, p3) => (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y), d1 = s(p, a, b), d2 = s(p, b, c), d3 = s(p, c, a); return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0)); };
+const readableOn = hex => { const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || ''); if (!m) return '#10151f'; const l = (.299 * parseInt(m[1], 16) + .587 * parseInt(m[2], 16) + .114 * parseInt(m[3], 16)) / 255; return l > .55 ? '#10151f' : '#ffffff'; };
 function handlesOf(d) {
   if (d.type === 'brush') return [];
+  if (d.pts && MULTI[d.type]) return d.pts.map((q, i) => ({key: 'p' + i, ...px(q)}));
   if (d.type === 'horizontal') return [{key: 'a', x: geo.left + geo.plotW / 2, y: Y(d.a.p)}];
   if (d.type === 'vertical') return [{key: 'a', x: X(idxOfTime(d.a.t)), y: geo.plotTop + geo.plotH / 2}];
   if (ONEPT.includes(d.type)) return [{key: 'a', ...px(d.a)}];
@@ -971,13 +1168,26 @@ function distToDrawing(d, pt) {
   if (d.type === 'brush') { let m = 1e9, prev = null; for (const q of d.pts) { const c = {x: X(idxOfTime(q[0])), y: Y(q[1])}; m = Math.min(m, prev ? segDist(pt, prev, c) : Math.hypot(pt.x - c.x, pt.y - c.y)); prev = c; } return Math.max(0, m - (d.w || 3) / 2); }
   if (d.type === 'horizontal') return Math.abs(pt.y - Y(d.a.p));
   if (d.type === 'vertical') return Math.abs(pt.x - X(idxOfTime(d.a.t)));
+  if (d.pts && MULTI[d.type]) { const P = ptsPx(d); let m = 1e9; for (let i = 1; i < P.length; i++) m = Math.min(m, segDist(pt, P[i - 1], P[i])); if (d.type === 'hs' && P.length > 4) m = Math.min(m, segDist(pt, P[2], P[4])); return P.length === 1 ? Math.hypot(pt.x - P[0].x, pt.y - P[0].y) : m; }
+  if (d.type === 'hray') { const A = px(d.a); return pt.x < A.x - 4 ? 1e9 : Math.abs(pt.y - A.y); }
+  if (d.type === 'crossline') { const A = px(d.a); return Math.min(Math.abs(pt.y - A.y), Math.abs(pt.x - A.x)); }
+  if (d.type === 'arrowup' || d.type === 'arrowdown') { const A = px(d.a), s = d.type === 'arrowup' ? 1 : -1; return Math.abs(pt.x - A.x) <= 10 && (pt.y - A.y) * s >= -4 && (pt.y - A.y) * s <= 30 ? 0 : Math.hypot(pt.x - A.x, pt.y - A.y); }
+  if (d.type === 'note') { const A = px(d.a), w = (d.text || '').length * 7 + 16; return pt.x >= A.x - 6 && pt.x <= A.x + w && pt.y >= A.y - 34 && pt.y <= A.y + 2 ? 0 : Math.hypot(pt.x - A.x, pt.y - A.y); }
+  if (d.type === 'label') { const A = px(d.a); return pt.x >= A.x - 4 && pt.x <= A.x + 70 && Math.abs(pt.y - A.y) <= 10 ? 0 : Math.hypot(pt.x - A.x, pt.y - A.y); }
   if (d.type === 'text' || d.type === 'marker') {
     const A = px(d.a);
     if (d.type === 'text' && pt.x >= A.x - 4 && pt.x <= A.x + (d.text || '').length * 7 + 10 && pt.y >= A.y - 16 && pt.y <= A.y + 4) return 0;
     return Math.hypot(pt.x - A.x, pt.y - A.y);
   }
   const a = px(d.a), b = px(d.b);
-  if (d.type === 'trend' || d.type === 'arrow') return segDist(pt, a, b);
+  if (d.type === 'trend' || d.type === 'arrow' || d.type === 'info' || d.type === 'angle') return segDist(pt, a, b);
+  if (d.type === 'extended') return segDist(pt, farPt(a, b, -1), farPt(a, b, 1));
+  if (d.type === 'ellipse') { const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2, rx = Math.max(1, Math.abs(b.x - a.x) / 2), ry = Math.max(1, Math.abs(b.y - a.y) / 2), r = Math.hypot((pt.x - cx) / rx, (pt.y - cy) / ry); return r <= 1 ? 0 : (r - 1) * Math.min(rx, ry); }
+  if (d.type === 'triangle') { if (!d.c) return segDist(pt, a, b); const c = px(d.c); return inTri(pt, a, b, c) ? 0 : Math.min(segDist(pt, a, b), segDist(pt, b, c), segDist(pt, c, a)); }
+  if (d.type === 'pitchfork') { if (!d.c) return segDist(pt, a, b); return Math.min(...pitchRays(d).map(([p, q]) => segDist(pt, p, q))); }
+  if (d.type === 'fibtime') { if (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH) return 1e9; const i0 = idxOfTime(d.a.t), u = idxOfTime(d.b.t) - i0; return Math.min(...FIBTIME.map(nn => Math.abs(pt.x - X(i0 + u * nn)))); }
+  if (d.type === 'fibfan') return Math.min(...fanRays(d).map(([p, q]) => segDist(pt, p, q)));
+  if (d.type === 'fibcircle') { const {m, R} = fibCircle(d), r = Math.hypot(pt.x - m.x, pt.y - m.y); return Math.min(...FIBCIRC.map(lv => Math.abs(r - R * lv))); }
   if (d.type === 'ray') { const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1; return segDist(pt, a, {x: a.x + dx / L * 5000, y: a.y + dy / L * 5000}); }
   if (d.type === 'channel') {
     if (!d.c) return segDist(pt, a, b);
@@ -992,7 +1202,7 @@ function distToDrawing(d, pt) {
     const c = px(d.c); if (pt.x < Math.min(a.x, c.x) - 10) return 1e9;
     return Math.min(...FIBEXT.map(lv => Math.abs(pt.y - Y(d.c.p + (d.b.p - d.a.p) * lv))));
   }
-  if (d.type === 'rect' || d.type === 'measure') {
+  if (d.type === 'rect' || d.type === 'measure' || d.type === 'pricerange' || d.type === 'daterange') {
     const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
     if (pt.x >= x1 && pt.x <= x2 && pt.y >= y1 && pt.y <= y2) return 0;
     return Math.min(segDist(pt, {x: x1, y: y1}, {x: x2, y: y1}), segDist(pt, {x: x2, y: y1}, {x: x2, y: y2}), segDist(pt, {x: x2, y: y2}, {x: x1, y: y2}), segDist(pt, {x: x1, y: y2}, {x: x1, y: y1}));
@@ -1001,7 +1211,7 @@ function distToDrawing(d, pt) {
   return Math.min(...FIB.map(lv => Math.abs(pt.y - Y(b_price(d, lv)))));
 }
 const b_price = (d, lv) => d.b.p - (d.b.p - d.a.p) * lv;
-function hitTest(pt) { const arr = getDrawings(); for (let i = arr.length - 1; i >= 0; i--) if (distToDrawing(arr[i], pt) < 13) return arr[i]; return null; }
+function hitTest(pt) { if (DOPT.lock || DOPT.hide) return null; const arr = getDrawings(); for (let i = arr.length - 1; i >= 0; i--) if (distToDrawing(arr[i], pt) < 13) return arr[i]; return null; }
 function commitDrawing(a, b, c) {
   const one = ONEPT.includes(drawTool), three = THREEPT.includes(drawTool);
   if (!one) {
@@ -1011,13 +1221,13 @@ function commitDrawing(a, b, c) {
   }
   if (three && !c) { pending2 = {a, b}; pending = null; preview = null; updateDrawUI(); scheduleRender(); return; }
   const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: drawTool, a, ...(one ? {} : {b}), ...(three ? {c} : {})};
-  if (drawTool === 'text') {
-    const txt = (prompt('Texto del dibujo:') || '').trim().slice(0, 80);
+  if (drawTool === 'text' || drawTool === 'note') {
+    const txt = (prompt(drawTool === 'note' ? 'Texto de la nota:' : 'Texto del dibujo:') || '').trim().slice(0, 80);
     if (!txt) { drawTool = ''; pending = null; preview = null; updateDrawUI(); render(); return; }
     d.text = txt;
   }
   snapDraw(); setDrawings([...getDrawings(), d]);
-  selectedId = d.id; drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); render();
+  selectedId = DOPT.stay ? null : d.id; if (!DOPT.stay) drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); render();
 }
 
 // Simplificación Ramer–Douglas–Peucker en píxeles: trazos livianos (el estado viaja entero a la cuenta) sin perder la forma
@@ -1026,13 +1236,18 @@ function rdp(P, eps) {
   while (st.length) { const [i, j] = st.pop(); let m = 0, k = -1; for (let n = i + 1; n < j; n++) { const d = segDist(P[n], P[i], P[j]); if (d > m) { m = d; k = n; } } if (k >= 0 && m > eps) { keep[k] = 1; st.push([i, k], [k, j]); } }
   return P.filter((_, i) => keep[i]);
 }
+function commitMulti() {
+  const M = MULTI[drawTool], pts = multi.slice(0, M.n), d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: drawTool, a: pts[0], pts};
+  snapDraw(); setDrawings([...getDrawings(), d]);
+  selectedId = DOPT.stay ? null : d.id; if (!DOPT.stay) drawTool = ''; multi = []; pending = null; preview = null; updateDrawUI(); render();
+}
 function commitBrush(live) {
   if (!live || live.length < 2 || !geo) return;
   const P = live.map(q => ({x: X(idxOfTime(q[0])), y: Y(q[1]), q}));
   let eps = 1.1, out = rdp(P, eps); while (out.length > 300 && eps < 20) out = rdp(P, eps *= 1.5);
   if (out.length < 2) return;
   const pts = out.map(o => [Math.round(o.q[0]), +(+o.q[1].toPrecision(8))]);
-  const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: 'brush', pts, a: {t: pts[0][0], p: pts[0][1]}, col: state.brush.c, w: state.brush.w};
+  const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: 'brush', pts, a: {t: pts[0][0], p: pts[0][1]}, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, ...(drawTool === 'highlighter' ? {hl: true} : {})};
   snapDraw(); setDrawings([...getDrawings(), d]); updateDrawUI();
 }
 
@@ -1347,10 +1562,15 @@ function renderCore() {
   if (nn && (state.indicators.nnIa || state.indicators.nnTp)) drawNovaSignals(nn, lo, hi, n);
   if (nn && nn.smc && state.indicators.nnSmc) drawNovaStruct(nn.smc);
   // dibujos del usuario
-  for (const d of getDrawings()) drawShape(d, d.id === selectedId, drawCol, text);
+  if (!DOPT.hide) for (const d of getDrawings()) drawShape(d, d.id === selectedId, drawCol, text);
   if (pending2) drawShape({id: '_', type: 'trend', a: pending2.a, b: pending2.b}, false, drawCol, text);
   if (preview) drawShape({id: '_', type: drawTool, a: preview.a, b: preview.b, c: preview.c}, false, drawCol, text);
-  if (brushLive && brushLive.length > 1) drawBrush({pts: brushLive, col: state.brush.c, w: state.brush.w}, false, drawCol);
+  if (brushLive && brushLive.length > 1) drawBrush({pts: brushLive, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, hl: drawTool === 'highlighter'}, false, drawCol);
+  if (multi.length && MULTI[drawTool]) {
+    const live = cross ? snapPoint(cross) : null, pts = multi.concat(live && multi.length < MULTI[drawTool].n ? [live] : []);
+    drawShape({id: '_', type: drawTool, a: pts[0], pts}, false, drawCol, text);
+    g.fillStyle = drawCol; for (const q of multi) { const P = px(q); g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
+  }
   if (pending) { const P = px(pending); g.fillStyle = drawCol; g.beginPath(); g.arc(P.x, P.y, 5, 0, 7); g.fill(); }
   g.restore();
 
@@ -1779,12 +1999,99 @@ function drawShapeExtra(d, a, b, rightX, col) {
     tag(`Stop ${fmt(q.stop)} (${pc(q.stop)})`, q.x1, q.yS + (q.yS < q.yE ? -11 : 11), rc);
   }
 }
+function drawShapeNew(d, a, b, rightX, col, selected) {
+  const t = d.type; g.setLineDash([]); g.globalAlpha = 1; g.textAlign = 'left';
+  const lw = selected ? 2.2 : 1.5; g.lineWidth = lw; g.strokeStyle = col; g.fillStyle = col;
+  const poly = (P, close) => { g.beginPath(); P.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); if (close) g.closePath(); };
+  const seg = (p, q) => { g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(q.x, q.y); g.stroke(); };
+  const fillA = (al, fn) => { g.globalAlpha = al; fn(); g.globalAlpha = 1; };
+  const dash = fn => { g.setLineDash([5, 4]); g.lineWidth = 1; fn(); g.setLineDash([]); g.lineWidth = lw; };
+  const lab = (txt, x, y) => { g.font = 'bold 11px system-ui'; g.fillStyle = col; g.textAlign = 'center'; g.fillText(txt, x, y); g.textAlign = 'left'; };
+  const M = MULTI[t];
+  if (M) {
+    const P = ptsPx(d); if (!P.length) return;
+    const fillIdx = idx => { if (idx.every(i => P[i])) { poly(idx.map(i => P[i]), true); fillA(.12, () => g.fill()); } };
+    const dseg = (i, j) => { if (P[i] && P[j]) dash(() => seg(P[i], P[j])); };
+    if (t === 'xabcd') { fillIdx([0, 1, 2]); fillIdx([2, 3, 4]); }
+    if (t === 'trianglep') { fillIdx([0, 2, 3, 1]); if (P[2]) seg(P[0], P[2]); if (P[3]) seg(P[1], P[3]); dseg(0, 1); dseg(1, 2); dseg(2, 3); }
+    else { poly(P); g.stroke(); }
+    if (t === 'xabcd') { dseg(0, 2); dseg(1, 3); dseg(2, 4); dseg(0, 4); }
+    if (t === 'abcd') { dseg(0, 2); dseg(1, 3); }
+    if (t === 'hs' && P[4]) dash(() => seg(P[2], farPt(P[2], P[4])));
+    g.fillStyle = col; P.forEach(p => { g.beginPath(); g.arc(p.x, p.y, 2.6, 0, 7); g.fill(); });
+    (M.labels || []).forEach((tx, i) => { const p = P[i]; if (!p || !tx) return; const up = (!P[i - 1] || P[i - 1].y > p.y) && (!P[i + 1] || P[i + 1].y > p.y); lab(tx, p.x, up ? p.y - 8 : p.y + 17); });
+    return;
+  }
+  const bars = b && d.b ? Math.round(idxOfTime(d.b.t) - idxOfTime(d.a.t)) : 0;
+  if (t === 'hray') { seg(a, {x: rightX, y: a.y}); g.beginPath(); g.arc(a.x, a.y, 3, 0, 7); g.fill(); }
+  else if (t === 'crossline') { seg({x: geo.left, y: a.y}, {x: rightX, y: a.y}); seg({x: a.x, y: geo.plotTop}, {x: a.x, y: geo.h - geo.axisH}); }
+  else if (t === 'extended') { seg(farPt(a, b, -1), farPt(a, b, 1)); }
+  else if (t === 'info') {
+    seg(a, b); const dp = d.b.p - d.a.p;
+    tag(`${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)}) · ${Math.abs(bars)} velas`, b.x + 8, b.y + (b.y < a.y ? -14 : 14), '#5b6b83');
+  }
+  else if (t === 'angle') {
+    seg(a, b); dash(() => seg(a, {x: b.x, y: a.y}));
+    const sx = b.x >= a.x ? 1 : -1, ang = Math.atan2(a.y - b.y, Math.abs(b.x - a.x)), deg = ang * 180 / Math.PI;
+    g.beginPath(); if (sx === 1) g.arc(a.x, a.y, 26, 0, -ang, ang > 0); else g.arc(a.x, a.y, 26, Math.PI, Math.PI + ang, ang < 0); g.lineWidth = 1; g.stroke(); g.lineWidth = lw;
+    tag(deg.toFixed(1) + '°', a.x + sx * 34, a.y - 12, '#5b6b83', sx === 1 ? 'left' : 'right');
+  }
+  else if (t === 'pricerange') {
+    const x1 = Math.min(a.x, b.x), w = Math.max(60, Math.abs(b.x - a.x)), mx = x1 + w / 2, dp = d.b.p - d.a.p, mc = dp >= 0 ? '#20bf9f' : '#f06b79';
+    g.fillStyle = mc; g.strokeStyle = mc; fillA(.12, () => g.fillRect(x1, Math.min(a.y, b.y), w, Math.abs(b.y - a.y)));
+    seg({x: x1, y: a.y}, {x: x1 + w, y: a.y}); seg({x: x1, y: b.y}, {x: x1 + w, y: b.y}); seg({x: mx, y: a.y}, {x: mx, y: b.y}); arrowHead({x: mx, y: a.y}, {x: mx, y: b.y}, 8);
+    tag(`${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)})`, mx + 8, (a.y + b.y) / 2, mc);
+  }
+  else if (t === 'daterange') {
+    const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = geo.plotTop, y2 = geo.h - geo.axisH, ym = (a.y + b.y) / 2, mc = '#548fff';
+    g.fillStyle = mc; g.strokeStyle = mc; fillA(.08, () => g.fillRect(x1, y1, x2 - x1, y2 - y1));
+    seg({x: x1, y: y1}, {x: x1, y: y2}); seg({x: x2, y: y1}, {x: x2, y: y2}); seg({x: a.x, y: ym}, {x: b.x, y: ym}); arrowHead({x: a.x, y: ym}, {x: b.x, y: ym}, 8);
+    tag(`${Math.abs(bars)} velas · ${fmtDur(d.b.t - d.a.t)}`, (x1 + x2) / 2 - 40, ym - 14, mc);
+  }
+  else if (t === 'ellipse') {
+    g.beginPath(); g.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.max(1, Math.abs(b.x - a.x) / 2), Math.max(1, Math.abs(b.y - a.y) / 2), 0, 0, Math.PI * 2); fillA(.12, () => g.fill()); g.stroke();
+  }
+  else if (t === 'triangle') {
+    if (!d.c) seg(a, b); else { poly([a, b, px(d.c)], true); fillA(.12, () => g.fill()); g.stroke(); }
+  }
+  else if (t === 'pitchfork') {
+    if (!d.c) { seg(a, b); return; }
+    const R = pitchRays(d); poly([R[1][0], R[1][1], R[2][1], R[2][0]], true); fillA(.08, () => g.fill());
+    R.forEach(([p, q], k) => { g.lineWidth = k === 0 ? lw : 1.2; seg(p, q); }); g.lineWidth = lw; dash(() => seg(R[1][0], R[2][0]));
+  }
+  else if (t === 'fibtime') {
+    const i0 = idxOfTime(d.a.t), u = idxOfTime(d.b.t) - i0; dash(() => seg(a, b)); g.font = '10px system-ui';
+    FIBTIME.forEach(nn => { const x = X(i0 + u * nn); if (x < geo.left - 1 || x > rightX) return; g.globalAlpha = nn <= 1 ? 1 : .7; g.lineWidth = 1; g.strokeStyle = col; seg({x, y: geo.plotTop}, {x, y: geo.h - geo.axisH}); g.globalAlpha = 1; g.fillStyle = col; g.fillText(String(nn), x + 3, geo.plotTop + 11); }); g.lineWidth = lw;
+  }
+  else if (t === 'fibfan') {
+    g.font = '10px system-ui';
+    fanRays(d).forEach(([p, q], k) => { const lv = FANLV[k]; g.globalAlpha = lv === 1 ? 1 : .8; g.lineWidth = lv === 1 ? lw : 1; g.strokeStyle = col; seg(p, q); g.globalAlpha = 1; g.fillStyle = col; g.fillText(String(lv), b.x + 4, a.y + (b.y - a.y) * lv + 3); }); g.lineWidth = lw;
+  }
+  else if (t === 'fibcircle') {
+    const {m, R} = fibCircle(d); dash(() => seg(a, b)); g.font = '10px system-ui';
+    FIBCIRC.forEach(lv => { g.globalAlpha = lv === 1 ? 1 : .75; g.lineWidth = 1; g.strokeStyle = col; g.beginPath(); g.arc(m.x, m.y, R * lv, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1; g.fillStyle = col; g.fillText(String(lv), m.x + 3, m.y - R * lv - 2); }); g.lineWidth = lw;
+  }
+  else if (t === 'note') {
+    g.font = '12px system-ui'; const txt = d.text || '', w = g.measureText(txt).width + 14, h = 24, bx = a.x - 6, by = a.y - h - 9;
+    g.fillStyle = col; fillA(.95, () => { roundRect(bx, by, w, h, 5); g.fill(); });
+    g.beginPath(); g.moveTo(a.x - 2, by + h - 1); g.lineTo(a.x + 7, by + h - 1); g.lineTo(a.x, a.y); g.closePath(); g.fill();
+    g.fillStyle = readableOn(col); g.fillText(txt, bx + 7, by + 16);
+  }
+  else if (t === 'label') {
+    g.font = 'bold 11px system-ui'; const txt = fmt(d.a.p), w = g.measureText(txt).width + 12, bx = a.x + 10;
+    g.beginPath(); g.arc(a.x, a.y, 3, 0, 7); g.fill(); seg(a, {x: bx, y: a.y});
+    g.fillStyle = col; roundRect(bx, a.y - 9, w, 18, 4); g.fill(); g.fillStyle = readableOn(col); g.fillText(txt, bx + 6, a.y + 4);
+  }
+  else if (t === 'arrowup' || t === 'arrowdown') {
+    const s = t === 'arrowup' ? 1 : -1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x - 9, a.y + 14 * s); g.lineTo(a.x - 3.5, a.y + 14 * s); g.lineTo(a.x - 3.5, a.y + 28 * s); g.lineTo(a.x + 3.5, a.y + 28 * s); g.lineTo(a.x + 3.5, a.y + 14 * s); g.lineTo(a.x + 9, a.y + 14 * s); g.closePath(); g.fill();
+  }
+}
 function drawBrush(d, selected, col) {
   const P = d.pts.map(q => ({x: X(idxOfTime(q[0])), y: Y(q[1])})); if (P.length < 2) return;
   g.save(); g.lineCap = 'round'; g.lineJoin = 'round'; g.setLineDash([]);
   const trace = () => { g.beginPath(); g.moveTo(P[0].x, P[0].y); for (let i = 1; i < P.length - 1; i++) g.quadraticCurveTo(P[i].x, P[i].y, (P[i].x + P[i + 1].x) / 2, (P[i].y + P[i + 1].y) / 2); g.lineTo(P[P.length - 1].x, P[P.length - 1].y); };
   if (selected) { g.strokeStyle = '#fff'; g.globalAlpha = .35; g.lineWidth = d.w + 6; trace(); g.stroke(); g.globalAlpha = 1; }
-  g.strokeStyle = d.col || col; g.lineWidth = d.w || 3; trace(); g.stroke(); g.restore();
+  g.strokeStyle = d.col || col; g.lineWidth = d.w || 3; if (d.hl) g.globalAlpha = .35; trace(); g.stroke(); g.restore();
 }
 function drawShape(d, selected, col, textCol) {
   if (d.type === 'brush') { drawBrush(d, selected, col); return; }
@@ -1812,6 +2119,7 @@ function drawShape(d, selected, col, textCol) {
     g.setLineDash([4, 4]); g.lineWidth = 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); g.setLineDash([]);
   }
   drawShapeExtra(d, a, b, rightX, col);
+  drawShapeNew(d, a, b, rightX, col, selected);
   if (selected) for (const hnd of handlesOf(d)) { g.fillStyle = '#fff'; g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(hnd.x, hnd.y, 7, 0, 7); g.fill(); g.stroke(); }
 }
 
@@ -1830,8 +2138,8 @@ area.addEventListener('pointerdown', e => { stopMotion();
   const onPriceAxis = pt.x >= geo.w - geo.right - 4 && pt.y <= geo.plotTop + geo.plotH + 8, onTimeAxis = pt.y >= geo.h - 34 && pt.x < geo.w - geo.right;
   if (onPriceAxis || onTimeAxis) { // arrastrar la barra derecha = escala de precio · barra inferior = escala de tiempo
     gest.mode = onPriceAxis ? 'scaleY' : 'scaleX'; gest.min0 = geo.min; gest.max0 = geo.max; gest.vis0 = visible; gest.pan1 = pan; cross = null;
-  } else if (drawTool === 'brush' && (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH || pt.x < geo.left || pt.x > geo.left + geo.plotW)) { gest.mode = 'ignore'; toast('El pincel dibuja sobre el gráfico de precio'); }
-  else if (drawTool === 'brush') { gest.mode = 'brush'; selectedId = null; brushLive = [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]; gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); }
+  } else if (isBrushTool(drawTool) && (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH || pt.x < geo.left || pt.x > geo.left + geo.plotW)) { gest.mode = 'ignore'; toast('El pincel dibuja sobre el gráfico de precio'); }
+  else if (isBrushTool(drawTool)) { gest.mode = 'brush'; selectedId = null; brushLive = [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]; gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); }
   else if (drawTool) gest.start = snapPoint(pt);
   else if (selectedId && gest.mode === 'pending') {
     const d = getDrawings().find(x => x.id === selectedId);
@@ -1858,7 +2166,7 @@ area.addEventListener('pointermove', e => {
   else if (gest.mode === 'handle') {
     const arr = getDrawings(), d = arr.find(x => x.id === selectedId); if (!d) return;
     const s = snapPoint(pt);
-    if (d.type === 'horizontal') d.a = {t: d.a.t, p: s.p}; else if (d.type === 'vertical') d.a = {t: s.t, p: d.a.p}; else d[gest.handle] = s;
+    if (d.type === 'horizontal') d.a = {t: d.a.t, p: s.p}; else if (d.type === 'vertical') d.a = {t: s.t, p: d.a.p}; else if (/^p\d+$/.test(gest.handle) && d.pts) { d.pts[+gest.handle.slice(1)] = s; d.a = d.pts[0]; } else d[gest.handle] = s;
     scheduleRender();
   }
   else if (gest.mode === 'scaleY') { // arriba = agrandar · abajo = achicar
@@ -1873,7 +2181,7 @@ area.addEventListener('pointermove', e => {
     if (priceMan) { if (gest.pm0 == null) gest.pm0 = {min: priceMan.min, max: priceMan.max}; const dy = (e.clientY - gest.y0) / geo.plotH * (gest.pm0.max - gest.pm0.min); priceMan = {min: gest.pm0.min + dy, max: gest.pm0.max + dy}; } // con escala manual también se mueve en vertical
     scheduleRender();
   }
-  else if (drawTool && gest.moved && !ONEPT.includes(drawTool)) { preview = pending2 ? {a: pending2.a, b: pending2.b, c: snapPoint(pt)} : {a: gest.start, b: snapPoint(pt)}; scheduleRender(); }
+  else if (drawTool && gest.moved && !ONEPT.includes(drawTool) && !MULTI[drawTool]) { preview = pending2 ? {a: pending2.a, b: pending2.b, c: snapPoint(pt)} : {a: gest.start, b: snapPoint(pt)}; scheduleRender(); }
 });
 function endPointer(e, cancelled) {
   const had = ptrs.delete(e.pointerId);
@@ -1892,6 +2200,12 @@ function endPointer(e, cancelled) {
   if (gs.mode === 'pan') { if (!cancelled && gs.vel && performance.now() - (gs.tl || 0) < 90) inertia(gs.vel); return; }
   if (!geo) return;
   const pt = local(e);
+  if (drawTool && MULTI[drawTool]) {
+    const q = snapPoint(pt), last = multi[multi.length - 1];
+    if (last) { const A = px(last), B = px(q); if (Math.hypot(A.x - B.x, A.y - B.y) < 8) return; }
+    multi.push(q); if (multi.length >= MULTI[drawTool].n) commitMulti(); else { updateDrawUI(); scheduleRender(); }
+    return;
+  }
   if (drawTool) {
     if (pending2) { const {a, b} = pending2; pending2 = null; preview = null; commitDrawing(a, b, snapPoint(pt)); return; }
     if (ONEPT.includes(drawTool)) { commitDrawing(snapPoint(pt)); return; }
@@ -1961,7 +2275,7 @@ document.addEventListener('keydown', e => {
   if (!typing && selectedId && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); deleteSelected(); return; }
   if (e.key !== 'Escape') return;
   if (selectedId) { selectedId = null; updateDrawUI(); render(); }
-  closeSheet(); if (drawTool) { drawTool = ''; pending = null; pending2 = null; preview = null; updateDrawUI(); }
+  closeSheet(); if (drawTool) { drawTool = ''; pending = null; pending2 = null; multi = []; preview = null; updateDrawUI(); }
   document.body.classList.remove('expanded'); syncFullscreenLabel(); requestAnimationFrame(render);
 });
 
@@ -2528,12 +2842,13 @@ async function initCloud() {
 
 /* ───────── Ancho de los paneles laterales (solo escritorio): arrastrar, doble clic para ocultar ───────── */
 (function layoutSplit() {
-  const main = document.querySelector('main'), KEY = 'cct_layout_v1', LIM = {wl: [230, 520, 270], side: [260, 680, 310]};
+  const main = document.querySelector('main'), KEY = 'cct_layout_v1', LIM = {wl: [230, 520, 270], side: [260, 680, 310]}; // wl (columna izquierda) ya no se redimensiona: ahora es la barra de dibujo
   let L = {}; try { L = JSON.parse(lsGet(KEY) || '{}') || {}; } catch {}
   const wide = () => window.innerWidth;
   const apply = () => {
     const mx = k => Math.min(LIM[k][1], Math.max(LIM[k][0], wide() * (k === 'wl' ? .4 : .45)));
-    for (const [k, v] of [['wl', '--wl-w'], ['side', '--side-w']]) {
+    main.style.removeProperty('--wl-w'); document.body.classList.remove('wl-off');
+    for (const [k, v] of [['side', '--side-w']]) {
       const off = L[k + 'Off'], w = L[k] ? Math.min(mx(k), Math.max(LIM[k][0], L[k])) : null;
       document.body.classList.toggle(k + '-off', !!off);
       if (off) main.style.setProperty(v, '0px'); else if (w) main.style.setProperty(v, w + 'px'); else main.style.removeProperty(v);
@@ -2544,7 +2859,7 @@ async function initCloud() {
     scheduleRender();
   };
   const store = () => { try { localStorage.setItem(KEY, JSON.stringify(L)); } catch {} };
-  const curW = k => { const el = document.getElementById(k === 'wl' ? 'watchView' : (document.body.dataset.side || 'newsView')); return Math.round(el.getBoundingClientRect().width) || LIM[k][2]; };
+  const curW = k => { const el = document.getElementById(k === 'wl' ? 'watchView' : (document.body.dataset.side || 'watchView')); return Math.round(el.getBoundingClientRect().width) || LIM[k][2]; };
   const bind = (id, k) => {
     const el = document.getElementById(id);
     el.addEventListener('pointerdown', e => {
@@ -2558,7 +2873,7 @@ async function initCloud() {
     el.addEventListener('dblclick', e => { if (!e.target.closest('.split-btn')) toggle(); });
     el.querySelector('.split-btn').addEventListener('click', toggle);
   };
-  bind('splitL', 'wl'); bind('splitR', 'side');
+  bind('splitR', 'side');
   // al cambiar de panel derecho (indicadores / alertas / ajustes) se mantiene el ancho; si estaba oculto, se muestra al elegir una pestaña
   document.querySelectorAll('.side-tabs button').forEach(b => b.addEventListener('click', () => { if (L.sideOff) { L.sideOff = false; store(); apply(); } }));
   window.addEventListener('resize', () => { if (isDesktop()) apply(); });
@@ -2566,9 +2881,12 @@ async function initCloud() {
 })();
 
 /* ───────── Arranque ───────── */
-renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); updateDrawUI(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
+renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); buildRail(); updateDrawUI(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
 if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud(); refreshPop();
+
+/* Solo para pruebas automáticas: se activa añadiendo ?cct_debug=1 a la dirección */
+if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
 
 /* ───────── Contexto para la IA: lo que el usuario ve en el gráfico ───────── */
 window.CCT_getAIContext = function () {

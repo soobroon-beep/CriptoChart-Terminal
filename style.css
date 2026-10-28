@@ -326,3 +326,41 @@ body.pane #chartView{display:flex!important;height:100dvh}
   .chart-view .more-lbl{display:inline}
   .chart-view .more-group button{width:100%;padding:12px 8px;font-size:12px;text-align:center}
 }
+
+/* ───────── Escritorio: barra de dibujo a la izquierda y «Mi seguimiento» en el panel derecho ───────── */
+.tool-rail{display:none}
+.rail-fly{position:fixed;z-index:70;min-width:250px;max-height:calc(100dvh - 16px);overflow-y:auto;background:var(--raised);border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.55);padding:6px}
+.rail-fly h4{margin:4px 10px 6px;font-size:10px;letter-spacing:1.1px;color:var(--muted);text-transform:uppercase}
+.rail-fly button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:8px;background:none;color:var(--text);font-size:13px;text-align:left;cursor:pointer}
+.rail-fly button:hover{background:var(--surface)}
+.rail-fly button.on{color:var(--accent)}
+.rail-fly .ti{display:inline-grid;place-items:center;width:22px;color:var(--muted)}
+.rail-fly button.on .ti,.rail-fly button:hover .ti{color:var(--accent)}
+.sheet-item .tool-line{display:inline-flex;align-items:center;gap:10px}
+.sheet-item .tool-line .ti{display:inline-grid;place-items:center;color:var(--accent)}
+@media(min-width:1024px){
+  main{--wl-w:50px!important}
+  .tool-rail{grid-area:watch;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 10px;border-right:1px solid var(--line);background:var(--surface);overflow-y:auto;overflow-x:hidden;scrollbar-width:none;min-height:0;z-index:3}
+  .tool-rail::-webkit-scrollbar{display:none}
+  .rail-btn{position:relative;flex:0 0 auto;width:40px;height:38px;border:0;border-radius:8px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer;padding:0}
+  .rail-btn:hover{background:var(--raised);color:var(--text)}
+  .rail-btn.on{background:var(--raised);color:var(--accent)}
+  .rail-btn.grp{padding-right:6px}
+  .rail-btn .caret{position:absolute;right:0;top:0;bottom:0;width:11px;border-radius:0 8px 8px 0}
+  .rail-btn .caret::after{content:"";position:absolute;right:2px;bottom:5px;border:3px solid transparent;border-left-color:currentColor;border-right:0;opacity:.7}
+  .rail-btn .caret:hover{background:rgba(255,255,255,.08)}
+  .rail-sep{flex:0 0 auto;width:26px;height:1px;background:var(--line);margin:6px 0}
+  .rail-spacer{flex:1 1 auto;min-height:6px}
+  #splitL{display:none!important}
+  /* «Mi seguimiento» vive en el panel derecho, junto a Noticias */
+  #watchView{display:none!important;grid-area:side;border-right:0;border-left:1px solid var(--line);padding:18px 18px 24px}
+  body[data-side="watchView"] #watchView,body:not([data-side]) #watchView{display:block!important}
+  body:not([data-side]) #newsView{display:none}
+  body.side-off #watchView{display:none!important}
+  .expanded #watchView{display:none!important}
+  /* pantalla completa: la barra de dibujo sigue a la izquierda */
+  .expanded main{grid-template-columns:var(--wl-w) minmax(0,1fr);grid-template-areas:"watch chart"}
+  body.split-v.expanded main{grid-template-columns:var(--wl-w) 1fr 1fr;grid-template-areas:"watch chart pane"}
+  body.split-h.expanded main{grid-template-columns:var(--wl-w) 1fr;grid-template-areas:"watch chart" "watch pane"}
+  body.pane #toolRail{display:none!important}
+}
