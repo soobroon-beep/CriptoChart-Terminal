@@ -44,6 +44,7 @@
   }
 
   /* Dibuja todo el resultado. o = {X, Y, lo, hi, left, right, top, bottom, step, candles, fg, text} */
+  const isZone = b => Math.abs(b.r - b.l) > 12; // caja ancha (zona del POC de 200 velas, cajas de liquidez con texto…): va detrás de las velas para no tapar el precio
   function draw(g, res, o) {
     const {X, Y, lo, hi, left, right, top, bottom, step, candles} = o, P = res.palette, col = i => (i === null || i === undefined || i < 0) ? null : P[i];
     g.save(); g.setLineDash([]); g.textAlign = 'left';
@@ -113,6 +114,7 @@
     }
     // líneas, cajas y etiquetas dibujadas por el script
     for (const b of res.boxes) {
+      if (o.pass === 'back' ? !isZone(b) : (o.zoneBack && isZone(b))) continue; // zonas anchas sin texto (POC, valor, sentimiento): van detrás de las velas
       if (isn(b.l) || isn(b.r) || isn(b.t) || isn(b.b)) continue;
       let x1 = X(b.l), x2 = X(b.r); if (b.extend === 'left' || b.extend === 'both') x1 = left; if (b.extend === 'right' || b.extend === 'both') x2 = right;
       const y1 = Y(b.t), y2 = Y(b.b); g.fillStyle = profileRowFill(b, col(b.fci)) || 'transparent'; g.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
