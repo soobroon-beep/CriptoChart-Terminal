@@ -5,7 +5,7 @@
     ['principal', 'Naranja sobre blanco'], ['turquesa', '01 Turquesa'],
     ['naranja', '02 Naranja'], ['cobalto', '03 Cobalto'], ['lavanda', '04 Lavanda'],
     ['lima', '05 Lima'], ['durazno', '06 Durazno'], ['bosque', '07 Bosque'],
-    ['fucsia', '08 Fucsia'], ['menta', '09 Menta'], ['arena', '10 Arena']
+    ['fucsia', '08 Fucsia'], ['menta', '09 Menta'], ['arena', '10 Arena'], ['vortex', '11 Vortex']
   ];
   const key = 'cct_app_icon_v1', valid = id => variants.some(v => v[0] === id);
   const query = new URLSearchParams(location.search).get('appIcon');

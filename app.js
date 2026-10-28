@@ -1450,7 +1450,7 @@ function renderCore() {
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
   const left = 6, right = 64, axisH = 22, top0 = 6;
-  const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH0 = state.indicators.rsi ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH0 = state.indicators.volume ? Math.round(Math.max(40, h * (hasTbl ? .07 : .12))) : 0;
+  const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH0 = state.indicators.rsi ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH0 = 0; // el volumen ya no tiene panel propio: se dibuja sobre las velas, abajo del gráfico
   const cap = Math.max(40, h - axisH - 80 - top0); let rsiH = rsiH0 && paneH.rsi ? clamp(paneH.rsi, 40, cap) : rsiH0, volH = volH0 && paneH.vol ? clamp(paneH.vol, 36, cap) : volH0;
   const panelKeys = [...PANELS.filter(k => state.indicators[k] && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
   const isC = k => paneH[k] > 0;
@@ -1542,6 +1542,12 @@ function renderCore() {
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailFill(ind.trail, lo, hi);
   // velas
   const barW = clamp(step * .66, 1.5, 16), limeBars = !!(state.indicators.nnLiq && state.indicators.nnLiqBars && ind.liq);
+  if (state.indicators.volume && candles.length) { // volumen en el mismo panel de las velas: barras al fondo (detrás de las velas), ocupan el ~18 % inferior
+    const vBot = plotTop + plotH, vH = Math.round(plotH * .18); let maxV = 1;
+    for (let i = lo; i < hi; i++) if (candles[i]) maxV = Math.max(maxV, candles[i].v);
+    for (let i = lo; i < hi; i++) { const d = candles[i]; if (!d) continue; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#20bf9faa' ? up + '55' : sp('volume', 'up')) : (sp('volume', 'down') === '#f06b79aa' ? down + '55' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * vH); g.fillRect(X(i) - clamp(step * .66, 1.5, 16) / 2, vBot - bh, clamp(step * .66, 1.5, 16), bh); }
+    g.fillStyle = text; legLabel('VOL', left + 4, vBot - 6, {t: 'std', key: 'volume'});
+  }
   const pineBar = {};
   for (const {r} of pr) for (const e of r.barcolors) for (const [bar, ci] of e.pts) pineBar[bar + (e.offset || 0)] = r.palette[ci];
   const ct = state.ctype || 'candles';
