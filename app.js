@@ -1483,7 +1483,9 @@ function renderCore() {
   const count = clamp(visible, 15, 400);
   pan = clamp(pan, -Math.floor(count * .4), Math.max(0, n - Math.ceil(count * .3)));
   const end = n - pan, start = end - count, step = plotW / count;
-  const lo = Math.max(0, Math.floor(start)), hi = Math.min(n, Math.ceil(end));
+  // Al mover el gráfico hacia atrás, las últimas velas pasan al margen derecho (el que se reserva para el perfil de volumen): se siguen dibujando ahí, por debajo del perfil,
+  // en vez de desaparecer (antes se cortaban justo donde empezaba el margen y parecía que un cuadro negro las tapaba).
+  const lo = Math.max(0, Math.floor(start)), hi = Math.min(n, Math.ceil(end) + (gutter > 0 ? Math.ceil(gutter / step) + 1 : 0));
   if (hi <= lo) return;
 
   let min = Infinity, max = -Infinity;
