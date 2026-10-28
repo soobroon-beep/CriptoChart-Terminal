@@ -1,6 +1,6 @@
 (() => {
 'use strict';
-/* CryptoChart Terminal · Mobile — JS vanilla, sin dependencias.
+/* VORTEX · Powered by Nova Nexus — JS vanilla, sin dependencias.
    Pestañas: Seguimiento · Gráfico · Indicadores · Ajustes. Datos reales de Binance Spot (REST + WebSocket). */
 
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
@@ -289,7 +289,7 @@ function fireAlert(a, price) {
   a.on = false; a.firedAt = Date.now(); a.firedPrice = price;
   const msg = `${base(a.symbol)} ${a.dir === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`;
   toast('🔔 ' + msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
-  try { if (window.Notification && Notification.permission === 'granted') new Notification('CryptoChart · Alerta', {body: msg}); } catch {}
+  try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {}
 }
 function checkAlerts(sym, price) {
   if (!Number.isFinite(price)) return;
@@ -392,7 +392,7 @@ function fireInd(a, info) {
   a.firedAt = Date.now(); a.firedInfo = info; if (a.repeat === 'once') a.on = false;
   const msg = `${base(a.symbol)} ${a.interval} · ${a.label}${info ? ' · ' + info : ''}${a.note ? ' · ' + a.note : ''}`;
   toast('🔔 ' + msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
-  try { if (window.Notification && Notification.permission === 'granted') new Notification('CryptoChart · Alerta', {body: msg}); } catch {}
+  try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {}
 }
 async function lastClosedBar(sym, itv) {
   const raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${itv}&limit=2`), now = Date.now(), cl = raw.filter(d => d[6] < now);
@@ -843,7 +843,11 @@ const IC = {
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   eyeoff: '<path d="M3 3l18 18M10.6 6.1A9.6 9.6 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3.2 3.9M6.5 7.6A16 16 0 0 0 2 12s4 7 10 7a9.5 9.5 0 0 0 4.2-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
-  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/>',
+  swap: '<path d="M8 4v16M8 4 5 7M8 4l3 3M16 20V4M16 20l-3-3M16 20l3-3"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  chevron: '<path d="m6 9 6 6 6-6"/>'
 };
 const TOOL_GROUPS = [
   {id: 'lines', name: 'Líneas', tools: [
@@ -1300,7 +1304,17 @@ const LEG_FONT = '600 13px system-ui';
 const legBtnH = () => (window.matchMedia && matchMedia('(max-width:760px)').matches ? 26 : 22);
 const legStep = () => legBtnH() + 4; // separación vertical entre filas con botones
 function legAt(text, x, y, act, dim) { legRows.push({x: x + g.measureText(text).width + 8, y: y - Math.round(legBtnH() / 2 + 5), act, dim: !!dim}); }
-function legLabel(text, x, y, act, dim) { const f = g.font; g.font = LEG_FONT; g.fillText(text, x, y); legAt(text, x, y, act, dim); g.font = f; }
+/* Leyenda de indicadores plegable: cerrada solo se ve «N indicadores»; abierta muestra nombres, valores y botones (ocultar, ajustes, eliminar) */
+let legOpen = lsGet('cct_legOpen_v1') === '1', legN = 0;
+function legLabel(text, x, y, act, dim) { legN++; if (!legOpen) return; const f = g.font; g.font = LEG_FONT; g.fillText(text, x, y); legAt(text, x, y, act, dim); g.font = f; }
+function syncLegToggle() {
+  const b = $('#legToggle'); if (!b) return; b.hidden = !legN; if (!legN) return;
+  $('#legCount').textContent = legN === 1 ? '1 indicador' : legN + ' indicadores';
+  b.classList.toggle('open', legOpen); b.setAttribute('aria-expanded', legOpen ? 'true' : 'false');
+  b.title = legOpen ? 'Ocultar las opciones de los indicadores' : 'Mostrar los indicadores y sus opciones (ocultar, ajustes, eliminar)';
+}
+(() => { const b = $('#legToggle'); if (!b) return; b.insertAdjacentHTML('beforeend', SV(IC.chevron, 12));
+  b.addEventListener('click', e => { e.stopPropagation(); legOpen = !legOpen; try { localStorage.setItem('cct_legOpen_v1', legOpen ? '1' : '0'); } catch {} legSig = ''; legStruct = ''; $('#legMenu')?.remove(); scheduleRender(); }); })();
 function syncLegend() {
   const box = $('#legendBox'); if (!box || gripDrag) return;
   const sig = grips.map(q => q.key + ':' + Math.round(q.y)).join(',') + '#' + legRows.map(r => [Math.round(r.x), Math.round(r.y), r.act.t, r.act.sid || r.act.key || '', r.dim ? 1 : 0, r.act.pane || ''].join(':')).join('|');
@@ -1316,7 +1330,7 @@ function syncLegend() {
   }
   legStruct = struct;
   box.innerHTML = grips.map(q => `<div class="pane-grip" data-gk="${esc(q.key)}" data-gd="${q.dir}" data-gh="${q.h}" style="top:${Math.round(q.y) - 10}px;left:${geo ? geo.left : 6}px;width:${gw}px" title="Arrastra para cambiar la altura (doble toque: automática)"></div>`).join('') + legRows.map(r => { const a = r.act, id = a.sid || a.key || '', d = `data-leg="${a.t}" data-id="${esc(id)}"`;
-    return `<div class="leg-row" style="left:${Math.round(r.x)}px;top:${Math.round(r.y)}px"><button ${d} data-do="eye" title="${r.dim ? 'Mostrar' : 'Ocultar'}" aria-label="${r.dim ? 'Mostrar' : 'Ocultar'}">${r.dim ? '🙈' : '👁'}</button><button ${d} data-do="set" title="Ajustes" aria-label="Ajustes">⚙</button>${a.t === 'pine' ? `<button ${d} data-do="move" title="Mover de panel" aria-label="Mover de panel">⇅</button>` : ''}<button ${d} data-do="del" title="Eliminar del gráfico" aria-label="Eliminar">✕</button></div>`; }).join('');
+    return `<div class="leg-row" style="left:${Math.round(r.x)}px;top:${Math.round(r.y)}px"><button ${d} data-do="eye" title="${r.dim ? 'Mostrar' : 'Ocultar'}" aria-label="${r.dim ? 'Mostrar' : 'Ocultar'}">${SV(r.dim ? IC.eyeoff : IC.eye, 15)}</button><button ${d} data-do="set" title="Ajustes" aria-label="Ajustes">${SV(IC.gear, 15)}</button>${a.t === 'pine' ? `<button ${d} data-do="move" title="Mover de panel" aria-label="Mover de panel">${SV(IC.swap, 15)}</button>` : ''}<button ${d} data-do="del" title="Eliminar del gráfico" aria-label="Eliminar">${SV(IC.close, 15)}</button></div>`; }).join('');
 }
 document.addEventListener('click', e => {
   const m = e.target.closest('[data-leg-pane]');
@@ -1342,7 +1356,7 @@ document.addEventListener('click', e => {
     state.indicators[id] = false; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast('Indicador apagado: puedes volver a activarlo en Indicadores');
   }
 });
-function render() { renderCore(); syncLegend(); }
+function render() { renderCore(); syncLegend(); syncLegToggle(); }
 (() => {
   const box = $('#legendBox'); if (!box) return; let drag = null;
   box.addEventListener('pointerdown', e => {
@@ -1416,7 +1430,7 @@ function renderCore() {
   const n = candles.length; if (!n) { geo = null; return; }
 
   const pineKeyNow = `${state.symbol}|${state.interval}|${candles[0].t}`;
-  legRows = [];
+  legRows = []; legN = 0;
   const prAll = activePine().filter(p => pineVisibleOn(p, state.interval)).map(p => ({p, r: pineStyled(pineRes[p.sid], p)})).filter(x => x.r && x.r.ok && x.r._key === pineKeyNow), pr = prAll.filter(x => !x.p.hide), pHid = prAll.filter(x => x.p.hide);
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
@@ -1587,9 +1601,9 @@ function renderCore() {
   }
   // leyenda de indicadores
   let ly2 = plotTop + 54; g.font = '12px system-ui'; const LS = legStep();
-  for (const [name, arr, col, , okey] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); const tx = `${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`; g.fillStyle = col; if (okey) legLabel(tx, left + 8, ly2, {t: 'std', key: okey}); else g.fillText(tx, left + 8, ly2); ly2 += LS; }
+  for (const [name, arr, col, , okey] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); const tx = `${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`; g.fillStyle = col; if (okey) legLabel(tx, left + 8, ly2, {t: 'std', key: okey}); else if (legOpen) g.fillText(tx, left + 8, ly2); ly2 += LS; }
 
-  for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += LS; for (const it of CCTPineDraw.legend(r, n - 1).slice(0, 4)) { g.fillStyle = it.color; g.fillText(it.text, left + 8, ly2); ly2 += 17; } }
+  for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += LS; for (const it of legOpen ? CCTPineDraw.legend(r, n - 1).slice(0, 4) : []) { g.fillStyle = it.color; g.fillText(it.text, left + 8, ly2); ly2 += 17; } }
   for (const {p, r} of pHid) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)} (oculto)`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); g.globalAlpha = 1; ly2 += LS; }
   if (novaOn() && ind.nn) { const tx = 'Nova Nexus'; g.fillStyle = '#11cf77'; legLabel(tx, left + 8, ly2, {t: 'nova'}); ly2 += LS; }
   if (state.indicators.supertrend && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#20bf9f' : '#f06b79'; { const tx = `Supertrend ${dv < 0 ? '↑' : '↓'}  ${fmt((dv < 0 ? ind.stUp : ind.stDn)[j])}`; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += LS; } }
@@ -2128,7 +2142,7 @@ const area = $('#chartArea'), ptrs = new Map();
 let gest = null, pinch = null, lastTap = null, brushLive = null;
 const local = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
 area.addEventListener('pointerdown', e => { stopMotion();
-  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.sel-bar')) return;
+  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.sel-bar,.leg-toggle')) return;
   try { area.setPointerCapture(e.pointerId); } catch {} ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   if (!geo) return;
   if (ptrs.size === 2) { startPinch(); return; }
@@ -2258,7 +2272,7 @@ function theme() { if (typeof pushPaneTheme === 'function') pushPaneTheme(); doc
 $('#themeBtn').onclick = $('#themeSetting').onclick = () => { state.light = !state.light; save(); theme(); };
 $('#exportData').onclick = () => {
   const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'}), url = URL.createObjectURL(blob), a = document.createElement('a');
-  a.href = url; a.download = 'cryptochart-mobile-config.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 500);
+  a.href = url; a.download = 'vortex-config.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 500);
 };
 $('#importFile').onchange = async e => {
   try {

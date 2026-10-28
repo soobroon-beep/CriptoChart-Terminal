@@ -9,7 +9,7 @@
   root.innerHTML = `
     <div class="section-label">APLICACIÓN EN TU CELULAR</div>
     <div class="pwa-card">
-      <div class="pwa-preview"><img data-app-icon width="64" height="64" alt="Ícono seleccionado"><div><b>CryptoChart Terminal</b><small id="appIconName"></small></div></div>
+      <div class="pwa-preview"><img data-app-icon width="64" height="64" alt="Ícono seleccionado"><div><b>VORTEX</b><small id="appIconName"></small></div></div>
       <p class="small-note">Elige el ícono antes de instalar. Tu selección se guarda en este navegador.</p>
       <div class="pwa-icons" role="group" aria-label="Ícono de la aplicación"></div>
       <button class="primary" id="installApp" type="button">Instalar aplicación</button>
@@ -44,7 +44,7 @@
   render();
   status.textContent = standalone() ? 'Abierta como aplicación instalada.' : ios ? 'Instala desde el menú Compartir de Safari.' : 'Si tu navegador permite la instalación, podrás iniciarla aquí o desde su menú.';
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); if (icons.selected === icons.initial) promptEvent = e; render(); });
-  window.addEventListener('appinstalled', () => { promptEvent = null; status.textContent = 'Instalación solicitada al sistema. Busca CryptoChart en tu pantalla de inicio.'; render(); });
+  window.addEventListener('appinstalled', () => { promptEvent = null; status.textContent = 'Instalación solicitada al sistema. Busca VORTEX en tu pantalla de inicio.'; render(); });
   button.addEventListener('click', async () => {
     if (icons.selected !== icons.initial) {
       const url = new URL(location.href); url.searchParams.set('appIcon', icons.selected); url.searchParams.set('install', '1');

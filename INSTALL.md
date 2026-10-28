@@ -1,4 +1,4 @@
-# Instalar CryptoChart Terminal
+# Instalar VORTEX
 
 Abre https://soobroon-beep.github.io/CriptoChart-Terminal/ desde el navegador de tu celular.
 

@@ -1,7 +1,7 @@
 {
   "id": "../",
-  "name": "CryptoChart Terminal",
-  "short_name": "CryptoChart",
+  "name": "VORTEX · Powered by Nova Nexus",
+  "short_name": "VORTEX",
   "lang": "es",
   "description": "Gráficos, seguimiento e indicadores de criptomonedas.",
   "start_url": "../?appIcon=lavanda",

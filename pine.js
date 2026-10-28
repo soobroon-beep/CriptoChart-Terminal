@@ -1,4 +1,4 @@
-/* CryptoChart Terminal · intérprete de Pine Script v5 (subconjunto)
+/* VORTEX · intérprete de Pine Script v5 (subconjunto)
    - Lexer + parser + evaluador propios. NO usa eval ni Function: el código pegado nunca se ejecuta como JavaScript.
    - Puro y sin DOM: corre igual en un Web Worker (aislado, con tiempo límite), en Node (pruebas) o en línea como último recurso.
    - Solo análisis: no hay órdenes reales. Lo que no soporta se avisa con su línea; nada se omite en silencio.

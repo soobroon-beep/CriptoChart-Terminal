@@ -19,7 +19,7 @@ const ticker = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT
     if (u.includes('api.binance.com')) return route.fulfill({json: ticker, headers: {'access-control-allow-origin': '*'}});
     if (u.startsWith('http://localhost')) return route.continue(); return route.abort(); });
   const sheetOpen = () => page.evaluate(() => document.querySelector('#sheet').classList.contains('open'));
-  await page.goto(`http://localhost:${port}/`); await page.waitForTimeout(500);
+  await page.addInitScript(() => { try { localStorage.setItem("cct_legOpen_v1", "1"); } catch (e) {} }); await page.goto(`http://localhost:${port}/`); await page.waitForTimeout(500);
   if (mode !== 'desktop') await page.click('[data-view="chartView"]'); await page.waitForTimeout(500);
   const addScript = async (code, name) => {
     await page.evaluate(() => document.querySelector('[data-pine-new]').click()); await page.waitForTimeout(150);

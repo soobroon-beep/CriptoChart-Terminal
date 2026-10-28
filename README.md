@@ -1,4 +1,4 @@
-# CryptoChart Terminal — versión móvil
+# VORTEX — Powered by Nova Nexus
 
 ## Inicio
 Abre `index.html` desde un servidor estático HTTPS (por ejemplo, GitHub Pages). No hay compilación ni dependencias: solo `index.html`, `style.css` y `app.js`.

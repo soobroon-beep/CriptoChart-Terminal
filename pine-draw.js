@@ -1,4 +1,4 @@
-/* CryptoChart Terminal · dibujo del resultado de un script de Pine sobre un canvas 2D.
+/* VORTEX · dibujo del resultado de un script de Pine sobre un canvas 2D.
    Puro (sin globales de la app): recibe el contexto g, el resultado de CCTPine.run y las funciones de escala. */
 (function (root) {
   'use strict';

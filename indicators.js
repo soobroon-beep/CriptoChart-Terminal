@@ -1,4 +1,4 @@
-/* Indicadores técnicos de CryptoChart Terminal — funciones puras, sin DOM (se prueban con Node: tests/indicators.test.js).
+/* Indicadores técnicos de VORTEX — funciones puras, sin DOM (se prueban con Node: tests/indicators.test.js).
    Las series devuelven `null` donde el valor aún no existe. Definiciones alineadas con TradingView (ta.*). */
 (function (root) {
   'use strict';
