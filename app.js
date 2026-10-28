@@ -1546,7 +1546,6 @@ function renderCore() {
     const vBot = plotTop + plotH, vH = Math.round(plotH * .18); let maxV = 1;
     for (let i = lo; i < hi; i++) if (candles[i]) maxV = Math.max(maxV, candles[i].v);
     for (let i = lo; i < hi; i++) { const d = candles[i]; if (!d) continue; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#20bf9faa' ? up + '55' : sp('volume', 'up')) : (sp('volume', 'down') === '#f06b79aa' ? down + '55' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * vH); g.fillRect(X(i) - clamp(step * .66, 1.5, 16) / 2, vBot - bh, clamp(step * .66, 1.5, 16), bh); }
-    g.fillStyle = text; legLabel('VOL', left + 4, vBot - 6, {t: 'std', key: 'volume'});
   }
   const pineBar = {};
   for (const {r} of pr) for (const e of r.barcolors) for (const [bar, ci] of e.pts) pineBar[bar + (e.offset || 0)] = r.palette[ci];
@@ -1624,7 +1623,8 @@ function renderCore() {
   let ly2 = plotTop + 54; g.font = '12px system-ui'; const LS = legStep();
   for (const [name, arr, col, , okey] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); const tx = `${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`; g.fillStyle = col; if (okey) legLabel(tx, left + 8, ly2, {t: 'std', key: okey}); else if (legOpen) g.fillText(tx, left + 8, ly2); ly2 += LS; }
 
-  for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += LS; for (const it of legOpen ? CCTPineDraw.legend(r, n - 1).slice(0, 4) : []) { g.fillStyle = it.color; g.fillText(it.text, left + 8, ly2); ly2 += 17; } }
+  if (state.indicators.volume && candles.length) { g.fillStyle = text; legLabel('Volumen', left + 8, ly2, {t: 'std', key: 'volume'}); ly2 += LS; }
+  for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += LS; }
   for (const {p, r} of pHid) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)} (oculto)`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); g.globalAlpha = 1; ly2 += LS; }
   if (novaOn() && ind.nn) { const tx = 'Nova Nexus'; g.fillStyle = '#11cf77'; legLabel(tx, left + 8, ly2, {t: 'nova'}); ly2 += LS; }
   if (state.indicators.supertrend && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#20bf9f' : '#f06b79'; { const tx = `Supertrend ${dv < 0 ? '↑' : '↓'}  ${fmt((dv < 0 ? ind.stUp : ind.stDn)[j])}`; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += LS; } }
@@ -2925,6 +2925,11 @@ fetchTicker(); loadCandles(); initCloud(); refreshPop();
 /* Solo para pruebas automáticas: se activa añadiendo ?cct_debug=1 a la dirección */
 if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
 
+/* ───────── Instantánea del mercado para el «Brief del día» de la IA (las 25 monedas con más volumen en Binance Spot) ───────── */
+window.CCT_getMarketSnapshot = async function () {
+  try { if (!popAll.length) await loadPopTickers(); } catch {}
+  return popAll.slice(0, 25).map(t => ({symbol: base(t.symbol), price: +t.lastPrice, chg24h: +t.priceChangePercent, volUsd: +t.quoteVolume}));
+};
 /* ───────── Contexto para la IA: lo que el usuario ve en el gráfico ───────── */
 window.CCT_getAIContext = function () {
   const n = candles.length; if (n < 30) return null;

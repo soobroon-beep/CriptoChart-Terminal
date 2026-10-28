@@ -378,3 +378,4 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .chart-label .leg-toggle.open svg{transform:rotate(180deg)}
 .leg-row button svg{display:block;margin:auto}
 @media(max-width:760px){.chart-label .leg-toggle{height:24px;font-size:12px;padding:0 9px 0 11px}}
+.ai-brief{width:100%;margin:0 0 8px;padding:11px 14px;font-size:14px}

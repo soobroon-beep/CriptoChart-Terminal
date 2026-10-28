@@ -36,6 +36,7 @@
         <div class="ai-row"><button class="small-button" id="aiSave">Guardar</button><button class="small-button danger" id="aiClear">Borrar clave</button></div>
       </div>
       <div class="ai-log" id="aiLog" aria-live="polite"></div>
+      <button class="primary ai-brief" id="aiBrief" type="button">📰 Brief del día</button>
       <div class="ai-chips" id="aiChips">${['Analiza el gráfico', '¿Cuál es la tendencia?', 'Soportes y resistencias', '¿Cómo van mis indicadores?', 'Noticias que me afectan', 'Calendario económico', '¿Qué escenarios ves?', 'Gestión de riesgo'].map(q => `<button data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
       <form class="ai-form" id="aiForm"><input id="aiInput" placeholder="Pregunta sobre tu gráfico, indicadores o el mercado cripto…" autocomplete="off" maxlength="600"><button class="ai-send" id="aiSend" aria-label="Enviar">➤</button></form>
       <p class="ai-disc">Análisis educativo basado en tus datos. No es asesoría financiera.</p>`;
@@ -46,12 +47,15 @@
     const log = $('#aiLog'); const d = document.createElement('div'); d.className = 'ai-msg ' + role + (extra ? ' ' + extra : '');
     d.innerHTML = role === 'user' ? `<p>${esc(text)}</p>` : md(text); log.appendChild(d); log.scrollTo({top: log.scrollHeight, behavior: 'smooth'}); return d;
   }
-  async function ask(q) {
-    q = String(q || '').trim(); if (!q || st.busy) return; st.busy = true; $('#aiSend').disabled = true; push('user', q);
-    const ctx = window.CCT_getAIContext && window.CCT_getAIContext(), news = window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [], cal = await loadCalendar(), extra = {news, calendar: cal || [], now: Date.now()};
+  const BRIEF_Q = 'Brief del día: resume el mercado cripto de hoy tomando en cuenta el segmento completo, las noticias, el calendario económico y mi gráfico, y dime hacia dónde es más probable que vaya el mercado, con tu propio análisis.';
+  async function ask(q, shown) {
+    q = String(q || '').trim(); if (!q || st.busy) return; st.busy = true; $('#aiSend').disabled = true; push('user', shown || q);
+    const isBrief = AI.intent(q) === 'brief';
+    const ctx = window.CCT_getAIContext && window.CCT_getAIContext(), news = window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [], cal = await loadCalendar(), market = isBrief && window.CCT_getMarketSnapshot ? await window.CCT_getMarketSnapshot() : [], extra = {news, calendar: cal || [], market, now: Date.now()};
     const typing = push('bot', '…', 'typing'); let out, useClaude = st.mode === 'claude' && (st.key || st.proxy) && ctx;
     try {
-      if (!ctx) out = 'Aún no hay un gráfico con velas cargadas. Abre la pestaña **Gráfico**, espera a que cargue y pregúntame de nuevo.';
+      if (!ctx && isBrief) out = AI.briefLocal(null, extra);
+      else if (!ctx) out = 'Aún no hay un gráfico con velas cargadas. Abre la pestaña **Gráfico**, espera a que cargue y pregúntame de nuevo.';
       else if (useClaude && AI.intent(q) !== 'off') { try { out = await AI.askClaude({key: st.key, model: st.model, proxy: st.proxy}, ctx, st.hist, q, extra); } catch (e) { out = '⚠ ' + (e.message || 'No se pudo consultar a Claude') + '\n\nTe respondo con el análisis local:\n\n' + AI.answerLocal(q, ctx, extra); } }
       else out = AI.answerLocal(q, ctx, extra);
     } catch (e) { out = 'Ocurrió un error al analizar: ' + (e.message || e); }
@@ -62,6 +66,7 @@
     root = document.getElementById('aiRoot'); if (!root) return; shell();
     push('bot', 'Hola 👋 Soy tu **analista de gráficos cripto**. Leo tu gráfico abierto con los indicadores que tengas activados, las noticias y el calendario económico.\n\nToca una sugerencia o escríbeme tu pregunta.');
     root.addEventListener('click', e => {
+      if (e.target.closest('#aiBrief')) { ask(BRIEF_Q, '📰 Brief del día'); return; }
       const q = e.target.closest('[data-q]'); if (q) { ask(q.dataset.q); return; }
       if (e.target.closest('#aiGear')) { $('#aiCfg').hidden = !$('#aiCfg').hidden; return; }
       if (e.target.closest('#aiSave')) { st.mode = $('#aiMode').value; st.key = $('#aiKey').value.trim(); st.model = $('#aiModel').value.trim() || 'claude-sonnet-5-5'; st.proxy = $('#aiProxy').value.trim(); ls.set('cct_ai_mode', st.mode); ls.set('cct_ai_key', st.key || null); ls.set('cct_ai_model', st.model); ls.set('cct_ai_proxy', st.proxy || null); $('#aiCfg').hidden = true; badge(); push('bot', st.mode === 'claude' && (st.key || st.proxy) ? 'Modo **Claude** activado: ahora puedo responder preguntas libres sobre cripto usando los datos de tu gráfico.' : 'Modo **Local** activo (sin clave, sin enviar datos).'); return; }

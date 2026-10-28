@@ -189,6 +189,7 @@
     const t = norm(q);
     if (/^(hola|buenas|hey|ayuda|que puedes|que haces|como funcionas)/.test(t) || /\b(que puedes hacer|ayuda)\b/.test(t)) return 'help';
     const g = t.match(/(?:que (?:es|son)|explica(?:me)?|significa|define)\s+(?:el |la |los |las |un |una )?([a-z ]{2,24})/); if (g) { const k = Object.keys(GLOSS).find(k => g[1].includes(k)); if (k) return 'gloss:' + k; }
+    if (/\bbrief\b|resumen (diario|del dia)|panorama (del dia|diario|de hoy)/.test(t)) return 'brief';
     if (!IN_SCOPE.test(t)) return 'off';
     if (/(noticia|news|titular|sentimiento)/.test(t)) return 'news'; if (/(calendario|evento|fomc|\bfed\b|cpi|ipc|inflacion|nominas|nfp|tasas? de interes|dato macro|powell|pib)/.test(t)) return 'calendar';
     if (/(riesgo|stop|\bsl\b|\btp\b|gestion|tamano|apalanc|liquidar)/.test(t)) return 'risk'; if (/(soporte|resistencia|nivel|zona|objetivo|target|techo|piso)/.test(t)) return 'levels';
@@ -197,8 +198,40 @@
     return 'full';
   }
   const HELP = ['Soy tu analista de gráficos cripto. Leo **tu gráfico abierto** (velas, indicadores activados, zonas de Nova Nexus), las **noticias** y el **calendario económico**, y te respondo en español.', '', 'Prueba con:', '- «Analiza el gráfico» · resumen completo', '- «¿Cuál es la tendencia?» · «¿Qué soportes y resistencias ves?»', '- «¿Cómo van mis indicadores?» · «¿Qué dicen las noticias?»', '- «¿Hay eventos del calendario que me afecten?»', '- «¿Qué escenarios ves?» · «¿Cómo manejo el riesgo?»', '- «¿Qué es el RSI?»', '', 'Solo hablo de cripto y de lo que muestran tus datos.'].join('\n');
+  /* Brief del día: mercado cripto en conjunto (amplitud, BTC/ETH), noticias, calendario y el gráfico abierto → inclinación más probable. Educativo, no asesoría. */
+  function briefLocal(ctx, extra) {
+    extra = extra || {}; const now = extra.now || Date.now(), M = Array.isArray(extra.market) ? extra.market.filter(x => x && Number.isFinite(x.chg24h)) : [];
+    const A = ctx ? analyze(ctx) : null, N = newsFor(extra.news, 'BTC', now), C = calendarFor(extra.calendar, now), L = [], pts = [];
+    L.push('### 📰 Brief del día · mercado cripto');
+    if (M.length) {
+      const up = M.filter(x => x.chg24h > 0).length, dn = M.length - up, avg = M.reduce((a, b) => a + b.chg24h, 0) / M.length, by = [...M].sort((a, b) => b.chg24h - a.chg24h);
+      const btc = M.find(x => x.symbol === 'BTC'), eth = M.find(x => x.symbol === 'ETH');
+      L.push(`**Mercado (24 h):** ${up} de ${M.length} monedas grandes suben y ${dn} bajan · promedio ${sgn(avg)}.` + (btc ? ` BTC ${fp(btc.price)} (${sgn(btc.chg24h)})` : '') + (eth ? ` · ETH ${fp(eth.price)} (${sgn(eth.chg24h)})` : '') + '.');
+      L.push(`Mejores: ${by.slice(0, 3).map(x => x.symbol + ' ' + sgn(x.chg24h)).join(', ')} · Peores: ${by.slice(-3).reverse().map(x => x.symbol + ' ' + sgn(x.chg24h)).join(', ')}.`);
+      const breadth = (up - dn) / M.length * 100; pts.push([Math.max(-25, Math.min(25, Math.round(breadth * .35 + avg * 3))), 'amplitud del mercado ' + (breadth > 15 ? 'positiva' : breadth < -15 ? 'negativa' : 'dividida')]);
+      if (btc && eth && M.length > 5) { const alts = M.filter(x => !['BTC', 'ETH'].includes(x.symbol)), am = alts.reduce((a, b) => a + b.chg24h, 0) / (alts.length || 1); L.push(am > btc.chg24h + .5 ? 'Las altcoins van **mejor que BTC** hoy (apetito por riesgo).' : am < btc.chg24h - .5 ? 'Las altcoins van **peor que BTC** hoy (el dinero se refugia en BTC).' : 'Altcoins y BTC se mueven parecido hoy.'); }
+    } else L.push('**Mercado:** no pude leer las cotizaciones generales en este momento.');
+    if (N && N.top.length) {
+      const ic = s => s > 0 ? '🟢' : s < 0 ? '🔴' : '⚪', tone = N.tone === 'positivo' ? 12 : N.tone === 'negativo' ? -12 : 0; pts.push([tone, 'tono de las noticias ' + N.tone]);
+      L.push(`**Noticias del día · tono ${N.tone}:**`, ...N.top.slice(0, 4).map(i => `- ${ic(i.s)} ${i.title} _(${i.src})_`));
+    } else L.push('**Noticias:** aún no hay noticias cargadas (abre la sección Noticias para actualizarlas).');
+    if (C) {
+      L.push(secCalendar(C, now));
+      if (C.soonHigh.length) pts.push([0, 'evento de alto impacto cercano (más volatilidad, dirección incierta)']);
+    }
+    if (A) {
+      pts.push([Math.round(A.score * .5), `gráfico ${A.symbol} ${IV_NAME[A.interval] || A.interval} ${A.bias}`]);
+      L.push(`**Tu gráfico (${A.symbol} · ${IV_NAME[A.interval] || A.interval}):** sesgo **${A.bias}** (puntaje ${A.score > 0 ? '+' : ''}${A.score}) · estructura ${A.structure}` + (A.rsi != null ? ` · RSI ${A.rsi.toFixed(0)}` : '') + '.');
+      if (A.resists[0] || A.supports[0]) L.push(`Niveles a vigilar: ${A.resists[0] ? 'resistencia ' + fp(A.resists[0].p) : ''}${A.resists[0] && A.supports[0] ? ' · ' : ''}${A.supports[0] ? 'soporte ' + fp(A.supports[0].p) : ''}.`);
+    }
+    const tot = pts.reduce((a, b) => a + b[0], 0), lean = tot >= 22 ? 'alcista' : tot >= 8 ? 'ligeramente alcista' : tot <= -22 ? 'bajista' : tot <= -8 ? 'ligeramente bajista' : 'lateral / sin ventaja clara';
+    L.push('### 🎯 Hacia dónde se inclina el mercado', `**Lectura: ${lean}** (puntaje combinado ${tot > 0 ? '+' : ''}${tot}).`, 'Factores: ' + (pts.length ? pts.map(p => p[1]).join('; ') : 'datos insuficientes') + '.');
+    L.push(C && C.soonHigh.length ? '⚠ Con un dato macro de alto impacto en menos de 24 h, conviene esperar a la reacción antes de apostar por una dirección.' : 'Si el precio rompe el nivel clave con volumen, la lectura gana fuerza; si lo pierde, se invalida.');
+    return L.join('\n\n') + '\n\n' + DISC;
+  }
   function answerLocal(question, ctx, extra) {
-    extra = extra || {}; const now = extra.now || Date.now(), it = intent(question), A = analyze(ctx);
+    extra = extra || {}; if (intent(question) === 'brief') return briefLocal(ctx, extra);
+    const now = extra.now || Date.now(), it = intent(question), A = analyze(ctx);
     if (it === 'help') return HELP;
     if (it.startsWith('gloss:')) return GLOSS[it.slice(6)];
     if (it === 'off') return 'Solo puedo ayudarte con **cripto**: tu gráfico, indicadores, niveles, noticias y calendario económico. ¿Quieres que analice el gráfico actual?';
@@ -214,6 +247,7 @@
 ALCANCE: solo el sector cripto (criptomonedas, mercado cripto, análisis técnico del gráfico del usuario, noticias y eventos macro que lo afectan). Si te piden otra cosa, explica amablemente que solo atiendes cripto y reconduce.
 BASE: cada afirmación debe apoyarse en los DATOS que se te entregan (velas, indicadores activados por el usuario, zonas, noticias, calendario). Cita el indicador o nivel concreto. Si un dato no está, dilo; no inventes precios, niveles, noticias ni cifras.
 ESTILO: claro y directo, con listas cortas; incluye niveles de invalidación y relación beneficio/riesgo cuando propongas escenarios; menciona la incertidumbre y los eventos de calendario cercanos. Nunca prometas resultados ni des órdenes de compra/venta: presenta escenarios educativos. Cierra análisis de operaciones con una línea breve: «Análisis educativo, no asesoría financiera.»
+BRIEF DEL DÍA: si piden un «brief», resume el mercado cripto de hoy (amplitud, BTC/ETH, noticias, calendario económico y el gráfico abierto), y termina con una sección «Hacia dónde se inclina el mercado» con tu lectura más probable (alcista, bajista o lateral), los factores que la sostienen y qué la invalidaría. No des certezas.
 FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo que pidan más detalle.`;
   function compactContext(ctx, A, extra) {
     const now = extra.now || Date.now(), N = newsFor(extra.news, ctx.symbol, now), C = calendarFor(extra.calendar, now), r = x => x == null ? null : +(+x).toPrecision(7);
@@ -222,6 +256,7 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
       analisis_calculado: A && {sesgo: A.bias, puntaje: A.score, confianza: A.confidence, estructura: A.structure, rsi: r(A.rsi), macd_hist: r(A.macd.hist), ema20: r(A.ema20), ema50: r(A.ema50), sma200: r(A.sma200), atr: r(A.atr), volumen_vs_prom: r(A.volRatio), soportes: A.supports.map(s => [r(s.p), s.k]), resistencias: A.resists.map(s => [r(s.p), s.k]), notas: A.notes, plan: A.plan},
       ultimas_velas_OHLCV: ctx.candles.slice(-60).map(c => [c.t, r(c.o), r(c.h), r(c.l), r(c.c), r(c.v)]),
       noticias: N && N.top.map(i => ({titulo: i.title, fuente: i.src, hace_min: Math.round((now - i.t) / 6e4), tono: i.s, impacto: i.impact})),
+      mercado_24h: (extra.market || []).slice(0, 25).map(m => ({moneda: m.symbol, precio: r(m.price), cambio24h_pct: r(m.chg24h)})),
       calendario: C && {proximos: C.upcoming.map(e => ({evento: C.name(e), pais: C.country(e), en_horas: +((e.t - now) / 36e5).toFixed(1), impacto: e.impact, prevision: e.forecast, previo: e.previous})), recientes: C.recent.map(e => ({evento: C.name(e), real: e.actual, prevision: e.forecast}))}});
   }
   async function askClaude(opts, ctx, history, question, extra) {
@@ -237,7 +272,7 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
     } finally { clearTimeout(to); }
   }
 
-  const api = {analyze, answerLocal, intent, newsFor, calendarFor, sentiment, compactContext, askClaude, SYSTEM, ema, rsi, macd, atr, swings, fmt, trCal, GLOSS};
+  const api = {analyze, briefLocal, answerLocal, intent, newsFor, calendarFor, sentiment, compactContext, askClaude, SYSTEM, ema, rsi, macd, atr, swings, fmt, trCal, GLOSS};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTAICore = api;
   if (typeof document === 'undefined') return;

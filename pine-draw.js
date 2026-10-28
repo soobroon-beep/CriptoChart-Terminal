@@ -180,11 +180,11 @@
       if (!W || !H) continue;
       const k = Math.max(.4, Math.min(1, (bottom - top - 12) / H, (right - left - 12) / W)), pos = t.pos, Ws = W * k, Hs = H * k;
       const ax = pos.includes('left') ? left + 6 : pos.includes('center') ? (left + right - Ws) / 2 : right - Ws - 6, ay = pos.includes('top') ? top + 6 : pos.includes('middle') ? (top + bottom - Hs) / 2 : bottom - Hs - 6;
-      g.save(); g.translate(ax, ay); g.scale(k, k); const x0 = 0, y0 = 0;
-      if (t.bci !== null && t.bci !== undefined && P[t.bci]) { g.fillStyle = P[t.bci]; g.fillRect(x0, y0, W, H); }
+      g.save(); g.translate(ax, ay); g.scale(k, k); const x0 = 0, y0 = 0, small = t.cells.length <= 4, bgOf = ci => small ? fadeRgba(P[ci], .25) : P[ci]; // tablas chicas (señal BUY/SELL, reglas): fondo casi transparente para no tapar las velas
+      if (t.bci !== null && t.bci !== undefined && P[t.bci]) { g.fillStyle = bgOf(t.bci); g.fillRect(x0, y0, W, H); }
       for (const c of t.cells) {
         let x = x0, y = y0; for (let i = 0; i < c.c; i++) x += cw(i); for (let i = 0; i < c.r; i++) y += rh(i);
-        if (c.bci !== null && c.bci !== undefined && P[c.bci]) { g.fillStyle = P[c.bci]; g.fillRect(x, y, cw(c.c), rh(c.r)); }
+        if (c.bci !== null && c.bci !== undefined && P[c.bci]) { g.fillStyle = bgOf(c.bci); g.fillRect(x, y, cw(c.c), rh(c.r)); }
         if (!c.text) continue; const fs = SZ[(c.size || 'small').replace(/^size\./, '')] || 9; g.font = fs + 'px system-ui'; g.fillStyle = (c.tci !== null && c.tci !== undefined && P[c.tci]) || '#d1d4dc';
         const al = String(c.halign || 'center').replace(/^text\./, ''); g.textAlign = al === 'left' ? 'left' : al === 'right' ? 'right' : 'center';
         g.fillText(c.text.split('\n')[0], al === 'left' ? x + 4 : al === 'right' ? x + cw(c.c) - 4 : x + cw(c.c) / 2, y + rh(c.r) / 2, cw(c.c) - 4);
@@ -223,6 +223,7 @@
     g.textAlign = 'left';
   }
   // Filas del perfil de volumen (volumen, sentimiento y precios): relleno casi transparente para que no tapen las velas cuando el gráfico se acerca al perfil (el borde conserva el color).
+  function fadeRgba(c, k) { const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(c || ''); return m ? `rgba(${m[1]},${m[2]},${m[3]},${+(m[4] * k).toFixed(3)})` : c; }
   const VP_FILL_K = 0.3;
   function profileRowFill(b, c) {
     if (!c || !b.text || !/(\(\d+(\.\d+)?%\)\s*$)|(^\s*[\d.,]+\s*$)/.test(b.text)) return c;
