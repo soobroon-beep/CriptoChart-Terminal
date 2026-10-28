@@ -115,7 +115,7 @@
     for (const b of res.boxes) {
       if (isn(b.l) || isn(b.r) || isn(b.t) || isn(b.b)) continue;
       let x1 = X(b.l), x2 = X(b.r); if (b.extend === 'left' || b.extend === 'both') x1 = left; if (b.extend === 'right' || b.extend === 'both') x2 = right;
-      const y1 = Y(b.t), y2 = Y(b.b); g.fillStyle = col(b.fci) || 'transparent'; g.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+      const y1 = Y(b.t), y2 = Y(b.b); g.fillStyle = profileRowFill(b, col(b.fci)) || 'transparent'; g.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
       g.strokeStyle = col(b.bci) || '#2962FF'; g.lineWidth = Math.min(4, b.bw || 1); g.setLineDash(DASH[b.bstyle] || []); g.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)); g.setLineDash([]);
       if (b.text) { // el texto se alinea (left/center/right), se ajusta al tamaño de la caja y se recorta dentro de ella, como en TradingView (antes se imprimía centrado y sin recortar, y las filas del perfil de volumen se montaban)
         const bx = Math.min(x1, x2), bw = Math.abs(x2 - x1), by = Math.min(y1, y2), bh = Math.abs(y2 - y1);
@@ -146,7 +146,7 @@
     for (const lb of res.labels) {
       if (isn(lb.x)) continue; const i = Math.round(lb.x), c = candles[Math.min(candles.length - 1, Math.max(0, i))]; let y;
       if (lb.yloc === 'abovebar') y = Y(c.h); else if (lb.yloc === 'belowbar') y = Y(c.l); else if (isn(lb.y)) continue; else y = Y(lb.y);
-      drawLabel(g, lb, X(lb.x), y, col(lb.ci), col(lb.tci), lb.yloc === 'abovebar' ? 'up' : lb.yloc === 'belowbar' ? 'down' : null);
+      drawLabel(g, lb, X(lb.x), y, col(lb.ci), col(lb.tci), lb.yloc === 'abovebar' ? 'down' : lb.yloc === 'belowbar' ? 'up' : null);
     }
     for (const pl of res.polylines || []) {
       const pts = pl.pts.filter(q => !isn(q[0]) && !isn(q[1])); if (pts.length < 2) continue;
@@ -221,6 +221,12 @@
     else { g.beginPath(); g.moveTo(x - sz, y - sz); g.lineTo(x + sz, y + sz); g.moveTo(x + sz, y - sz); g.lineTo(x - sz, y + sz); g.stroke(); } // xcross
     if (text && s.kind !== 'char' || (text && s.kind === 'char')) { g.fillStyle = tcolor || color; g.font = '10px system-ui'; g.textAlign = 'center'; g.fillText(text, x, dir <= 0 ? y - sz - 3 : y + sz + 11); }
     g.textAlign = 'left';
+  }
+  // Filas del perfil de volumen (volumen, sentimiento y precios): relleno casi transparente para que no tapen las velas cuando el gráfico se acerca al perfil (el borde conserva el color).
+  const VP_FILL_K = 0.3;
+  function profileRowFill(b, c) {
+    if (!c || !b.text || !/(\(\d+(\.\d+)?%\)\s*$)|(^\s*[\d.,]+\s*$)/.test(b.text)) return c;
+    const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(c); return m ? `rgba(${m[1]},${m[2]},${m[3]},${+(m[4] * VP_FILL_K).toFixed(3)})` : c;
   }
   function drawLabel(g, lb, x, y, bg, fg, force) {
     const fs = FONT[lb.size] || 11; g.font = `${fs}px system-ui`; const text = lb.text || '', lines = text.split('\n'), tw = Math.max(0, ...lines.map(t => g.measureText(t).width)), pad = 5, w = tw + pad * 2, h = lines.length * (fs + 2) + pad * 2 - 2;

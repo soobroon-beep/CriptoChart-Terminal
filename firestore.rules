@@ -1,9 +1,20 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Cada persona solo puede leer y escribir sus propios datos.
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    // Configuración, dibujos, indicadores y scripts: solo el dueño de la cuenta (mismo uid en PC, celular y cualquier dispositivo).
+    match /users/{userId}/data/{docId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+                            && request.auth.uid == userId
+                            && docId in ['cct_mobile', 'scripts']
+                            && request.resource.size() < 1000000;   // tope de Firestore: 1 MiB por documento
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Cualquier otra ruta, bloqueada.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

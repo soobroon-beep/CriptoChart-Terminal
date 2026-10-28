@@ -23,7 +23,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], novaSaved: null, novaParams: {}, alerts: []
+  light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -89,6 +89,7 @@ function merge(s) {
     nnKeys.forEach(k => { o.indicators[k] = false; }); o.novaSaved = null;
     if (nnWasOn && !o.pine.some(p => p.sid === 'cat:nova-nexus') && o.pine.length < 12) o.pine.unshift({sid: 'cat:nova-nexus', on: true, inputs: {}});
   }
+  o.source = o.source === 'bybit' ? 'bybit' : 'binance';
   o.layout = ['1', '2v', '2h'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
@@ -128,7 +129,7 @@ let pineLastMs = 0, pineRes = {}, pineBusy = {}, pineDirty = {}, pineLast = 0, p
 const PINE_MAX = 6;
 let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null, multi = [];
 let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
-let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0;
+let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0, wsPing = 0, dataSrc = 'binance';
 const lastShown = {};
 
 /* ───────── Navegación ───────── */
@@ -554,15 +555,27 @@ function updateChartHeader() {
   $('#dayChange').textContent = pct(ch);
   $('#dayChange').className = ch >= 0 ? 'positive' : 'negative';
 }
+/* Velas desde Binance o Bybit Spot (para que el perfil de volumen y el POC coincidan con TradingView/Bybit). Si Bybit falla o no lista el par, se usa Binance. */
+const BYBIT = 'https://api.bybit.com/v5/market', BY_IV = {'1m':'1','5m':'5','15m':'15','30m':'30','1h':'60','4h':'240','1d':'D','1w':'W','1M':'M'};
+async function fetchKlinesBybit(sym, tf, limit = 1000, end = null, signal) {
+  const j = await getJSON(`${BYBIT}/kline?category=spot&symbol=${sym}&interval=${BY_IV[tf]}&limit=${Math.min(1000, limit)}${end ? '&end=' + end : ''}`, signal);
+  if (!j || j.retCode !== 0 || !j.result || !Array.isArray(j.result.list) || !j.result.list.length) throw new Error('Bybit sin datos');
+  return j.result.list.map(d => ({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})).reverse(); // Bybit las entrega de la más nueva a la más vieja
+}
+async function fetchKlinesAny(sym, tf, signal) {
+  if (state.source === 'bybit' && BY_IV[tf]) { try { return {cs: await fetchKlinesBybit(sym, tf, 1000, null, signal), src: 'bybit'}; } catch (e) { if (e.name === 'AbortError') throw e; } }
+  const data = await getJSON(`${API}/klines?symbol=${sym}&interval=${tf}&limit=1000`, signal);
+  return {cs: data.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})), src: 'binance'};
+}
 async function loadCandles(silent = false) {
   if (fetchCtl) fetchCtl.abort();
   fetchCtl = new AbortController();
   const sym = state.symbol, tf = state.interval;
   if (!silent) { candles = []; ind = {}; setFeedback('Cargando velas reales de Binance…'); render(); }
   try {
-    const data = await getJSON(`${API}/klines?symbol=${sym}&interval=${tf}&limit=1000`, fetchCtl.signal);
+    const r = await fetchKlinesAny(sym, tf, fetchCtl.signal);
     if (sym !== state.symbol || tf !== state.interval) return;
-    candles = data.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}));
+    candles = r.cs; dataSrc = r.src;
     recalc();
     if (!silent) { stopMotion(); visible = defaultVisible(); pan = 0; const ca = $('#chartArea'); if (ca) { ca.classList.remove('swap-in'); void ca.offsetWidth; ca.classList.add('swap-in'); } }
     setFeedback(''); updateChartHeader(); render(); connectWS();
@@ -572,17 +585,19 @@ async function loadCandles(silent = false) {
   }
 }
 function setLive(on) { $('#liveDot').classList.toggle('on', !!on); }
-function closeWS() { wsGen++; wsOpen = false; if (ws) { ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null; try { ws.close(); } catch {} } ws = null; setLive(false); }
+function closeWS() { wsGen++; wsOpen = false; clearInterval(wsPing); if (ws) { ws.onclose = ws.onmessage = ws.onopen = ws.onerror = null; try { ws.close(); } catch {} } ws = null; setLive(false); }
 function connectWS() {
   closeWS();
   if (typeof WebSocket === 'undefined') return;
   const gen = wsGen, sym = state.symbol, tf = state.interval;
-  try { ws = new WebSocket(`wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_${tf}`); } catch { return; }
-  ws.onopen = () => { if (gen === wsGen) { wsOpen = true; wsRetry = 0; setLive(true); } };
+  const by = dataSrc === 'bybit' && BY_IV[tf];
+  try { ws = new WebSocket(by ? 'wss://stream.bybit.com/v5/public/spot' : `wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_${tf}`); } catch { return; }
+  ws.onopen = () => { if (gen === wsGen) { wsOpen = true; wsRetry = 0; setLive(true); if (by) { ws.send(JSON.stringify({op: 'subscribe', args: [`kline.${BY_IV[tf]}.${sym}`]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send(JSON.stringify({op: 'ping'})); } catch {} }, 20000); } } };
   ws.onmessage = e => {
     if (gen !== wsGen) return;
-    let k; try { k = JSON.parse(e.data).k; } catch { return; }
-    if (k) applyKline({t: k.t, o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.v});
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (by) { const d = m && typeof m.topic === 'string' && m.topic.startsWith('kline.') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d.start, o: +d.open, h: +d.high, l: +d.low, c: +d.close, v: +d.volume}); return; }
+    const k = m && m.k; if (k) applyKline({t: k.t, o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.v});
   };
   ws.onerror = () => { try { ws.close(); } catch {} };
   ws.onclose = () => {
@@ -2269,6 +2284,8 @@ window.addEventListener('resize', scheduleRender);
 
 /* ───────── Tema, exportar e importar ───────── */
 function theme() { if (typeof pushPaneTheme === 'function') pushPaneTheme(); document.body.classList.toggle('light', !!state.light); document.documentElement.style.colorScheme = state.light ? 'light' : 'dark'; render(); }
+const srcBtn = $('#sourceSetting');
+if (srcBtn) { const paint = () => { srcBtn.textContent = state.source === 'bybit' ? 'Bybit Spot' : 'Binance Spot'; }; paint(); srcBtn.onclick = () => { state.source = state.source === 'bybit' ? 'binance' : 'bybit'; save(); paint(); closeWS(); candles = []; ind = {}; loadCandles(); }; window.__paintSource = paint; }
 $('#themeBtn').onclick = $('#themeSetting').onclick = () => { state.light = !state.light; save(); theme(); };
 $('#exportData').onclick = () => {
   const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'}), url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -2739,8 +2756,8 @@ $('#scriptFile').onchange = async e => {
 /* ───────── Aplicar estado completo (importar / nube) ───────── */
 function applyState(data, soft = false) {
   const sameChart = soft && data.symbol === state.symbol && data.interval === state.interval;
-  state = merge(data); clearTransient(); if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader();
-  if (!sameChart) { closeWS(); candles = []; ind = {}; loadCandles(); }
+  const prevSource = state.source; state = merge(data); if (window.__paintSource) window.__paintSource(); clearTransient(); if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader();
+  if (!sameChart || prevSource !== state.source) { closeWS(); candles = []; ind = {}; loadCandles(); }
 }
 
 /* ───────── Cuenta de Google + guardado en la nube (Firebase Auth + Firestore) ───────── */
