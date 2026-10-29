@@ -403,3 +403,5 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .ai-top-r{display:flex;gap:8px;align-items:center}
 .ai-brief{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px 0 10px;border-radius:10px;border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));background:color-mix(in srgb,var(--accent) 14%,var(--surface));color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.01em}
 .ai-brief:disabled{opacity:.5}
+
+.src-menu{position:fixed;z-index:30;width:220px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px #0008;padding:6px;display:flex;flex-direction:column;gap:2px}.src-menu button{background:none;border:0;color:var(--text);text-align:left;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600}.src-menu button:hover{background:var(--raised)}.src-menu button.on{color:var(--accent);background:var(--raised)}.src-menu small{color:var(--muted);font-size:10px;line-height:1.5;padding:6px 10px 4px}#srcLabel{cursor:pointer;text-decoration:underline dotted}

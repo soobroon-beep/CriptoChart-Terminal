@@ -36,6 +36,7 @@ function sanAlert(a) {
   return Object.assign(base0, {price: a.price, dir: a.dir, firedPrice: Number.isFinite(a.firedPrice) ? a.firedPrice : null});
 }
 const CTYPES = [['candles', 'Velas', '🕯'], ['hollow', 'Velas huecas', '▯'], ['ha', 'Heikin Ashi', '◩'], ['bars', 'Barras OHLC', '╫'], ['hlc', 'Barras HLC', '┿'], ['line', 'Línea', '╱'], ['area', 'Área', '◢'], ['step', 'Línea escalonada', '⌐']];
+const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', okx: 'OKX Spot', coinbase: 'Coinbase'}; // fuentes de velas
 const CHART_DEF = {bg: '#0d1019', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false};
 function sanChartStyle(c) {
   const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
@@ -99,7 +100,7 @@ function merge(s) {
     nnKeys.forEach(k => { o.indicators[k] = false; }); o.novaSaved = null;
     if (nnWasOn && !o.pine.some(p => p.sid === 'cat:nova-nexus') && o.pine.length < 12) o.pine.unshift({sid: 'cat:nova-nexus', on: true, inputs: {}});
   }
-  o.source = o.source === 'bybit' ? 'bybit' : 'binance';
+  o.source = Object.prototype.hasOwnProperty.call(SOURCES, o.source) ? o.source : 'binance';
   o.layout = ['1', '2v', '2h'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
@@ -121,8 +122,11 @@ const save = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state
 
 /* ───────── Utilidades ───────── */
 const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','⚛'],UNI:['Uniswap','🦄'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
-const base = s => s.replace(/USDT$/, '');
-const meta = s => catalog[base(s)] || [base(s), base(s).slice(0, 1)];
+const QUOTES = ['USDT', 'USDC', 'FDUSD', 'BTC', 'ETH', 'BNB', 'EUR', 'TRY', 'BRL']; // monedas de cotización admitidas (ETHBTC = ETH/BTC)
+const splitSym = s => { for (const q of QUOTES) if (s.length > q.length + 1 && s.endsWith(q)) return [s.slice(0, -q.length), q]; return [s, 'USDT']; };
+const baseOnly = s => splitSym(s)[0], quoteOf = s => splitSym(s)[1], pairLbl = s => `${baseOnly(s)}/${quoteOf(s)}`;
+const base = s => { const [b, q] = splitSym(s); return q === 'USDT' ? b : b + '/' + q; };
+const meta = s => catalog[baseOnly(s)] || [base(s), baseOnly(s).slice(0, 1)];
 const fmt = n => !Number.isFinite(n) ? '—' : n >= 1000 ? n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : n >= 1 ? n.toFixed(2) : n.toFixed(n < .01 ? 8 : 4);
 const pct = n => !Number.isFinite(n) ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -178,7 +182,7 @@ if (deskMQ.addEventListener) deskMQ.addEventListener('change', onLayoutChange);
 
 /* ───────── 1 · Seguimiento ───────── */
 function coinBadge(s) {
-  const b = base(s);
+  const b = baseOnly(s);
   return `<span class="coin-icon ${b === 'ETH' ? 'eth' : b === 'SOL' ? 'sol' : b === 'BNB' ? 'bnb' : b === 'XRP' ? 'xrp' : b === 'BTC' ? '' : 'other'}">${esc(meta(s)[1])}</span>`;
 }
 function renderWatch() {
@@ -326,8 +330,8 @@ function renderAlerts() {
     const p = curPrice(a.symbol), dist = Number.isFinite(p) ? ((a.price - p) / p * 100) : NaN;
     return `<div class="setting-row alert-row ${a.on ? '' : 'dim'}"><div><b>${esc(base(a.symbol))} ${a.dir === 'up' ? '≥' : '≤'} ${fmt(a.price)}</b><small>${a.on ? `Ahora ${fmt(p)}${Number.isFinite(dist) ? ` · a ${Math.abs(dist).toFixed(2)}%` : ''}` : `Se disparó ${new Date(a.firedAt).toLocaleString()} a ${fmt(a.firedPrice)}`}${a.note ? ' · ' + esc(a.note) : ''}</small></div><div class="alert-btns">${a.on ? '' : `<button class="small-button" data-al-re="${a.id}">Reactivar</button>`}<button class="small-button" data-al-del="${a.id}" aria-label="Eliminar">✕</button></div></div>`; };
   el.innerHTML = (act.length ? `<div class="section-label">ACTIVAS (${act.length})</div>` + act.map(row).join('') : '<div class="soon"><div class="soon-ic">◔</div><b>Sin alertas activas</b><small>Crea una abajo y te avisaremos cuando el precio llegue.</small></div>') + (done.length ? `<div class="section-label">DISPARADAS</div>` + done.map(row).join('') : '');
-  const sel = $('#alSym'); if (sel && !sel.dataset.ready) { sel.dataset.ready = 1; sel.innerHTML = state.symbols.map(s => `<option value="${s}">${esc(base(s))}/USDT</option>`).join(''); }
-  if (sel) { const s = state.symbols; if ([...sel.options].map(o => o.value).join() !== s.join()) { const v = sel.value; sel.innerHTML = s.map(x => `<option value="${x}">${esc(base(x))}/USDT</option>`).join(''); if (s.includes(v)) sel.value = v; } }
+  const sel = $('#alSym'); if (sel && !sel.dataset.ready) { sel.dataset.ready = 1; sel.innerHTML = state.symbols.map(s => `<option value="${s}">${esc(pairLbl(s))}</option>`).join(''); }
+  if (sel) { const s = state.symbols; if ([...sel.options].map(o => o.value).join() !== s.join()) { const v = sel.value; sel.innerHTML = s.map(x => `<option value="${x}">${esc(pairLbl(x))}</option>`).join(''); if (s.includes(v)) sel.value = v; } }
 }
 $('#alInd').onclick = openIndAlertDialog;
 $('#alAdd').onclick = async () => {
@@ -462,7 +466,7 @@ function openIndAlertDialog() {
       <label class="al-f">Indicador<select id="aiSrc">${inds.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label>
       <label class="al-f">Condición<select id="aiCond"></select></label>
       <div id="aiExtra"></div>
-      <label class="al-f">Activo<select id="aiSym">${state.symbols.map(s => `<option value="${s}" ${s === state.symbol ? 'selected' : ''}>${esc(base(s))}/USDT</option>`).join('')}</select></label>
+      <label class="al-f">Activo<select id="aiSym">${state.symbols.map(s => `<option value="${s}" ${s === state.symbol ? 'selected' : ''}>${esc(pairLbl(s))}</option>`).join('')}</select></label>
       <label class="al-f">Temporalidad<select id="aiTf">${INTERVALS.map(t => `<option ${t === state.interval ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <label class="al-f">Frecuencia<select id="aiRep"><option value="once">Solo una vez</option><option value="every">Cada vez que ocurra (al cerrar la vela)</option></select></label>
       <label class="al-f">Nota (opcional)<input id="aiNote" maxlength="80"></label>
@@ -559,7 +563,7 @@ function updateChartHeader() {
   const last = candles.length ? candles[candles.length - 1].c : Number(t?.lastPrice);
   const ch = Number(t?.priceChangePercent);
   $('#coinIcon').textContent = meta(state.symbol)[1];
-  $('#coinTitle').textContent = `${b} / USDT`;
+  $('#coinTitle').textContent = `${baseOnly(state.symbol)} / ${quoteOf(state.symbol)}`; { const sl = $('#srcLabel'); if (sl) sl.textContent = (SOURCES[dataSrc || state.source] || 'Binance Spot').toUpperCase() + ' ▾'; }
   $('#chartLabel').textContent = state.symbol;
   $('#intervalLabel').textContent = state.interval;
   $('#lastPrice').textContent = fmt(last);
@@ -573,16 +577,46 @@ async function fetchKlinesBybit(sym, tf, limit = 1000, end = null, signal) {
   if (!j || j.retCode !== 0 || !j.result || !Array.isArray(j.result.list) || !j.result.list.length) throw new Error('Bybit sin datos');
   return j.result.list.map(d => ({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})).reverse(); // Bybit las entrega de la más nueva a la más vieja
 }
-async function fetchKlinesAny(sym, tf, signal) {
-  if (state.source === 'bybit' && BY_IV[tf]) { try { return {cs: await fetchKlinesBybit(sym, tf, 1000, null, signal), src: 'bybit'}; } catch (e) { if (e.name === 'AbortError') throw e; } }
-  const data = await getJSON(`${API}/klines?symbol=${sym}&interval=${tf}&limit=1000`, signal);
-  return {cs: data.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})), src: 'binance'};
+const bnRow = d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]});
+const OKX_BAR = {'1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1H', '4h': '4H', '1d': '1Dutc', '1w': '1Wutc', '1M': '1Mutc'}, CB_GRAN = {'1m': 60, '5m': 300, '15m': 900, '1h': 3600, '1d': 86400};
+const dashPair = s => { const [b, q] = splitSym(s); return `${b}-${q}`; };
+async function fetchOkx(sym, tf, limit = 1000, signal) { // OKX Spot: 300 velas recientes y luego historial de 100 en 100
+  const inst = dashPair(sym), bar = OKX_BAR[tf], out = [];
+  let j = await getJSON(`https://www.okx.com/api/v5/market/candles?instId=${inst}&bar=${bar}&limit=300`, signal);
+  if (!j || j.code !== '0' || !Array.isArray(j.data) || !j.data.length) throw new Error('OKX sin datos');
+  out.push(...j.data);
+  for (let page = 0; page < 6 && out.length < limit; page++) {
+    j = await getJSON(`https://www.okx.com/api/v5/market/history-candles?instId=${inst}&bar=${bar}&limit=100&after=${out[out.length - 1][0]}`, signal);
+    if (!j || j.code !== '0' || !Array.isArray(j.data) || !j.data.length) break; out.push(...j.data);
+  }
+  return out.slice(0, limit).map(d => ({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]})).reverse();
+}
+async function fetchCoinbase(sym, tf, limit = 900, signal) { // Coinbase: máx. 300 velas por consulta, temporalidades 1m 5m 15m 1h 1d
+  const g = CB_GRAN[tf], prod = dashPair(sym), out = []; let end = Date.now();
+  for (let page = 0; page < Math.ceil(limit / 300) && out.length < limit; page++) {
+    const start = end - 300 * g * 1000, rows = await getJSON(`https://api.exchange.coinbase.com/products/${prod}/candles?granularity=${g}&start=${new Date(start).toISOString()}&end=${new Date(end).toISOString()}`, signal);
+    if (!Array.isArray(rows) || !rows.length) break; out.push(...rows); end = start;
+  }
+  if (!out.length) throw new Error('Coinbase sin datos');
+  return out.map(d => ({t: d[0] * 1000, o: +d[3], h: +d[2], l: +d[1], c: +d[4], v: +d[5]})).sort((a, b2) => a.t - b2.t).filter((c, i, arr) => !i || c.t !== arr[i - 1].t);
+}
+const SRC_FETCH = {
+  binancef: {ok: () => true, get: (sym, tf, limit, sig) => getJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=${Math.min(1500, limit)}`, sig).then(d => d.map(bnRow))},
+  bybit: {ok: tf => !!BY_IV[tf], get: (sym, tf, limit, sig) => fetchKlinesBybit(sym, tf, limit, null, sig)},
+  okx: {ok: tf => !!OKX_BAR[tf], get: fetchOkx},
+  coinbase: {ok: tf => !!CB_GRAN[tf], get: fetchCoinbase}
+};
+async function fetchKlinesAny(sym, tf, signal, limit = 1000) { // si la fuente elegida no tiene el par o la temporalidad, se usa Binance Spot
+  const f = SRC_FETCH[state.source];
+  if (f && f.ok(tf)) { try { return {cs: await f.get(sym, tf, limit, signal), src: state.source}; } catch (e) { if (e.name === 'AbortError') throw e; } }
+  const data = await getJSON(`${API}/klines?symbol=${sym}&interval=${tf}&limit=${Math.min(1000, limit)}`, signal);
+  return {cs: data.map(bnRow), src: 'binance'};
 }
 async function loadCandles(silent = false) {
   if (fetchCtl) fetchCtl.abort();
   fetchCtl = new AbortController();
   const sym = state.symbol, tf = state.interval;
-  if (!silent) { candles = []; ind = {}; setFeedback('Cargando velas reales de Binance…'); render(); }
+  if (!silent) { candles = []; ind = {}; setFeedback(`Cargando velas reales de ${SOURCES[state.source] || 'Binance'}…`); render(); }
   try {
     const r = await fetchKlinesAny(sym, tf, fetchCtl.signal);
     if (sym !== state.symbol || tf !== state.interval) return;
@@ -592,7 +626,7 @@ async function loadCandles(silent = false) {
     setFeedback(''); updateChartHeader(); render(); connectWS();
   } catch (e) {
     if (e.name === 'AbortError') return;
-    if (!silent) { setFeedback('No se pudieron cargar las velas de Binance. No se muestran datos simulados.'); render(); }
+    if (!silent) { setFeedback(`No se pudieron cargar las velas de ${SOURCES[state.source] || 'Binance'}${state.source !== 'binance' ? ' ni de Binance Spot' : ''}. No se muestran datos simulados.`); render(); }
   }
 }
 function setLive(on) { $('#liveDot').classList.toggle('on', !!on); }
@@ -600,14 +634,21 @@ function closeWS() { wsGen++; wsOpen = false; clearInterval(wsPing); if (ws) { w
 function connectWS() {
   closeWS();
   if (typeof WebSocket === 'undefined') return;
-  const gen = wsGen, sym = state.symbol, tf = state.interval;
-  const by = dataSrc === 'bybit' && BY_IV[tf];
-  try { ws = new WebSocket(by ? 'wss://stream.bybit.com/v5/public/spot' : `wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_${tf}`); } catch { return; }
-  ws.onopen = () => { if (gen === wsGen) { wsOpen = true; wsRetry = 0; setLive(true); if (by) { ws.send(JSON.stringify({op: 'subscribe', args: [`kline.${BY_IV[tf]}.${sym}`]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send(JSON.stringify({op: 'ping'})); } catch {} }, 20000); } } };
+  const gen = wsGen, sym = state.symbol, tf = state.interval, src = dataSrc || 'binance';
+  if (src === 'coinbase') { // Coinbase no ofrece velas por WebSocket público: se consulta cada 8 s
+    setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await fetchCoinbase(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 8000); return;
+  }
+  const by = src === 'bybit' && BY_IV[tf], ok = src === 'okx' && OKX_BAR[tf];
+  const url = by ? 'wss://stream.bybit.com/v5/public/spot' : ok ? 'wss://ws.okx.com:8443/ws/v5/business' : src === 'binancef' ? `wss://fstream.binance.com/ws/${sym.toLowerCase()}@kline_${tf}` : `wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_${tf}`;
+  try { ws = new WebSocket(url); } catch { return; }
+  ws.onopen = () => { if (gen === wsGen) { wsOpen = true; wsRetry = 0; setLive(true);
+    if (by) { ws.send(JSON.stringify({op: 'subscribe', args: [`kline.${BY_IV[tf]}.${sym}`]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send(JSON.stringify({op: 'ping'})); } catch {} }, 20000); }
+    if (ok) { ws.send(JSON.stringify({op: 'subscribe', args: [{channel: 'candle' + OKX_BAR[tf], instId: dashPair(sym)}]})); clearInterval(wsPing); wsPing = setInterval(() => { try { ws.send('ping'); } catch {} }, 20000); } } };
   ws.onmessage = e => {
     if (gen !== wsGen) return;
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (by) { const d = m && typeof m.topic === 'string' && m.topic.startsWith('kline.') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d.start, o: +d.open, h: +d.high, l: +d.low, c: +d.close, v: +d.volume}); return; }
+    if (ok) { const d = m && m.arg && /^candle/.test(m.arg.channel || '') && Array.isArray(m.data) ? m.data[0] : null; if (d) applyKline({t: +d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}); return; }
     const k = m && m.k; if (k) applyKline({t: k.t, o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.v});
   };
   ws.onerror = () => { try { ws.close(); } catch {} };
@@ -962,14 +1003,14 @@ function renderSheet() {
   const search = $('#sheetSearch').value.trim().toUpperCase();
   const pool = sheetMode === 'add' ? Object.keys(catalog).map(s => s + 'USDT') : state.symbols;
   const syms = pool.filter(s => s.includes(search) || meta(s)[0].toUpperCase().includes(search));
-  if (sheetMode === 'add' && search && !syms.length && /^[A-Z0-9]{2,15}$/.test(search)) syms.push(search.endsWith('USDT') ? search : search + 'USDT');
+  { const q2 = search.replace(/[^A-Z0-9]/g, ''); if (sheetMode === 'add' && q2 && /^[A-Z0-9]{2,15}$/.test(q2)) { const full = QUOTES.some(q => q2.length > q.length + 1 && q2.endsWith(q)) ? q2 : q2 + 'USDT'; if (!syms.includes(full)) syms.unshift(full); } } // escribe ETHBTC, ETH/BTC o solo ETH
   list.innerHTML = syms.map(s => `<button class="sheet-item" data-pick="${s}"><span>${esc(base(s))} <small>${esc(meta(s)[0])}</small></span><span>${state.symbols.includes(s) ? (sheetMode === 'add' ? '✓' : '→') : '＋'}</span></button>`).join('') || '<p class="small-note">No se encontraron monedas.</p>';
   $$('[data-pick]').forEach(b => b.onclick = async () => {
     const s = b.dataset.pick;
     if (sheetMode !== 'add') { selectSymbol(s); return; }
     if (state.symbols.includes(s)) { closeSheet(); return; }
-    if (!catalog[base(s)]) { // símbolo escrito a mano: comprobar que existe en Binance
-      try { await getJSON(`${API}/ticker/price?symbol=${s}`); } catch { toast(`${s} no existe en Binance Spot`); return; }
+    if (!catalog[baseOnly(s)] || quoteOf(s) !== 'USDT') { // símbolo escrito a mano o par que no es USDT: comprobar que existe en Binance
+      try { await getJSON(`${API}/ticker/price?symbol=${s}`); } catch { try { await getJSON(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${s}`); toast(`${s} solo existe en Binance Futuros: cambia la fuente de velas a Futuros para verlo`); } catch { toast(`${s} no existe en Binance`); return; } }
     }
     state.symbols.push(s); save(); renderWatch(); fetchTicker(); toast(`${base(s)} añadido`); closeSheet();
   });
@@ -2328,7 +2369,20 @@ window.addEventListener('resize', scheduleRender);
 window.addEventListener('cct-theme', () => { try { if (typeof render === 'function' && candles) render(); } catch {} });
 function theme() { if (typeof pushPaneTheme === 'function') pushPaneTheme(); document.body.classList.toggle('light', !!state.light); document.documentElement.style.colorScheme = state.light ? 'light' : 'dark'; render(); }
 const srcBtn = $('#sourceSetting');
-if (srcBtn) { const paint = () => { srcBtn.textContent = state.source === 'bybit' ? 'Bybit Spot' : 'Binance Spot'; }; paint(); srcBtn.onclick = () => { state.source = state.source === 'bybit' ? 'binance' : 'bybit'; save(); paint(); closeWS(); candles = []; ind = {}; loadCandles(); }; window.__paintSource = paint; }
+function paintSource() { if (srcBtn) srcBtn.textContent = SOURCES[state.source] || 'Binance Spot'; const sl = $('#srcLabel'); if (sl) sl.textContent = (SOURCES[dataSrc || state.source] || 'Binance Spot').toUpperCase() + ' ▾'; }
+function setSource(k) { if (!SOURCES[k]) return; state.source = k; save(); paintSource(); closeWS(); candles = []; ind = {}; loadCandles(); }
+function pickSource(anchor) { // menú para elegir la fuente de velas (Binance Spot/Futuros, Bybit, OKX, Coinbase)
+  const old = document.querySelector('.src-menu'); if (old) { old.remove(); return; }
+  const m = document.createElement('div'); m.className = 'src-menu';
+  m.innerHTML = Object.entries(SOURCES).map(([k, v]) => `<button data-src="${k}" class="${k === state.source ? 'on' : ''}">${v}</button>`).join('') + '<small>Si la fuente no tiene el par o la temporalidad, se usa Binance Spot.</small>';
+  document.body.appendChild(m); const r = anchor.getBoundingClientRect(); m.style.top = Math.max(8, Math.min(innerHeight - 280, r.bottom + 6)) + 'px'; m.style.left = Math.max(8, Math.min(innerWidth - 230, r.left)) + 'px';
+  const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); }, away = e => { if (!m.contains(e.target) && e.target !== anchor) close(); };
+  setTimeout(() => document.addEventListener('pointerdown', away, true));
+  m.onclick = e => { const b2 = e.target.closest('[data-src]'); if (b2) { close(); setSource(b2.dataset.src); } };
+}
+paintSource(); window.__paintSource = paintSource;
+if (srcBtn) srcBtn.onclick = () => pickSource(srcBtn);
+{ const sl = $('#srcLabel'); if (sl) sl.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); pickSource(sl); }); }
 $('#themeBtn').onclick = $('#themeSetting').onclick = () => { state.light = !state.light; save(); theme(); };
 $('#exportData').onclick = () => {
   const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'}), url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -2970,8 +3024,7 @@ window.CCT_host = {
   interval: () => state.interval,
   async top(n) { try { if (!popAll.length) await loadPopTickers(); } catch {} return popAll.slice(0, n).map(t => ({symbol: t.symbol, price: +t.lastPrice, chg: +t.priceChangePercent})); },
   async klines(sym, itv) {
-    if (state.source === 'bybit' && BY_IV[itv]) { try { return await fetchKlinesBybit(sym, itv, 300); } catch {} }
-    return (await getJSON(`${API}/klines?symbol=${sym}&interval=${itv}&limit=300`)).map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5]}));
+    return (await fetchKlinesAny(sym, itv, undefined, 300)).cs;
   },
   openSignal(sym, itv) { // abre el gráfico de la moneda con Nova Nexus activo para ver la señal
     if (INTERVALS.includes(itv)) state.interval = itv;
