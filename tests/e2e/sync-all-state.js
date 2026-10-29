@@ -32,7 +32,7 @@ return{initializeApp(){},auth:Object.assign(()=>auth,{GoogleAuthProvider:functio
   const skey = p => p.evaluate(() => Object.keys(localStorage).filter(k => /cct_mobile/.test(k)).map(k => JSON.parse(localStorage.getItem(k)))[0] || {});
   // Estado rico guardado en la cuenta (como si otro dispositivo lo hubiera creado)
   const rich = {symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','DOGEUSDT'], symbol: 'SOLUSDT', interval: '15m', indicators: {rsi: true, ema: true}, source: 'bybit', ctype: 'heikin', layout: 2,
-    drawings: {SOLUSDT: [{id: 'd1', type: 'trend', a: {t: 1, p: 100}, b: {t: 2, p: 110}}]}, ui: {paneH: {rsi: 222}, paneScale: 1.6, dopt: {magnet: false, stay: true, lock: false, hide: false}, icon: 'vortex'}};
+    drawings: {SOLUSDT: [{id: 'd1', type: 'trend', a: {t: 1, p: 100}, b: {t: 2, p: 110}}]}, ui: {panes: {movil: {paneH: {rsi: 222}, paneScale: 1.6}, pc: {paneH: {rsi: 90}, paneScale: 0.8}}, dopt: {magnet: false, stay: true, lock: false, hide: false}, icon: 'vortex'}};
   store.set('users/U1/data/cct_mobile', {state: JSON.stringify(rich), updatedAt: 'TS'});
   const B = await mkPage({width: 420, height: 860});
   await B.click('#accountBtn'); await B.waitForTimeout(3000);
@@ -42,19 +42,19 @@ return{initializeApp(){},auth:Object.assign(()=>auth,{GoogleAuthProvider:functio
   ck('indicadores', st.indicators && st.indicators.rsi && st.indicators.ema);
   ck('fuente de datos', st.source === 'bybit');
   ck('dibujos', st.drawings && st.drawings.SOLUSDT && st.drawings.SOLUSDT.length === 1);
-  ck('ui guardada en estado', st.ui && st.ui.paneScale === 1.6 && st.ui.paneH && st.ui.paneH.rsi === 222 && st.ui.icon === 'vortex', JSON.stringify(st.ui));
+  ck('ui guardada en estado', st.ui && st.ui.panes && st.ui.panes.movil.paneScale === 1.6 && st.ui.panes.pc.paneScale === 0.8 && st.ui.icon === 'vortex', JSON.stringify(st.ui));
   const ls = await B.evaluate(() => ({ps: localStorage.getItem('cct_paneScale'), ph: localStorage.getItem('cct_paneH_v1'), dopt: localStorage.getItem('cct_dopts_v1'), icon: window.CCTAppIcons.selected, theme: document.documentElement.dataset.theme}));
   ck('ui aplicada en el dispositivo', ls.ps === '1.6' && /222/.test(ls.ph) && /"stay":true/.test(ls.dopt) && ls.icon === 'vortex', JSON.stringify(ls));
   // El otro dispositivo cambia la interfaz -> llega a la cuenta
   await B.click('[data-view=chartView]').catch(()=>{}); await B.evaluate(() => document.querySelector('#paneBig') && document.querySelector('#paneBig').click()); await B.waitForTimeout(2500);
   const doc = JSON.parse(store.get('users/U1/data/cct_mobile').state);
-  ck('cambio de interfaz sube a la cuenta', doc.ui && doc.ui.paneScale > 1.6, 'paneScale=' + (doc.ui && doc.ui.paneScale));
+  ck('cambio de interfaz sube a la cuenta', doc.ui && doc.ui.panes.movil.paneScale > 1.6 && doc.ui.panes.pc.paneScale === 0.8, JSON.stringify(doc.ui.panes));
   // Cambio en vivo desde la cuenta
   const A = await mkPage({width: 1400, height: 820}); await A.click('#accountBtn'); await A.waitForTimeout(2500);
-  const live = JSON.parse(store.get('users/U1/data/cct_mobile').state); live.ui.paneScale = 1; live.symbols.push('XRPUSDT');
+  const live = JSON.parse(store.get('users/U1/data/cct_mobile').state); live.ui.panes.movil.paneScale = 1; live.symbols.push('XRPUSDT');
   store.set('users/U1/data/cct_mobile', {state: JSON.stringify(live), updatedAt: 'TS2'}); await B.waitForTimeout(2500);
   const st2 = await skey(B);
-  ck('cambio en vivo llega al otro dispositivo', st2.symbols.includes('XRPUSDT') && st2.ui.paneScale === 1, JSON.stringify(st2.ui));
+  ck('cambio en vivo llega al otro dispositivo', st2.symbols.includes('XRPUSDT') && st2.ui.panes.movil.paneScale === 1, JSON.stringify(st2.ui));
   console.log('errores:', errs.join(' | ') || 'ninguno');
   await br.close(); srv.close();
 })();
