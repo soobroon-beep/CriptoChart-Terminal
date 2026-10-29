@@ -2775,8 +2775,9 @@ function drawPinePane(x, top0, H, lo, hi, o) {
   g.font = '10px system-ui'; g.fillStyle = text; g.textAlign = 'left';
   { const tx = `${(r.meta.short || r.meta.title || '').slice(0, 22)}  ${CCTPineDraw.legend(r, candles.length - 1).slice(0, 2).map(i => i.text.replace(/^.* /, '')).join('  ')}`; legLabel(tx, left + 4, top + 16, {t: 'pine', sid: x.p.sid, pane: x.p.pane || 'bottom'}); }
   g.fillText(CCTPineDraw.fmtV(mx - pad), w - right + 6, top + 9); g.fillText(CCTPineDraw.fmtV(mn + pad), w - right + 6, top + height);
-  g.beginPath(); g.rect(left, top0, plotW + 2, H); g.clip();
-  CCTPineDraw.draw(g, r, {X, Y: Yp, lo, hi, left, right: left + plotW, top: top0 + 2, bottom: top0 + H - 2, step, candles, overlay: false});
+  const pr = w - right; // el panel usa todo el ancho hasta el eje (incluye el margen derecho del gráfico): si no, al desplazarse quedaba un cuadro vacío que tapaba las últimas velas
+  g.beginPath(); g.rect(left, top0, pr - left + 2, H); g.clip();
+  CCTPineDraw.draw(g, r, {X, Y: Yp, lo, hi, left, right: pr, top: top0 + 2, bottom: top0 + H - 2, step, candles, overlay: false});
   g.restore();
 }
 

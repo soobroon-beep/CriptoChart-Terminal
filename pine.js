@@ -647,7 +647,7 @@ function evCall(n, env) {
     if (parts.length === 1 && ctx.fns.has(name)) return callUser(ctx.fns.get(name), n, env);
     if (parts.length === 1 && ctx.methods.has(name) && n.args.length) { // método llamado como función: el primer argumento es el receptor
       const recv = ev(n.args[0].e, env), ty = typeOfVal(recv), ms = ctx.methods.get(name);
-      const m = ms.find(x => x.params[0] && x.params[0].type === ty) || ms.find(x => x.params[0] && (!x.params[0].type || x.params[0].type === 'series')) || ms[0];
+      const m = ms.find(x => x.params[0] && x.params[0].type === ty) || ms.find(x => ty === 'int' && x.params[0] && x.params[0].type === 'float') || ms.find(x => x.params[0] && (!x.params[0].type || x.params[0].type === 'series')) || ms[0];
       return callUser(m, Object.assign({}, n, {args: n.args.slice(1)}), env, recv);
     }
     if (parts.length === 2 && parts[1] === 'new' && ctx.types.has(parts[0])) return newObj(ctx.types.get(parts[0]), n, env);
@@ -661,7 +661,7 @@ function evCall(n, env) {
   if (f.k === 'mem') {
     const recv = ev(f.obj, env);
     const ms = ctx.methods.get(f.prop);
-    if (ms) { const ty = typeOfVal(recv); const m = ms.find(x => x.params[0] && x.params[0].type === ty) || ms.find(x => x.params[0] && (!x.params[0].type || x.params[0].type === 'series')); if (m) return callUser(m, n, env, recv); }
+    if (ms) { const ty = typeOfVal(recv); const m = ms.find(x => x.params[0] && x.params[0].type === ty) || ms.find(x => ty === 'int' && x.params[0] && x.params[0].type === 'float') || ms.find(x => x.params[0] && (!x.params[0].type || x.params[0].type === 'series')); if (m) return callUser(m, n, env, recv); }
     if (recv && recv._t && f.prop === 'copy') return Object.assign({}, recv);
     const ns = Array.isArray(recv) ? 'array' : recv && recv._kind ? recv._kind : typeof recv === 'string' ? 'str' : null;
     const b = ns && B[ns + '.' + f.prop];

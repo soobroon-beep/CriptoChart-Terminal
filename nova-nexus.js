@@ -299,9 +299,9 @@
     const haTr = haH.map((h, i) => i === 0 ? NA : Math.max(h - haL[i], Math.abs(h - haC[i - 1]), Math.abs(haL[i] - haC[i - 1])));
     const haAtr = rma(haTr, sDfl);
     const chH = change(haH), chL = change(haL);
-    const fUp = rma(chH.map(v => isna(v) ? NA : Math.max(v, 0)), sDfl).map((v, i) => v / haAtr[i]);
-    const fDn = rma(chL.map(v => isna(v) ? NA : Math.max(-v, 0)), sDfl).map((v, i) => v / haAtr[i]);
-    const flux = rma(fUp.map((u, i) => (u - fDn[i]) / (u + fDn[i])), sDfl / 2).map(v => v * 100);
+    const fUp = rma(chH.map(v => isna(v) ? NA : Math.max(v, 0)), sDfl).map((v, i) => v / (haAtr[i] === 0 ? 1e-12 : haAtr[i]));
+    const fDn = rma(chL.map(v => isna(v) ? NA : Math.max(-v, 0)), sDfl).map((v, i) => v / (haAtr[i] === 0 ? 1e-12 : haAtr[i]));
+    const flux = rma(fUp.map((u, i) => (u + fDn[i]) === 0 ? 0 : (u - fDn[i]) / (u + fDn[i])), sDfl / 2).map(v => v * 100);
 
     /* EMA 200, ADX (ta.dmi) y ATR 14 */
     const ema200 = ema(C, emaLen), atr14 = atrLen(atrL);

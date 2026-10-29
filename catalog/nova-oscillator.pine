@@ -202,7 +202,9 @@ method atr(bar b, simple int len = 1) =>
          math.abs(   b.h    - b.c[1])) ,
          math.abs(   b.l    - b.c[1]))
 
-    len == 1 ? tr : ta.rma(tr, len)
+    float res = len == 1 ? tr : ta.rma(tr, len)
+    // piso relativo: en monedas con velas planas (rango 0) el ATR valía 0, dividía entre 0 y el NaN contaminaba el oscilador para siempre
+    math.max(res, math.abs(b.c) * 1e-9)
 
 method stdev(float src, simple int len) =>
     float sq  = 0.
@@ -238,7 +240,7 @@ method dfo(bar b, simple int len) =>
              math.max   (
                ta.change(b.l) * -1, 0), len) / (tr)
     float x  = ta.rma   (
-             (up - dn) / (up + dn)    , len  / 2) * 100
+             (up + dn) == 0 ? 0 : (up - dn) / (up + dn), len  / 2) * 100
 
     osc.new(
               x        , 
