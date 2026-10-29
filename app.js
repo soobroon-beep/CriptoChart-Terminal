@@ -23,7 +23,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', novaSaved: null, novaParams: {}, alerts: []
+  light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -66,6 +66,15 @@ function sanStdParams(p) {
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
 const cstyle = () => Object.assign({}, CHART_DEF, state.chartStyle || {});
+/* Preferencias de interfaz que también viajan a la cuenta: altura de paneles, tamaño de paneles, opciones del dibujo (imán, bloquear…) y color/ícono de la app */
+function sanUi(u) {
+  const q = u && typeof u === 'object' && !Array.isArray(u) ? u : {}, o = {};
+  if (q.paneH && typeof q.paneH === 'object' && !Array.isArray(q.paneH)) { const h = {}; for (const [k, v] of Object.entries(q.paneH).slice(0, 24)) if (/^[A-Za-z0-9:_-]{1,40}$/.test(k) && Number.isFinite(v) && v >= 20 && v <= 3000) h[k] = Math.round(v); o.paneH = h; }
+  if (Number.isFinite(q.paneScale) && q.paneScale >= .6 && q.paneScale <= 3) o.paneScale = q.paneScale;
+  if (q.dopt && typeof q.dopt === 'object' && !Array.isArray(q.dopt)) { const d = {}; for (const k of ['magnet', 'stay', 'lock', 'hide']) if (typeof q.dopt[k] === 'boolean') d[k] = q.dopt[k]; o.dopt = d; }
+  if (typeof q.icon === 'string' && /^[a-z]{3,12}$/.test(q.icon)) o.icon = q.icon;
+  return o;
+}
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
@@ -82,6 +91,7 @@ function merge(s) {
     o.brush = {c: /^#[0-9a-f]{6}$/i.test(bq.c) ? bq.c : '#e9c36e', w: [2, 4, 7].includes(+bq.w) ? +bq.w : 3};
   }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
+  o.ui = sanUi(o.ui);
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
   { // Nova Nexus: queda un solo indicador, el completo (Pine, en Mis indicadores). El módulo nativo antiguo se apaga y, si estaba encendido, se pasa al completo para no perderlo
@@ -920,7 +930,7 @@ const TOOL_GROUPS = [
 /* Opciones de la barra: imán (ajusta a O/H/L/C), mantener herramienta, bloquear y ocultar dibujos */
 const DOPT_KEY = 'cct_dopts_v1';
 const DOPT = Object.assign({magnet: true, stay: false, lock: false, hide: false}, (() => { try { return JSON.parse(lsGet(DOPT_KEY) || '{}') || {}; } catch { return {}; } })());
-const saveDopt = () => { try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} };
+const saveDopt = () => { try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} if (typeof syncUi === 'function') syncUi(); };
 const isBrushTool = t => t === 'brush' || t === 'highlighter';
 function renderSheet() {
   const list = $('#sheetList');
@@ -1312,9 +1322,20 @@ function timeLabel(t, prev) {
 }
 let legRows = [], legSig = '', legStruct = '', grips = [], gripDrag = false;
 let paneH = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneH_v1') || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; } })();
-const savePaneH = () => { try { localStorage.setItem('cct_paneH_v1', JSON.stringify(paneH)); } catch {} };
+const savePaneH = () => { try { localStorage.setItem('cct_paneH_v1', JSON.stringify(paneH)); } catch {} if (typeof syncUi === 'function') syncUi(); };
 const paneScale0 = () => { try { const v = parseFloat(localStorage.getItem('cct_paneScale')); return v >= .6 && v <= 3 ? v : 1.25; } catch { return 1.25; } };
 let paneScale = paneScale0();
+function syncUi() { // vuelca las preferencias de interfaz al estado (que se guarda en el dispositivo y en la cuenta)
+  state.ui = sanUi({paneH, paneScale, dopt: DOPT, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
+}
+function applyUi() { // al recibir el estado de la cuenta: aplica sus preferencias de interfaz en este dispositivo
+  const u = state.ui || {};
+  if (u.paneH) { paneH = {...u.paneH}; try { localStorage.setItem('cct_paneH_v1', JSON.stringify(paneH)); } catch {} }
+  if (u.paneScale) { paneScale = u.paneScale; try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} }
+  if (u.dopt) { Object.assign(DOPT, u.dopt); try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} }
+  if (u.icon && window.CCTAppIcons && window.CCTAppIcons.selected !== u.icon) window.CCTAppIcons.apply(u.icon);
+}
+window.addEventListener('cct-theme', () => { const id = window.CCTAppIcons && window.CCTAppIcons.selected; if (id && (state.ui || {}).icon !== id && typeof save === 'function') syncUi(); });
 const LEG_FONT = '600 13px system-ui';
 const legBtnH = () => (window.matchMedia && matchMedia('(max-width:760px)').matches ? 26 : 22);
 const legStep = () => legBtnH() + 4; // separación vertical entre filas con botones
@@ -2288,7 +2309,7 @@ $('#zoomIn').onclick = () => glide({visible: clamp((glideT && glideT.visible != 
 $('#zoomOut').onclick = () => glide({visible: clamp((glideT && glideT.visible != null ? glideT.visible : visible) * 1.3, 15, 400)});
 $('#fitChart').onclick = fit;
 function syncFullscreenLabel() { $('#fullscreen').textContent = document.body.classList.contains('expanded') ? '⤓ Reducir' : '⛶ Expandir'; }
-const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
+const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} syncUi(); scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
 $('#paneBig').onclick = () => setPaneScale(paneScale * 1.2); $('#paneSmall').onclick = () => setPaneScale(paneScale / 1.2);
 $('#fullscreen').onclick = () => { document.body.classList.toggle('expanded'); syncFullscreenLabel(); requestAnimationFrame(render); };
 if (window.ResizeObserver) new ResizeObserver(() => scheduleRender()).observe(area);
@@ -2769,7 +2790,7 @@ $('#scriptFile').onchange = async e => {
 /* ───────── Aplicar estado completo (importar / nube) ───────── */
 function applyState(data, soft = false) {
   const sameChart = soft && data.symbol === state.symbol && data.interval === state.interval;
-  const prevSource = state.source; state = merge(data); if (window.__paintSource) window.__paintSource(); clearTransient(); if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader();
+  const prevSource = state.source; state = merge(data); applyUi(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource(); clearTransient(); if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader();
   if (!sameChart || prevSource !== state.source) { closeWS(); candles = []; ind = {}; loadCandles(); }
 }
 
