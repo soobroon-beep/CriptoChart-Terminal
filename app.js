@@ -36,7 +36,7 @@ function sanAlert(a) {
   return Object.assign(base0, {price: a.price, dir: a.dir, firedPrice: Number.isFinite(a.firedPrice) ? a.firedPrice : null});
 }
 const CTYPES = [['candles', 'Velas', '🕯'], ['hollow', 'Velas huecas', '▯'], ['ha', 'Heikin Ashi', '◩'], ['bars', 'Barras OHLC', '╫'], ['hlc', 'Barras HLC', '┿'], ['line', 'Línea', '╱'], ['area', 'Área', '◢'], ['step', 'Línea escalonada', '⌐']];
-const CHART_DEF = {bg: '', grid: '', gridH: true, gridV: true, up: '#20bf9f', down: '#f06b79', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false};
+const CHART_DEF = {bg: '#0d1019', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false};
 function sanChartStyle(c) {
   const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
   for (const k of ['bg', 'grid', 'up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick']) if (typeof c[k] === 'string' && /^#[0-9a-fA-F]{6}$/.test(c[k])) o[k] = c[k];
@@ -48,12 +48,12 @@ const STD_SCHEMA = {
   sma200: [['len', 'Período', 'int', 200, 1, 1000], ['color', 'Color y opacidad', 'color', '#b58dff'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]], wma20: [['len', 'Período', 'int', 20, 1, 500], ['color', 'Color y opacidad', 'color', '#4dd0e1'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]],
   bollinger: [['len', 'Período', 'int', 20, 2, 500], ['mult', 'Desviaciones', 'float', 2, .1, 10], ['color', 'Color y opacidad', 'color', '#748bab'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Guiones', 0, 0, ['Sólida', 'Guiones', 'Puntos']], ['fill', 'Relleno entre bandas', 'color', '#748bab00']],
   rsi: [['len', 'Período', 'int', 14, 2, 200], ['color', 'Color y opacidad', 'color', '#bb9cff'], ['width', 'Grosor', 'int', 2, 1, 6], ['ob', 'Nivel sobrecompra', 'int', 70, 50, 100], ['os', 'Nivel sobreventa', 'int', 30, 0, 50]],
-  macd: [['fast', 'Rápida', 'int', 12, 1, 200], ['slow', 'Lenta', 'int', 26, 2, 400], ['sig', 'Señal', 'int', 9, 1, 100], ['cLine', 'Color línea MACD', 'color', '#548fff'], ['cSig', 'Color señal', 'color', '#f5a623'], ['hUp', 'Histograma positivo', 'color', '#20bf9f'], ['hDn', 'Histograma negativo', 'color', '#f06b79'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  macd: [['fast', 'Rápida', 'int', 12, 1, 200], ['slow', 'Lenta', 'int', 26, 2, 400], ['sig', 'Señal', 'int', 9, 1, 100], ['cLine', 'Color línea MACD', 'color', '#548fff'], ['cSig', 'Color señal', 'color', '#f5a623'], ['hUp', 'Histograma positivo', 'color', '#089981'], ['hDn', 'Histograma negativo', 'color', '#f23645'], ['width', 'Grosor', 'int', 1, 1, 6]],
   stoch: [['k', 'Longitud %K', 'int', 14, 1, 200], ['ks', 'Suavizado %K', 'int', 3, 1, 50], ['d', 'Suavizado %D', 'int', 3, 1, 50], ['cK', 'Color %K', 'color', '#548fff'], ['cD', 'Color %D', 'color', '#f5a623'], ['lo', 'Nivel inferior', 'int', 20, 0, 50], ['hi', 'Nivel superior', 'int', 80, 50, 100], ['width', 'Grosor', 'int', 1, 1, 6]],
   atr: [['len', 'Período', 'int', 14, 1, 200], ['color', 'Color y opacidad', 'color', '#e07b53'], ['width', 'Grosor', 'int', 1, 1, 6]],
-  supertrend: [['len', 'Período ATR', 'int', 10, 1, 200], ['factor', 'Factor', 'float', 3, .1, 20], ['up', 'Color alcista', 'color', '#20bf9f'], ['down', 'Color bajista', 'color', '#f06b79'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  supertrend: [['len', 'Período ATR', 'int', 10, 1, 200], ['factor', 'Factor', 'float', 3, .1, 20], ['up', 'Color alcista', 'color', '#089981'], ['down', 'Color bajista', 'color', '#f23645'], ['width', 'Grosor', 'int', 1, 1, 6]],
   vwap: [['color', 'Color y opacidad', 'color', '#ff8a65'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]], obv: [['color', 'Color y opacidad', 'color', '#2ec4b6'], ['width', 'Grosor', 'int', 1, 1, 6]],
-  volume: [['up', 'Color alcista y opacidad', 'color', '#20bf9faa'], ['down', 'Color bajista y opacidad', 'color', '#f06b79aa']]
+  volume: [['up', 'Color alcista y opacidad', 'color', '#089981aa'], ['down', 'Color bajista y opacidad', 'color', '#f23645aa']]
 };
 const sp = (key, name) => { const v = state.stdParams && state.stdParams[key] && state.stdParams[key][name]; if (v !== undefined) return v; const e = (STD_SCHEMA[key] || []).find(x => x[0] === name); return e ? e[3] : undefined; };
 function sanStdParams(p) {
@@ -65,7 +65,7 @@ function sanStdParams(p) {
 }
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
-const cstyle = () => Object.assign({}, CHART_DEF, state.chartStyle || {});
+const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle || {}); if (!(state.chartStyle && state.chartStyle.bg) && document.body.classList.contains('light')) o.bg = ''; return o; }; // fondo por defecto #0d1019 (el tema claro conserva el suyo)
 /* Preferencias de interfaz que también viajan a la cuenta: altura de paneles, tamaño de paneles, opciones del dibujo (imán, bloquear…) y color/ícono de la app */
 function sanUi(u) {
   const q = u && typeof u === 'object' && !Array.isArray(u) ? u : {}, o = {};
@@ -640,7 +640,7 @@ const indicatorMeta = [
   ['rsi','RSI 14','Índice de fuerza relativa en panel inferior','#bb9cff'],
   ['wma20','WMA 20','Media móvil ponderada de 20 períodos','#4dd0e1'],
   ['vwap','VWAP','Precio medio ponderado por volumen, reinicia cada día UTC (solo intradía)','#ff8a65'],
-  ['supertrend','Supertrend','ATR 10 · factor 3 · verde = alcista, rojo = bajista','#20bf9f'],
+  ['supertrend','Supertrend','ATR 10 · factor 3 · verde = alcista, rojo = bajista','#089981'],
   ['cross','Cruces EMA 20/50','Marca los cruces de la EMA 20 con la EMA 50','#f5c568'],
   ['macd','MACD 12 26 9','Línea, señal e histograma en panel inferior','#548fff'],
   ['stoch','Estocástico 14 3 3','%K y %D en panel inferior (niveles 20/80)','#548fff'],
@@ -1015,7 +1015,7 @@ Object.assign(HINTS, {
 });
 for (const k of Object.keys(MULTI)) HINTS[k] = () => `Toca el punto ${Math.min(multi.length + 1, MULTI[k].n)} de ${MULTI[k].n}${MULTI[k].labels[multi.length] ? ' (' + MULTI[k].labels[multi.length] + ')' : ''}`;
 function startTool(k) { drawTool = k; pending = null; pending2 = null; multi = []; preview = null; selectedId = null; updateDrawUI(); scheduleRender(); }
-const BRUSH_COLORS = ['#e9c36e', '#f06b79', '#20bf9f', '#548fff', '#ffffff'], BRUSH_W = [2, 4, 7];
+const BRUSH_COLORS = ['#e9c36e', '#f23645', '#089981', '#548fff', '#ffffff'], BRUSH_W = [2, 4, 7];
 function brushOptsHtml() { return `<span id="brushOpts">${BRUSH_COLORS.map(c => `<button class="bsw${state.brush.c === c ? ' on' : ''}" data-bc="${c}" style="background:${c}" aria-label="Color ${c}"></button>`).join('')}${BRUSH_W.map(w => `<button class="bw${state.brush.w === w ? ' on' : ''}" data-bw="${w}" aria-label="Grosor ${w}"><i style="height:${w}px"></i></button>`).join('')}</span>`; }
 document.addEventListener('click', e => {
   const c = e.target.closest('[data-bc]'), w = e.target.closest('[data-bw]'); if (!c && !w) return;
@@ -1040,7 +1040,7 @@ function deleteSelected() { if (!selectedId) return; snapDraw(); setDrawings(get
 $('#undoDraw').onclick = undoDrawing;
 $('#deleteDraw').onclick = deleteSelected;
 /* Barra flotante sobre el gráfico: aparece al tocar un dibujo (color · borrar · deshacer · rehacer) y al usar el pincel */
-const SEL_COLORS = ['#e9c36e', '#f06b79', '#20bf9f', '#548fff', '#ffffff', '#b07cff'];
+const SEL_COLORS = ['#e9c36e', '#f23645', '#089981', '#548fff', '#ffffff', '#b07cff'];
 function renderSelBar() {
   let bar = $('#selBar'); const d = selectedId && getDrawings().find(x => x.id === selectedId), show = !!d || isBrushTool(drawTool);
   if (!show) { if (bar) bar.remove(); return; }
@@ -1420,7 +1420,7 @@ function openStdDialog(key) {
   }});
 }
 function openChartStyle() {
-  const cs = cstyle(); let bgDef = '#101725'; try { let n = $('#chartArea'); while (n) { const c = getComputedStyle(n).backgroundColor, m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(c); if (m && (m[4] === undefined || +m[4] > 0)) { bgDef = '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join(''); break; } n = n.parentElement; } } catch {}
+  const cs = cstyle(); let bgDef = '#101725'; try { if (!document.body.classList.contains('light')) throw 0; let n = $('#chartArea'); while (n) { const c = getComputedStyle(n).backgroundColor, m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(c); if (m && (m[4] === undefined || +m[4] > 0)) { bgDef = '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join(''); break; } n = n.parentElement; } } catch { if (!document.body.classList.contains('light')) bgDef = CHART_DEF.bg; }
   const lineDef = '#263244', P = (key, title, type, def, group, extra) => Object.assign({key, title, type, def, value: state.chartStyle && state.chartStyle[key] !== undefined ? state.chartStyle[key] : def, group}, extra || {});
   const inputs = [
     P('bg', 'Color de fondo', 'color', bgDef, '🖼 FONDO Y CUADRÍCULA'), P('gridH', 'Líneas horizontales', 'bool', true, '🖼 FONDO Y CUADRÍCULA'), P('gridV', 'Líneas verticales', 'bool', true, '🖼 FONDO Y CUADRÍCULA'), P('grid', 'Color de la cuadrícula', 'color', lineDef, '🖼 FONDO Y CUADRÍCULA'),
@@ -1572,7 +1572,7 @@ function renderCore() {
   if (state.indicators.volume && candles.length) { // volumen en el mismo panel de las velas: barras al fondo (detrás de las velas), ocupan el ~18 % inferior
     const vBot = plotTop + plotH, vH = Math.round(plotH * .18); let maxV = 1;
     for (let i = lo; i < hi; i++) if (candles[i]) maxV = Math.max(maxV, candles[i].v);
-    for (let i = lo; i < hi; i++) { const d = candles[i]; if (!d) continue; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#20bf9faa' ? up + '55' : sp('volume', 'up')) : (sp('volume', 'down') === '#f06b79aa' ? down + '55' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * vH); g.fillRect(X(i) - clamp(step * .66, 1.5, 16) / 2, vBot - bh, clamp(step * .66, 1.5, 16), bh); }
+    for (let i = lo; i < hi; i++) { const d = candles[i]; if (!d) continue; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#089981aa' ? up + '55' : sp('volume', 'up')) : (sp('volume', 'down') === '#f23645aa' ? down + '55' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * vH); g.fillRect(X(i) - clamp(step * .66, 1.5, 16) / 2, vBot - bh, clamp(step * .66, 1.5, 16), bh); }
   }
   const pineBar = {};
   for (const {r} of pr) for (const e of r.barcolors) for (const [bar, ci] of e.pts) pineBar[bar + (e.offset || 0)] = r.palette[ci];
@@ -1614,7 +1614,7 @@ function renderCore() {
     g.font = 'bold 11px system-ui'; g.textAlign = 'center';
     for (let i = lo; i < hi; i++) {
       const k = ind.cross[i]; if (!k) continue;
-      g.fillStyle = k > 0 ? '#20bf9f' : '#f06b79';
+      g.fillStyle = k > 0 ? '#089981' : '#f23645';
       g.fillText(k > 0 ? '▲' : '▼', X(i), k > 0 ? Y(candles[i].l) + 14 : Y(candles[i].h) - 6);
     }
     g.textAlign = 'left';
@@ -1654,7 +1654,7 @@ function renderCore() {
   for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += LS; }
   for (const {p, r} of pHid) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)} (oculto)`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); g.globalAlpha = 1; ly2 += LS; }
   if (novaOn() && ind.nn) { const tx = 'Nova Nexus'; g.fillStyle = '#11cf77'; legLabel(tx, left + 8, ly2, {t: 'nova'}); ly2 += LS; }
-  if (state.indicators.supertrend && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#20bf9f' : '#f06b79'; { const tx = `Supertrend ${dv < 0 ? '↑' : '↓'}  ${fmt((dv < 0 ? ind.stUp : ind.stDn)[j])}`; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += LS; } }
+  if (state.indicators.supertrend && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#089981' : '#f23645'; { const tx = `Supertrend ${dv < 0 ? '↑' : '↓'}  ${fmt((dv < 0 ? ind.stUp : ind.stDn)[j])}`; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += LS; } }
 
   // volumen
   if (volH) {
@@ -1662,7 +1662,7 @@ function renderCore() {
     for (let i = lo; i < hi; i++) maxV = Math.max(maxV, candles[i].v);
     g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.volTop); g.lineTo(w - right + 2, geo.volTop); g.stroke();
     g.fillStyle = text; legLabel('VOL', left + 4, top + 16, {t: 'std', key: 'volume'});
-    for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#20bf9faa' ? up + 'aa' : sp('volume', 'up')) : (sp('volume', 'down') === '#f06b79aa' ? down + 'aa' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * height); g.fillRect(X(i) - barW / 2, top + height - bh, barW, bh); }
+    for (let i = lo; i < hi; i++) { const d = candles[i]; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#089981aa' ? up + 'aa' : sp('volume', 'up')) : (sp('volume', 'down') === '#f23645aa' ? down + 'aa' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * height); g.fillRect(X(i) - barW / 2, top + height - bh, barW, bh); }
   }
   // RSI
   if (rsiH) {
@@ -2029,7 +2029,7 @@ function drawShapeExtra(d, a, b, rightX, col) {
     g.globalAlpha = .1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(b2.x, b2.y); g.lineTo(a2.x, a2.y); g.closePath(); g.fill(); g.globalAlpha = 1;
   }
   else if (t === 'measure') {
-    const dp = d.b.p - d.a.p, up = dp >= 0, mc = up ? '#20bf9f' : '#f06b79', bars = Math.round(idxOfTime(d.b.t) - idxOfTime(d.a.t));
+    const dp = d.b.p - d.a.p, up = dp >= 0, mc = up ? '#089981' : '#f23645', bars = Math.round(idxOfTime(d.b.t) - idxOfTime(d.a.t));
     const x1 = Math.min(a.x, b.x), y1 = Math.min(a.y, b.y), w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
     g.fillStyle = mc; g.strokeStyle = mc; g.globalAlpha = .12; g.fillRect(x1, y1, w, h); g.globalAlpha = 1; g.setLineDash([4, 3]); g.strokeRect(x1, y1, w, h); g.setLineDash([]);
     g.lineWidth = 1.5; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); arrowHead(a, b, 8);
@@ -2049,7 +2049,7 @@ function drawShapeExtra(d, a, b, rightX, col) {
     });
   }
   else if (t === 'long' || t === 'short') {
-    const q = posBox(d), lg = t === 'long', gc = '#20bf9f', rc = '#f06b79', w = q.x2 - q.x1;
+    const q = posBox(d), lg = t === 'long', gc = '#089981', rc = '#f23645', w = q.x2 - q.x1;
     g.globalAlpha = .16; g.fillStyle = gc; g.fillRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
     g.fillStyle = rc; g.fillRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE)); g.globalAlpha = 1;
     g.lineWidth = 1.2; g.strokeStyle = gc; g.strokeRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
@@ -2099,7 +2099,7 @@ function drawShapeNew(d, a, b, rightX, col, selected) {
     tag(deg.toFixed(1) + '°', a.x + sx * 34, a.y - 12, '#5b6b83', sx === 1 ? 'left' : 'right');
   }
   else if (t === 'pricerange') {
-    const x1 = Math.min(a.x, b.x), w = Math.max(60, Math.abs(b.x - a.x)), mx = x1 + w / 2, dp = d.b.p - d.a.p, mc = dp >= 0 ? '#20bf9f' : '#f06b79';
+    const x1 = Math.min(a.x, b.x), w = Math.max(60, Math.abs(b.x - a.x)), mx = x1 + w / 2, dp = d.b.p - d.a.p, mc = dp >= 0 ? '#089981' : '#f23645';
     g.fillStyle = mc; g.strokeStyle = mc; fillA(.12, () => g.fillRect(x1, Math.min(a.y, b.y), w, Math.abs(b.y - a.y)));
     seg({x: x1, y: a.y}, {x: x1 + w, y: a.y}); seg({x: x1, y: b.y}, {x: x1 + w, y: b.y}); seg({x: mx, y: a.y}, {x: mx, y: b.y}); arrowHead({x: mx, y: a.y}, {x: mx, y: b.y}, 8);
     tag(`${dp >= 0 ? '+' : ''}${fmt(dp)} (${pct(dp / d.a.p * 100)})`, mx + 8, (a.y + b.y) / 2, mc);
@@ -2418,7 +2418,7 @@ function novaPreviewSvg() {
   c += `<rect x="40" y="84" width="70" height="12" fill="#26a69a" opacity=".18"/>`;
   [18, 50, 66].forEach((y, i) => c += `<line x1="14" x2="262" y1="${y}" y2="${y}" stroke="#22ab94" stroke-width=".9" opacity="${.55 - i * .12}"/>`);
   c += `<polyline points="${cs.map((k, i) => `${X(i)},${k[1] + 17}`).join(' ')}" fill="none" stroke="#119c7e" stroke-width="1.6"/>`;
-  cs.forEach((k, i) => { const up = k[1] <= k[0], col = up ? '#20bf9f' : '#f06b79'; c += `<line x1="${X(i)}" x2="${X(i)}" y1="${k[2]}" y2="${k[3]}" stroke="${col}" stroke-width="1"/><rect x="${X(i) - 2.8}" y="${Math.min(k[0], k[1])}" width="5.6" height="${Math.max(1.5, Math.abs(k[0] - k[1]))}" fill="${col}"/>`; });
+  cs.forEach((k, i) => { const up = k[1] <= k[0], col = up ? '#089981' : '#f23645'; c += `<line x1="${X(i)}" x2="${X(i)}" y1="${k[2]}" y2="${k[3]}" stroke="${col}" stroke-width="1"/><rect x="${X(i) - 2.8}" y="${Math.min(k[0], k[1])}" width="5.6" height="${Math.max(1.5, Math.abs(k[0] - k[1]))}" fill="${col}"/>`; });
   c += tag(34, 100, 'BUY 4★', '#11cf77') + tag(150, 8, 'SELL 3★', '#d11645');
   c += `<line x1="196" x2="262" y1="92" y2="92" stroke="#ff4444" stroke-dasharray="3 2"/><line x1="196" x2="262" y1="60" y2="60" stroke="#11cf77" stroke-dasharray="3 2"/><line x1="196" x2="262" y1="48" y2="48" stroke="#00aaff" stroke-dasharray="3 2"/>`;
   [[12, 40], [22, 30], [32, 52], [42, 44], [52, 24], [62, 36], [72, 16]].forEach(([y, w], i) => c += `<rect x="${316 - w}" y="${y + 6}" width="${w}" height="7" fill="${i === 4 ? '#ffeb3b' : '#8294a8'}" opacity="${i === 4 ? .85 : .45}"/>`);

@@ -94,15 +94,23 @@
         for (let i = lo; i < hi; i++) { const v = at(p, i), c = colAt(i); if (isn(v) || c === null || c < 0) continue; const x = X(i), y = Y(v); g.strokeStyle = g.fillStyle = P[c]; g.lineWidth = 1.2;
           if (st === 'circles') { g.beginPath(); g.arc(x, y, Math.max(1.5, lw), 0, 7); g.fill(); } else { g.beginPath(); g.moveTo(x - 3, y); g.lineTo(x + 3, y); g.moveTo(x, y - 3); g.lineTo(x, y + 3); g.stroke(); } }
       } else if (/^area/.test(st)) {
-        // Área como en TradingView: el color del script ya trae su transparencia (no se vuelve a aclarar) y se rellena hasta el fondo del panel, formando los "montecitos".
-        // Se agrupan los tramos del mismo color en una sola figura para que no queden costuras entre velas.
-        let run = null; const flush = () => { if (!run) return; g.fillStyle = P[run.c]; g.beginPath(); g.moveTo(run.pts[0][0], bottom); run.pts.forEach(q => g.lineTo(q[0], q[1])); g.lineTo(run.pts[run.pts.length - 1][0], bottom); g.closePath(); g.fill(); run = null; };
+        // Área como en TradingView: se rellena entre la línea y la base (histbase, por defecto 0): montes arriba del cero y valles abajo, y el color cambia justo al cruzar el cero.
+        // El color del script ya trae su transparencia (no se vuelve a aclarar).
+        const hb = p.histbase || 0; let run = null;
+        const flush = () => { if (!run) return; g.fillStyle = P[run.c]; g.beginPath(); g.moveTo(run.pts[0][0], base); run.pts.forEach(q => g.lineTo(q[0], q[1])); g.lineTo(run.pts[run.pts.length - 1][0], base); g.closePath(); g.fill(); run = null; };
+        let pv = null, px = 0;
         for (let i = Math.max(lo - 1, 0); i < hi; i++) {
           const v = at(p, i), c = colAt(i);
-          if (isn(v) || c === null || c < 0) { flush(); continue; }
-          if (run && run.c !== c) { const last = run.pts[run.pts.length - 1]; flush(); run = {c, pts: [last]}; }
+          if (isn(v) || c === null || c < 0) { flush(); pv = null; continue; }
+          const x = X(i), y = Y(v);
+          if (run && run.c !== c) {
+            let sx = px, sy = Y(pv);
+            if (pv !== null && (pv - hb) * (v - hb) < 0) { const t = (pv - hb) / (pv - v); sx = px + (x - px) * t; sy = base; run.pts.push([sx, base]); }
+            else if (pv !== null) run.pts.push([x, y]);
+            flush(); run = {c, pts: [[sx, sy]]};
+          }
           if (!run) run = {c, pts: []};
-          run.pts.push([X(i), Y(v)]);
+          run.pts.push([x, y]); pv = v; px = x;
         }
         flush();
         strokePlot(g, p, lo, hi, X, Y, colAt, P, lw, false);
