@@ -138,6 +138,7 @@ let currentView = 'watchView', sheetMode = 'select', editMode = false;
 let pineLastMs = 0, pineRes = {}, pineBusy = {}, pineDirty = {}, pineLast = 0, pineTimer = 0, pineKey = '', pineDraft = {name: '', code: ''}, pineSetSid = null, pineWorker = null, pineNoWorker = false, pineSeq = 0;
 const PINE_MAX = 6;
 let drawTool = '', pending = null, pending2 = null, preview = null, selectedId = null, cross = null, geo = null, multi = [];
+let paneMan = {}, paneHit = []; // escala vertical manual por panel (oscilador, RSI…) y su zona táctil; se llena al dibujar
 let priceMan = null, lastAxisTap = 0; // escala de precio manual {min,max}; null = automática
 let ws = null, wsGen = 0, wsOpen = false, wsRetry = 0, wsPing = 0, dataSrc = 'binance';
 const lastShown = {};
@@ -1462,7 +1463,7 @@ function renderCore() {
   const text = css.getPropertyValue('--muted').trim(), line = css.getPropertyValue('--line').trim(), bg = css.getPropertyValue('--bg').trim(), drawCol = css.getPropertyValue('--draw').trim() || '#e9c36e', fg = css.getPropertyValue('--text').trim();
   syncNovaCols(); const CS = cstyle(), up = CS.up, down = CS.down;
   g.clearRect(0, 0, w, h); if (CS.bg) { g.fillStyle = CS.bg; g.fillRect(0, 0, w, h); }
-  const gridCol = CS.grid || line; grips = [];
+  const gridCol = CS.grid || line; grips = []; paneHit = []; { const sk = state.symbol + '|' + state.interval; if (paneMan._k !== sk) paneMan = {_k: sk}; }
   const n = candles.length; if (!n) { geo = null; return; }
 
   const pineKeyNow = `${state.symbol}|${state.interval}|${candles[0].t}`;
@@ -1716,6 +1717,7 @@ function drawSubPanel(key, top0, H, lo, hi, o) {
   if (key === 'macd') { const m = Math.max(Math.abs(mn), Math.abs(mx)) || 1; mn = -m; mx = m; } // el cero queda al centro
   if (mx === mn) { mx += 1; mn -= 1; }
   const pad = key === 'stoch' ? 0 : (mx - mn) * .08; mn -= pad; mx += pad;
+  { const pm = paneMan[key]; if (pm) { mn = pm.min; mx = pm.max; } paneHit.push({key, top0, H, mn, mx}); }
   const Yp = v => top + (mx - v) / (mx - mn) * height;
   g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip(); // incluye el eje derecho para que se vean los niveles y la escala
   g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
@@ -2197,8 +2199,10 @@ area.addEventListener('pointerdown', e => { stopMotion();
   if (ptrs.size > 2) return;
   const pt = local(e);
   gest = {id: e.pointerId, x0: e.clientX, y0: e.clientY, pan0: pan, moved: false, mode: 'pending', start: null, handle: null, timer: 0};
-  const onPriceAxis = pt.x >= geo.w - geo.right - 4 && pt.y <= geo.plotTop + geo.plotH + 8, onTimeAxis = pt.y >= geo.h - 34 && pt.x < geo.w - geo.right;
-  if (onPriceAxis || onTimeAxis) { // arrastrar la barra derecha = escala de precio · barra inferior = escala de tiempo
+  const paneAx = pt.x >= geo.w - geo.right - 4 ? paneHit.find(q => pt.y >= q.top0 && pt.y < q.top0 + q.H) : null;
+  const onPriceAxis = !paneAx && pt.x >= geo.w - geo.right - 4 && pt.y <= geo.plotTop + geo.plotH + 8, onTimeAxis = pt.y >= geo.h - 34 && pt.x < geo.w - geo.right;
+  if (paneAx) { gest.mode = 'scaleP'; gest.pane = {key: paneAx.key, min0: paneAx.mn, max0: paneAx.mx}; cross = null; } // barra derecha de un panel (oscilador, RSI…): arrastrar = agrandar/achicar su escala
+  else if (onPriceAxis || onTimeAxis) { // arrastrar la barra derecha = escala de precio · barra inferior = escala de tiempo
     gest.mode = onPriceAxis ? 'scaleY' : 'scaleX'; gest.min0 = geo.min; gest.max0 = geo.max; gest.vis0 = visible; gest.pan1 = pan; cross = null;
   } else if (isBrushTool(drawTool) && (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH || pt.x < geo.left || pt.x > geo.left + geo.plotW)) { gest.mode = 'ignore'; toast('El pincel dibuja sobre el gráfico de precio'); }
   else if (isBrushTool(drawTool)) { gest.mode = 'brush'; selectedId = null; brushLive = [[timeOfIdx(IDX(pt.x)), PRICE(pt.y)]]; gest.lx = pt.x; gest.ly = pt.y; updateDrawUI(); scheduleRender(); }
@@ -2235,6 +2239,10 @@ area.addEventListener('pointermove', e => {
     const f = clamp(Math.exp(-(e.clientY - gest.y0) / 160), .05, 25), c = (gest.min0 + gest.max0) / 2, half = (gest.max0 - gest.min0) / 2 / f;
     priceMan = {min: c - half, max: c + half}; updateAutoBtn(); scheduleRender();
   }
+  else if (gest.mode === 'scaleP') { // arriba = agrandar · abajo = achicar
+    const q = gest.pane, f = clamp(Math.exp(-(e.clientY - gest.y0) / 140), .1, 20), c = (q.min0 + q.max0) / 2, half = (q.max0 - q.min0) / 2 / f;
+    paneMan[q.key] = {min: c - half, max: c + half}; scheduleRender();
+  }
   else if (gest.mode === 'scaleX') { // derecha = más grande · izquierda = más chico
     const f = clamp(Math.exp((e.clientX - gest.x0) / 180), .1, 12); visible = clamp(gest.vis0 / f, 15, 400); scheduleRender();
   }
@@ -2255,6 +2263,7 @@ function endPointer(e, cancelled) {
   if (cancelled) { cross = null; preview = null; scheduleRender(); return; }
   if (gs.mode === 'cross') { cross = null; scheduleRender(); return; }
   if (gs.mode === 'handle') { save(); render(); return; }
+  if (gs.mode === 'scaleP') { if (!gs.moved) { const now = Date.now(); if (now - lastAxisTap < 320) { lastAxisTap = 0; delete paneMan[gs.pane.key]; render(); } else lastAxisTap = now; } return; } // doble toque = escala automática
   if (gs.mode === 'scaleY' || gs.mode === 'scaleX') {
     if (!gs.moved) { const now = Date.now(); if (now - lastAxisTap < 320) { lastAxisTap = 0; if (gs.mode === 'scaleY') { priceMan = null; updateAutoBtn(); } else visible = defaultVisible(); render(); } else lastAxisTap = now; }
     return;
@@ -2768,7 +2777,9 @@ document.addEventListener('click', e => {
 function drawPinePane(x, top0, H, lo, hi, o) {
   if (!x) return; const {left, w, right, line, text, step, plotW} = o, r = x.r, top = top0 + 4, height = H - 10;
   const rg = CCTPineDraw.range(r, lo, hi); let mn = rg ? rg.min : 0, mx = rg ? rg.max : 1;
-  if (mx === mn) { mx += 1; mn -= 1; } const pad = (mx - mn) * .08; mn -= pad; mx += pad;
+  if (mx === mn) { mx += 1; mn -= 1; } let pad = (mx - mn) * .08; mn -= pad; mx += pad;
+  const pkey = 'pine:' + x.p.sid, pm = paneMan[pkey]; if (pm) { mn = pm.min; mx = pm.max; pad = 0; }
+  paneHit.push({key: pkey, top0, H, mn, mx});
   const Yp = v => top + (mx - v) / (mx - mn) * height;
   g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip();
   g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
