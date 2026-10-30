@@ -23,7 +23,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
+  light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -66,6 +66,8 @@ function sanStdParams(p) {
     if (Object.keys(q).length) o[key] = q; }
   return o;
 }
+const stdOn = k => !!state.indicators[k] && !(state.stdHide && state.stdHide[k]); // activo y no oculto con el ojito de la leyenda
+const stdName = k => ({ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', vpvr: 'VPVR', cross: 'Cruces EMA 20/50'}[k] || k);
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
 const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle || {}); if (!(state.chartStyle && state.chartStyle.bg) && document.body.classList.contains('light')) o.bg = ''; return o; }; // fondo por defecto #0d1019 (el tema claro conserva el suyo)
@@ -104,6 +106,7 @@ function merge(s) {
   }
   o.source = Object.prototype.hasOwnProperty.call(SOURCES, o.source) ? o.source : 'binance';
   o.layout = ['1', '2v', '2h'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
+  o.stdHide = o.stdHide && typeof o.stdHide === 'object' && !Array.isArray(o.stdHide) ? Object.fromEntries(Object.keys(o.stdHide).filter(k => o.stdHide[k] === true && Object.prototype.hasOwnProperty.call(o.indicators, k) && !k.startsWith('nn') && o.indicators[k]).map(k => [k, true])) : {}; // «oculto» (ojito) ≠ «apagado»: sigue activo en Indicadores, solo no se dibuja
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
@@ -871,7 +874,7 @@ function renderIndicators() { $('#indicatorList').innerHTML = indicatorRows(); }
 function countIndicators() { const n = Object.entries(state.indicators).filter(([k, v]) => v && !k.startsWith('nn')).length + (novaOn() ? 1 : 0); $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-ind]'); if (!b) return;
-  state.indicators[b.dataset.ind] = !state.indicators[b.dataset.ind];
+  state.indicators[b.dataset.ind] = !state.indicators[b.dataset.ind]; if (state.stdHide) delete state.stdHide[b.dataset.ind];
   save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); }
   if (['indicators', 'novaSet'].includes(sheetMode) && $('#sheet').classList.contains('open')) renderSheet();
   scheduleRender();
@@ -1462,7 +1465,11 @@ document.addEventListener('click', e => {
   if (t === 'nova') { if (act === 'set') openNovaDialog(); else if (act === 'eye' || act === 'del') { novaToggleAll(false); novaAfter(); toast('Nova Nexus apagado: actívalo en Indicadores → Mis indicadores'); } return; }
   if (t === 'std') {
     if (act === 'set') { openStdDialog(id); return; }
-    state.indicators[id] = false; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast('Indicador apagado: puedes volver a activarlo en Indicadores');
+    if (act === 'eye') { // el ojito solo oculta/muestra: el indicador sigue activo en Indicadores
+      state.stdHide = state.stdHide || {}; if (state.stdHide[id]) delete state.stdHide[id]; else state.stdHide[id] = true;
+      save(); legSig = ''; legStruct = ''; scheduleRender(); return;
+    }
+    state.indicators[id] = false; if (state.stdHide) delete state.stdHide[id]; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast('Indicador apagado: puedes volver a activarlo en Indicadores');
   }
 });
 function render() { renderCore(); syncLegend(); syncLegToggle(); }
@@ -1544,9 +1551,9 @@ function renderCore() {
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
   const left = 6, right = 64, axisH = 22, top0 = 6;
-  const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH0 = state.indicators.rsi ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH0 = 0; // el volumen ya no tiene panel propio: se dibuja sobre las velas, abajo del gráfico
+  const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH0 = stdOn('rsi') ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH0 = 0; // el volumen ya no tiene panel propio: se dibuja sobre las velas, abajo del gráfico
   const cap = Math.max(40, h - axisH - 80 - top0); let rsiH = rsiH0 && paneH.rsi ? clamp(paneH.rsi, 40, cap) : rsiH0, volH = volH0 && paneH.vol ? clamp(paneH.vol, 36, cap) : volH0;
-  const panelKeys = [...PANELS.filter(k => state.indicators[k] && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
+  const panelKeys = [...PANELS.filter(k => stdOn(k) && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
   const isC = k => paneH[k] > 0;
   const tblOnly = x => !!(x && x.r && x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length);
   const tblW = panelKeys.length + pTop.length > 3 ? 2 : 4, wBot = panelKeys.map(k => k.startsWith('pine:') && tblOnly(pr.find(x => 'pine:' + x.p.sid === k)) ? tblW : 1), wTop = pTop.map(x => tblOnly(x) ? tblW : 1), wSum = wBot.map((x, i) => isC(panelKeys[i]) ? 0 : x).concat(wTop.map((x, i) => isC('pine:' + pTop[i].p.sid) ? 0 : x)).reduce((a, b) => a + b, 0), nAuto = panelKeys.filter(k => !isC(k)).length + pTop.filter(x => !isC('pine:' + x.p.sid)).length, customSum = panelKeys.filter(isC).reduce((s2, k) => s2 + clamp(paneH[k], 40, cap), 0) + pTop.filter(x => isC('pine:' + x.p.sid)).reduce((s2, x) => s2 + clamp(paneH['pine:' + x.p.sid], 40, cap), 0);
@@ -1589,13 +1596,13 @@ function renderCore() {
   // cajas dibujadas en barras «futuras» (el perfil de volumen): su rango de precios entra en el autoajuste para que se vean todos los niveles y no solo los que caen en las velas visibles
   for (const {r} of pOver) for (const b of r.boxes || []) { if (Math.max(b.l, b.r) > n + .5 && Math.max(b.l, b.r) < n + 400 && Number.isFinite(b.t) && Number.isFinite(b.b) && b.t > min / 3 && b.t < max * 3 && b.b > min / 3 && b.b < max * 3) { min = Math.min(min, b.t, b.b); max = Math.max(max, b.t, b.b); } }
   const overlays = [];
-  if (state.indicators.ema20) overlays.push([`EMA ${sp('ema20', 'len')}`, ind.ema20, sp('ema20', 'color'), false, 'ema20', lineSty('ema20')]);
-  if (state.indicators.ema50) overlays.push([`EMA ${sp('ema50', 'len')}`, ind.ema50, sp('ema50', 'color'), false, 'ema50', lineSty('ema50')]);
-  if (state.indicators.sma200) overlays.push([`SMA ${sp('sma200', 'len')}`, ind.sma200, sp('sma200', 'color'), false, 'sma200', lineSty('sma200')]);
-  if (state.indicators.wma20 && ind.wma20) overlays.push([`WMA ${sp('wma20', 'len')}`, ind.wma20, sp('wma20', 'color'), false, 'wma20', lineSty('wma20')]);
-  if (state.indicators.vwap && ind.vwap) overlays.push(['VWAP', ind.vwap, sp('vwap', 'color'), false, 'vwap', lineSty('vwap')]);
-  if (state.indicators.supertrend && ind.stUp) overlays.push(['Supertrend ↑', ind.stUp, sp('supertrend', 'up'), false, null, {w: sp('supertrend', 'width'), d: []}], ['Supertrend ↓', ind.stDn, sp('supertrend', 'down'), false, null, {w: sp('supertrend', 'width'), d: []}]);
-  if (state.indicators.bollinger) overlays.push(['BB sup', ind.bbU, sp('bollinger', 'color'), false, 'bollinger', lineSty('bollinger')], ['BB inf', ind.bbL, sp('bollinger', 'color'), false, null, lineSty('bollinger')]);
+  if (stdOn('ema20')) overlays.push([`EMA ${sp('ema20', 'len')}`, ind.ema20, sp('ema20', 'color'), false, 'ema20', lineSty('ema20')]);
+  if (stdOn('ema50')) overlays.push([`EMA ${sp('ema50', 'len')}`, ind.ema50, sp('ema50', 'color'), false, 'ema50', lineSty('ema50')]);
+  if (stdOn('sma200')) overlays.push([`SMA ${sp('sma200', 'len')}`, ind.sma200, sp('sma200', 'color'), false, 'sma200', lineSty('sma200')]);
+  if (stdOn('wma20') && ind.wma20) overlays.push([`WMA ${sp('wma20', 'len')}`, ind.wma20, sp('wma20', 'color'), false, 'wma20', lineSty('wma20')]);
+  if (stdOn('vwap') && ind.vwap) overlays.push(['VWAP', ind.vwap, sp('vwap', 'color'), false, 'vwap', lineSty('vwap')]);
+  if (stdOn('supertrend') && ind.stUp) overlays.push(['Supertrend ↑', ind.stUp, sp('supertrend', 'up'), false, null, {w: sp('supertrend', 'width'), d: []}], ['Supertrend ↓', ind.stDn, sp('supertrend', 'down'), false, null, {w: sp('supertrend', 'width'), d: []}]);
+  if (stdOn('bollinger')) overlays.push(['BB sup', ind.bbU, sp('bollinger', 'color'), false, 'bollinger', lineSty('bollinger')], ['BB inf', ind.bbL, sp('bollinger', 'color'), false, null, lineSty('bollinger')]);
   for (const [, arr] of overlays) for (let i = lo; i < hi; i++) if (arr[i] != null) { if (arr[i] < min) min = arr[i]; if (arr[i] > max) max = arr[i]; }
   if (state.indicators.nnTrail && ind.trail) for (let i = lo; i < hi; i++) { const v = ind.trail.trail[i]; if (v != null) { if (v < min) min = v; if (v > max) max = v; } }
   const nn = ind.nn;
@@ -1606,7 +1613,7 @@ function renderCore() {
   geo = {w, h, left, right, gutter, vpOn, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
 
   // VPVR: perfil de volumen de las velas que se ven ahora mismo (índices cuyo centro cae dentro del área de precios); se recalcula en cada dibujo, así sigue al desplazar y al hacer zoom
-  const vpvr = state.indicators.vpvr && window.CCTIndicators ? CCTIndicators.visibleRangeProfile(candles, Math.ceil(start - .5), Math.floor(end - .5 + (vpOn ? 0 : gutter) / step), {rows: sp('vpvr', 'rows'), valueArea: sp('vpvr', 'va')}) : null;
+  const vpvr = stdOn('vpvr') && window.CCTIndicators ? CCTIndicators.visibleRangeProfile(candles, Math.ceil(start - .5), Math.floor(end - .5 + (vpOn ? 0 : gutter) / step), {rows: sp('vpvr', 'rows'), valueArea: sp('vpvr', 'va')}) : null;
   if (volH) grips.push({key: 'vol', y: geo.volTop, dir: 'up', h: volH});
   if (rsiH) grips.push({key: 'rsi', y: geo.rsiTop, dir: 'up', h: rsiH});
   panelKeys.forEach((k, i) => grips.push({key: k, y: geo.extraTop + oBot[i], dir: 'up', h: hBot[i]}));
@@ -1645,7 +1652,7 @@ function renderCore() {
   if (vpvr) drawVPVR(vpvr); // detrás de las velas, como en TradingView
   // velas
   const barW = clamp(step * .66, 1.5, 16), limeBars = !!(state.indicators.nnLiq && state.indicators.nnLiqBars && ind.liq);
-  if (state.indicators.volume && candles.length) { // volumen en el mismo panel de las velas: barras al fondo (detrás de las velas), ocupan el ~18 % inferior
+  if (stdOn('volume') && candles.length) { // volumen en el mismo panel de las velas: barras al fondo (detrás de las velas), ocupan el ~18 % inferior
     const vBot = plotTop + plotH, vH = Math.round(plotH * .18); let maxV = 1;
     for (let i = lo; i < hi; i++) if (candles[i]) maxV = Math.max(maxV, candles[i].v);
     for (let i = lo; i < hi; i++) { const d = candles[i]; if (!d) continue; g.fillStyle = d.c >= d.o ? (sp('volume', 'up') === '#089981aa' ? up + '55' : sp('volume', 'up')) : (sp('volume', 'down') === '#f23645aa' ? down + '55' : sp('volume', 'down')); const bh = Math.max(1, d.v / maxV * vH); g.fillRect(X(i) - clamp(step * .66, 1.5, 16) / 2, vBot - bh, clamp(step * .66, 1.5, 16), bh); }
@@ -1674,7 +1681,7 @@ function renderCore() {
     }
   }
   // medias y bandas
-  if (state.indicators.bollinger && ind.bbU && sp('bollinger', 'fill') !== '#748bab00') fillBetween(ind.bbU, ind.bbL, lo, hi, sp('bollinger', 'fill'), 1);
+  if (stdOn('bollinger') && ind.bbU && sp('bollinger', 'fill') !== '#748bab00') fillBetween(ind.bbU, ind.bbL, lo, hi, sp('bollinger', 'fill'), 1);
   for (const [, arr, col, , , sty] of overlays) {
     g.strokeStyle = col; g.lineWidth = sty ? sty.w : 1.4; g.setLineDash(sty ? sty.d : []); g.beginPath();
     let on = false;
@@ -1686,7 +1693,7 @@ function renderCore() {
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailLine(ind.trail, lo, hi);
   if (state.indicators.nnSR && ind.sr) drawNovaSRLabels(ind.sr, lo, hi);
   // cruces EMA 20 / EMA 50
-  if (state.indicators.cross && ind.cross) {
+  if (stdOn('cross') && ind.cross) {
     g.font = 'bold 11px system-ui'; g.textAlign = 'center';
     for (let i = lo; i < hi; i++) {
       const k = ind.cross[i]; if (!k) continue;
@@ -1727,12 +1734,13 @@ function renderCore() {
   let ly2 = plotTop + 54; g.font = '12px system-ui'; const LS = legStep();
   for (const [name, arr, col, , okey] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const tx = name.replace('BB sup', 'Bollinger'); g.fillStyle = col; if (okey) legLabel(tx, left + 8, ly2, {t: 'std', key: okey}); else if (legOpen) g.fillText(tx, left + 8, ly2); ly2 += LS; }
 
-  if (state.indicators.volume && candles.length) { g.fillStyle = text; legLabel('Volumen', left + 8, ly2, {t: 'std', key: 'volume'}); ly2 += LS; }
-  if (state.indicators.vpvr) { g.fillStyle = text; legLabel('VPVR', left + 8, ly2, {t: 'std', key: 'vpvr'}); ly2 += LS; }
+  if (stdOn('volume') && candles.length) { g.fillStyle = text; legLabel('Volumen', left + 8, ly2, {t: 'std', key: 'volume'}); ly2 += LS; }
+  if (stdOn('vpvr')) { g.fillStyle = text; legLabel('VPVR', left + 8, ly2, {t: 'std', key: 'vpvr'}); ly2 += LS; }
   for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += LS; }
   for (const {p, r} of pHid) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)} (oculto)`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); g.globalAlpha = 1; ly2 += LS; }
+  for (const k of Object.keys(state.stdHide || {})) { if (!state.indicators[k] || !state.stdHide[k]) continue; g.globalAlpha = .5; g.fillStyle = text; legLabel(stdName(k) + ' (oculto)', left + 8, ly2, {t: 'std', key: k}, true); g.globalAlpha = 1; ly2 += LS; }
   if (novaOn() && ind.nn) { const tx = 'Nova Nexus'; g.fillStyle = '#11cf77'; legLabel(tx, left + 8, ly2, {t: 'nova'}); ly2 += LS; }
-  if (state.indicators.supertrend && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#089981' : '#f23645'; { const tx = 'Supertrend'; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += LS; } }
+  if (stdOn('supertrend') && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#089981' : '#f23645'; { const tx = 'Supertrend'; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += LS; } }
 
   // volumen
   if (volH) {

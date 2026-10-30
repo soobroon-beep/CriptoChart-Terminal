@@ -1,6 +1,6 @@
 'use strict';
 // Bump this version when changing cached application files. No API responses or account data are cached.
-const CACHE = 'cct-shell-v15';
+const CACHE = 'cct-shell-v16';
 const ROOT = new URL('./', self.location.href);
 const SHELL = ['index.html', 'style.css', 'glass.css', 'pwa.css', 'themes.css', 'pwa-icons.js', 'pwa.js',
   'app.js', 'screener.js', 'firebase-config.js', 'indicators.js', 'nova-nexus.js', 'catalog.js', 'pine.js',
