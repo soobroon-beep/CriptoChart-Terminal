@@ -338,6 +338,41 @@
     return {from, to: last, ln, lo, hi, step, rows, poc, pocPrice: lo + (poc + .5) * step, pocBot: lo + poc * step, pocTop: lo + (poc + 1) * step, total, colors: VP};
   }
 
-  root.CCTIndicators = {volumeProfile, gradient, liquidations, LIQ_AFTER, pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
+  /* VPVR · Perfil de volumen de rango visible (como el de TradingView).
+     Se calcula SOLO con las velas c[from..to] (las que se ven en pantalla): el rango de precios visible se divide en `rows` filas iguales y el volumen
+     de cada vela se reparte entre las filas que toca, proporcional al rango de precio que cubre en cada una (una vela sin rango va entera a su fila).
+     Volumen comprador = vela con cierre >= apertura; vendedor = el resto. POC = fila con más volumen.
+     Área de valor (por defecto 70 %): se parte de la fila POC y se suma, en cada paso, el par de filas contiguas con más volumen (arriba o abajo; empate → arriba)
+     hasta llegar al porcentaje pedido. VAH = tope de la última fila incluida por arriba; VAL = base de la última por abajo.
+     Devuelve null si no hay velas, volumen o rango de precio. */
+  function visibleRangeProfile(c, from, to, o = {}) {
+    const n = c ? c.length : 0; if (!n) return null;
+    const f = Math.max(0, Math.floor(from)), t = Math.min(n - 1, Math.floor(to)); if (!(t >= f)) return null;
+    const R = Math.max(2, Math.min(300, Math.round(o.rows || 24))), vaT = Math.max(.01, Math.min(1, (o.valueArea == null ? 70 : o.valueArea) / 100));
+    let lo = Infinity, hi = -Infinity;
+    for (let i = f; i <= t; i++) { const b = c[i]; if (b.l < lo) lo = b.l; if (b.h > hi) hi = b.h; }
+    const step = (hi - lo) / R; if (!(step > 0) || !Number.isFinite(step)) return null;
+    const up = new Array(R).fill(0), dn = new Array(R).fill(0), rowOf = p => Math.max(0, Math.min(R - 1, Math.floor((p - lo) / step)));
+    for (let i = f; i <= t; i++) {
+      const b = c[i], v = b.v > 0 ? b.v : 0; if (!v) continue;
+      const side = b.c >= b.o ? up : dn, rng = b.h - b.l;
+      if (!(rng > 0)) { side[rowOf(b.h)] += v; continue; }
+      for (let r = rowOf(b.l), r1 = rowOf(b.h); r <= r1; r++) {
+        const a = Math.max(b.l, lo + r * step), z = Math.min(b.h, lo + (r + 1) * step);
+        if (z > a) side[r] += v * (z - a) / rng;
+      }
+    }
+    const tot = up.map((x, r) => x + dn[r]), total = tot.reduce((a, b) => a + b, 0), maxV = Math.max(...tot); if (!(maxV > 0)) return null;
+    const poc = tot.indexOf(maxV); let a = poc, z = poc, acc = tot[poc];
+    while (acc < total * vaT - 1e-12 && (a > 0 || z < R - 1)) {
+      const upS = z < R - 1 ? tot[z + 1] + (z + 2 <= R - 1 ? tot[z + 2] : 0) : -1, dnS = a > 0 ? tot[a - 1] + (a - 2 >= 0 ? tot[a - 2] : 0) : -1;
+      if (upS >= dnS) { z++; acc += tot[z]; if (z < R - 1 && acc < total * vaT - 1e-12) { z++; acc += tot[z]; } }
+      else { a--; acc += tot[a]; if (a > 0 && acc < total * vaT - 1e-12) { a--; acc += tot[a]; } }
+    }
+    const rows = tot.map((vol, r) => ({r, bot: lo + r * step, top: lo + (r + 1) * step, center: lo + (r + .5) * step, up: up[r], dn: dn[r], vol, delta: up[r] - dn[r], inVA: r >= a && r <= z}));
+    return {from: f, to: t, lo, hi, step, rows, total, maxVol: maxV, maxDelta: Math.max(...rows.map(x => Math.abs(x.delta))), poc, pocPrice: lo + (poc + .5) * step, pocBot: lo + poc * step, pocTop: lo + (poc + 1) * step, vaLo: a, vaHi: z, val: lo + a * step, vah: lo + (z + 1) * step, vaShare: acc / total};
+  }
+
+  root.CCTIndicators = {visibleRangeProfile, volumeProfile, gradient, liquidations, LIQ_AFTER, pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTIndicators;
 })(typeof window !== 'undefined' ? window : globalThis);

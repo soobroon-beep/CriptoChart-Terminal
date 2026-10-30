@@ -22,7 +22,7 @@ const MULTI = {
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
+  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
   light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
@@ -54,7 +54,9 @@ const STD_SCHEMA = {
   atr: [['len', 'Período', 'int', 14, 1, 200], ['color', 'Color y opacidad', 'color', '#e07b53'], ['width', 'Grosor', 'int', 1, 1, 6]],
   supertrend: [['len', 'Período ATR', 'int', 10, 1, 200], ['factor', 'Factor', 'float', 3, .1, 20], ['up', 'Color alcista', 'color', '#089981'], ['down', 'Color bajista', 'color', '#f23645'], ['width', 'Grosor', 'int', 1, 1, 6]],
   vwap: [['color', 'Color y opacidad', 'color', '#ff8a65'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]], obv: [['color', 'Color y opacidad', 'color', '#2ec4b6'], ['width', 'Grosor', 'int', 1, 1, 6]],
-  volume: [['up', 'Color alcista y opacidad', 'color', '#089981aa'], ['down', 'Color bajista y opacidad', 'color', '#f23645aa']]
+  volume: [['up', 'Color alcista y opacidad', 'color', '#089981aa'], ['down', 'Color bajista y opacidad', 'color', '#f23645aa']],
+  vpvr: [['rows', 'Número de filas', 'int', 24, 4, 200], ['va', 'Área de valor (% del volumen)', 'int', 70, 10, 100], ['mode', 'Volumen', 'string', 'Arriba/Abajo', 0, 0, ['Arriba/Abajo', 'Total', 'Delta']], ['place', 'Ubicación', 'string', 'Derecha', 0, 0, ['Derecha', 'Izquierda']], ['wpct', 'Ancho (% del gráfico)', 'int', 30, 5, 90],
+    ['cUp', 'Volumen comprador (arriba)', 'color', '#2962ff'], ['cDn', 'Volumen vendedor (abajo)', 'color', '#fbc02d'], ['pocOn', 'Línea POC', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cPoc', 'Color POC', 'color', '#ff5252'], ['vaOn', 'Líneas VAH / VAL', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cVa', 'Color VAH / VAL', 'color', '#2962ff']]
 };
 const sp = (key, name) => { const v = state.stdParams && state.stdParams[key] && state.stdParams[key][name]; if (v !== undefined) return v; const e = (STD_SCHEMA[key] || []).find(x => x[0] === name); return e ? e[3] : undefined; };
 function sanStdParams(p) {
@@ -185,6 +187,31 @@ function coinBadge(s) {
   const b = baseOnly(s);
   return `<span class="coin-icon ${b === 'ETH' ? 'eth' : b === 'SOL' ? 'sol' : b === 'BNB' ? 'bnb' : b === 'XRP' ? 'xrp' : b === 'BTC' ? '' : 'other'}">${esc(meta(s)[1])}</span>`;
 }
+/* Mini gráficos (sparklines) de la lista: últimas 24 h con velas de 30 min de Binance Spot (49 puntos: la apertura de la primera vela y el cierre de cada una).
+   El último punto se sustituye por el precio en vivo del ticker. Verde si la moneda sube en 24 h, rojo si baja (el mismo signo que el % de la fila). Sin datos no se dibuja nada inventado. */
+const SPARK_TTL = 300000, SPARK_RETRY = 60000, spark = {}; let sparkBusy = false;
+const sparkStale = s => { const e = spark[s]; return !e || Date.now() - e.ts > (e.v ? SPARK_TTL : SPARK_RETRY); };
+async function loadSparks() {
+  if (sparkBusy) return; const todo = state.symbols.filter(sparkStale).slice(0, 60); if (!todo.length) return;
+  sparkBusy = true;
+  try {
+    for (let i = 0; i < todo.length; i += 8) { // en lotes de 8 para no saturar la API
+      await Promise.all(todo.slice(i, i + 8).map(async s => {
+        try { const k = await getJSON(`${API}/klines?symbol=${s}&interval=30m&limit=48`), v = [+k[0][1], ...k.map(x => +x[4])].filter(x => Number.isFinite(x) && x > 0); spark[s] = {ts: Date.now(), v: v.length >= 8 ? v : null}; }
+        catch { spark[s] = {ts: Date.now(), v: null}; }
+      }));
+      renderWatch();
+    }
+  } finally { sparkBusy = false; }
+}
+function sparkSVG(s, change) {
+  const e = spark[s]; if (!e || !e.v) return '<span class="spark" aria-hidden="true"></span>';
+  const v = e.v.slice(), live = Number(tickers[s]?.lastPrice); if (Number.isFinite(live) && live > 0) v[v.length - 1] = live;
+  const lo = Math.min(...v), hi = Math.max(...v), W = 72, H = 28, P = 3, n = v.length, flat = !(hi - lo > hi * 1e-9);
+  const pts = v.map((x, i) => [+(i / (n - 1) * W).toFixed(1), +(flat ? H / 2 : P + (hi - x) / (hi - lo) * (H - 2 * P)).toFixed(1)]);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(''), rising = Number.isFinite(change) ? change >= 0 : v[n - 1] >= v[0], end = pts[n - 1];
+  return `<svg class="spark ${rising ? 'positive' : 'negative'}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${rising ? 'Subiendo' : 'Bajando'} en las últimas 24 horas"><path d="${d}L${W} ${H}L0 ${H}Z" fill="currentColor" fill-opacity=".13"/><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${end[0]}" cy="${end[1]}" r="2.2" fill="currentColor"/></svg>`;
+}
 function renderWatch() {
   const q = $('#searchCoins').value.trim().toUpperCase();
   const list = state.symbols.filter(s => s.includes(q) || meta(s)[0].toUpperCase().includes(q));
@@ -195,7 +222,7 @@ function renderWatch() {
     if (Number.isFinite(price)) lastShown[s] = price;
     const main = `${coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small>${esc(meta(s)[0])}</small></span>`;
     if (editMode) return `<div class="watch-row editing" data-symbol="${s}">${main}<span class="row-edit"><button data-move="${s}" aria-label="Subir ${esc(base(s))}">▲</button><button data-remove="${s}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
-    return `<button class="watch-row" data-symbol="${s}">${main}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
+    return `<button class="watch-row" data-symbol="${s}">${main}${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
   }).join('') || '<p class="small-note">No hay activos con ese nombre.</p>';
   $('#totalAssets').textContent = state.symbols.length;
   $('#winners').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) > 0).length;
@@ -217,7 +244,7 @@ async function fetchTicker() {
     catch { data = await getJSON(`${API}/ticker/24hr`); } // por si algún símbolo añadido a mano no existe
     for (const t of data) tickers[t.symbol] = t;
     updateStatus(true, 'Binance en línea');
-    renderWatch(); updateChartHeader(); checkAlertsPoll();
+    renderWatch(); updateChartHeader(); checkAlertsPoll(); loadSparks();
   } catch {
     updateStatus(false, 'Sin conexión'); renderWatch();
     if (!candles.length) setFeedback('No hay datos. Revisa tu conexión o posibles restricciones de Binance en tu país.');
@@ -689,6 +716,7 @@ const indicatorMeta = [
   ['atr','ATR 14','Rango verdadero medio (Wilder) en panel inferior','#e07b53'],
   ['obv','OBV','Volumen en balance en panel inferior','#2ec4b6'],
   ['volume','Volumen','Barras de volumen por vela','#8294a8'],
+  ['vpvr','Perfil de volumen de rango visible (VPVR)','Volumen por nivel de precio de las velas que ves en pantalla, con POC y área de valor; se recalcula al mover o hacer zoom','#2962ff'],
   ['nnIa','Nova Nexus · Señales IA','BUY/SELL con score ⭐, cooldown y divergencias (v2.7)','#11cf77'],
   ['nnEma','Nova Nexus · EMA Cloud','Nube EMA 55 ± 0.6 ATR','#8a97b3'],
   ['nnTp','Nova Nexus · TP / SL','Niveles de la última señal (SL 1 · TP 1.5 / 2.5 / 4 ATR)','#ff9900'],
@@ -1577,6 +1605,8 @@ function renderCore() {
   { const lb = document.querySelector('.chart-label'); if (lb) lb.style.top = (topH + 8) + 'px'; } // la leyenda del precio baja si hay paneles arriba
   geo = {w, h, left, right, gutter, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
 
+  // VPVR: perfil de volumen de las velas que se ven ahora mismo (índices cuyo centro cae dentro del área de precios); se recalcula en cada dibujo, así sigue al desplazar y al hacer zoom
+  const vpvr = state.indicators.vpvr && window.CCTIndicators ? CCTIndicators.visibleRangeProfile(candles, Math.ceil(start - .5), Math.floor(end - .5), {rows: sp('vpvr', 'rows'), valueArea: sp('vpvr', 'va')}) : null;
   if (volH) grips.push({key: 'vol', y: geo.volTop, dir: 'up', h: volH});
   if (rsiH) grips.push({key: 'rsi', y: geo.rsiTop, dir: 'up', h: rsiH});
   panelKeys.forEach((k, i) => grips.push({key: k, y: geo.extraTop + oBot[i], dir: 'up', h: hBot[i]}));
@@ -1612,6 +1642,7 @@ function renderCore() {
     const none = {plots: [], shapes: [], lines: [], labels: [], polylines: [], hlines: [], fills: [], bgcolors: [], barcolors: [], candles: [], linefills: [], tables: [], strategy: null};
     for (const {r} of pOver) CCTPineDraw.draw(g, Object.assign({}, r, none), {X, Y, lo, hi, left, right: left + plotW + (vpOn ? 0 : pineG), top: plotTop, bottom: plotTop + plotH, step, candles, overlay: true, pass: 'back'});
   }
+  if (vpvr) drawVPVR(vpvr); // detrás de las velas, como en TradingView
   // velas
   const barW = clamp(step * .66, 1.5, 16), limeBars = !!(state.indicators.nnLiq && state.indicators.nnLiqBars && ind.liq);
   if (state.indicators.volume && candles.length) { // volumen en el mismo panel de las velas: barras al fondo (detrás de las velas), ocupan el ~18 % inferior
@@ -1691,11 +1722,13 @@ function renderCore() {
     g.strokeStyle = col; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(left, ly); g.lineTo(w - right + 2, ly); g.stroke(); g.setLineDash([]);
     g.fillStyle = col; g.fillRect(w - right + 2, ly - 9, right - 3, 18); g.fillStyle = '#fff'; g.fillText(fmt(lastC.c), w - right + 5, ly + 3.5);
   }
+  if (vpvr) drawVPVRTags(vpvr); // etiquetas de POC / VAH / VAL en la escala de precios
   // leyenda de indicadores
   let ly2 = plotTop + 54; g.font = '12px system-ui'; const LS = legStep();
   for (const [name, arr, col, , okey] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); const tx = `${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`; g.fillStyle = col; if (okey) legLabel(tx, left + 8, ly2, {t: 'std', key: okey}); else if (legOpen) g.fillText(tx, left + 8, ly2); ly2 += LS; }
 
   if (state.indicators.volume && candles.length) { g.fillStyle = text; legLabel('Volumen', left + 8, ly2, {t: 'std', key: 'volume'}); ly2 += LS; }
+  if (state.indicators.vpvr) { g.fillStyle = text; legLabel(vpvr ? `VPVR  ${vpvr.rows.length} filas · POC ${fmt(vpvr.pocPrice)}` : 'VPVR', left + 8, ly2, {t: 'std', key: 'vpvr'}); ly2 += LS; }
   for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += LS; }
   for (const {p, r} of pHid) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)} (oculto)`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); g.globalAlpha = 1; ly2 += LS; }
   if (novaOn() && ind.nn) { const tx = 'Nova Nexus'; g.fillStyle = '#11cf77'; legLabel(tx, left + 8, ly2, {t: 'nova'}); ly2 += LS; }
@@ -1861,6 +1894,35 @@ const rgbaOf = (c, a = c[3]) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${
 function fmtVolPine(v) { // aproxima format.volume: 1.23K · 4.5M · 2B
   const a = Math.abs(v), sg = v < 0 ? '-' : '', t = x => String(+x.toFixed(2));
   return sg + (a >= 1e12 ? t(a / 1e12) + 'T' : a >= 1e9 ? t(a / 1e9) + 'B' : a >= 1e6 ? t(a / 1e6) + 'M' : a >= 1e3 ? t(a / 1e3) + 'K' : t(a));
+}
+/* ───────── VPVR · perfil de volumen de rango visible ─────────
+   Histograma horizontal pegado al borde derecho (o izquierdo) del área de precios, detrás de las velas. Cada fila es un tramo de precio y su largo es el volumen negociado ahí
+   por las velas visibles. Arriba/Abajo: comprador (cierre ≥ apertura) junto al borde y vendedor a continuación; Total: una sola barra; Delta: |compra − venta| con el color del lado ganador.
+   Las filas dentro del área de valor se ven más intensas. Línea roja = POC; líneas punteadas = VAH / VAL. */
+function drawVPVR(vp) {
+  const P = k => sp('vpvr', k), mode = P('mode'), toRight = P('place') === 'Derecha', maxW = Math.max(10, geo.plotW * P('wpct') / 100);
+  const xE = toRight ? geo.left + geo.plotW : geo.left, sc = mode === 'Delta' ? vp.maxDelta : vp.maxVol, cu = hexArr(P('cUp')), cd = hexArr(P('cDn'));
+  const bar = (off, len, c, k, y, h) => { if (len < .3) return; g.fillStyle = rgbaOf(c, c[3] * k); g.fillRect(toRight ? xE - off - len : xE + off, y, len, h); };
+  g.save(); g.setLineDash([]);
+  if (sc > 0) for (const r of vp.rows) {
+    const yT = Y(r.top), yB = Y(r.bot), h = yB - yT; if (yB < geo.plotTop || yT > geo.plotTop + geo.plotH) continue;
+    const gap = h > 4 ? 1 : 0, y = yT + gap / 2, hh = Math.max(1, h - gap), k = r.inVA ? .68 : .34;
+    if (mode === 'Arriba/Abajo') { const lu = r.up / sc * maxW, ld = r.dn / sc * maxW; bar(0, lu, cu, k, y, hh); bar(lu, ld, cd, k, y, hh); }
+    else if (mode === 'Total') bar(0, r.vol / sc * maxW, cu, k, y, hh);
+    else bar(0, Math.abs(r.delta) / sc * maxW, r.delta >= 0 ? cu : cd, k, y, hh);
+  }
+  const xa = geo.left, xb = geo.left + geo.plotW, lab = (txt, y, col) => { g.font = '10px system-ui'; g.fillStyle = col; g.textAlign = toRight ? 'left' : 'right'; g.fillText(txt, toRight ? xa + 4 : xb - 4, y - 3); };
+  const hl = (p, col, w, dash, txt) => { const y = Y(p); if (y < geo.plotTop - 1 || y > geo.plotTop + geo.plotH + 1) return; g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash); g.beginPath(); g.moveTo(xa, y); g.lineTo(xb, y); g.stroke(); lab(txt, y, col); };
+  if (P('vaOn') === 'Sí') { const cv = P('cVa'); hl(vp.vah, cv, 1, [4, 3], 'VAH'); hl(vp.val, cv, 1, [4, 3], 'VAL'); }
+  if (P('pocOn') === 'Sí') hl(vp.pocPrice, P('cPoc'), 1.5, [], 'POC');
+  g.restore(); g.textAlign = 'left';
+}
+function drawVPVRTags(vp) {
+  const P = k => sp('vpvr', k), x = geo.w - geo.right + 2, wTag = geo.right - 3, tag = (p, col) => { const y = Y(p); if (y < geo.plotTop || y > geo.plotTop + geo.plotH) return; g.fillStyle = col; g.fillRect(x, y - 8, wTag, 16); g.fillStyle = '#fff'; g.font = '10px system-ui'; g.textAlign = 'left'; g.fillText(fmt(p), x + 3, y + 3.5); };
+  g.save();
+  if (P('vaOn') === 'Sí') { tag(vp.vah, P('cVa')); tag(vp.val, P('cVa')); }
+  if (P('pocOn') === 'Sí') tag(vp.pocPrice, P('cPoc'));
+  g.restore();
 }
 function drawNovaVPZone(vp) { // zona del POC (Last(Zone)): caja y línea punteada sobre las velas del perfil
   const C = vpPal(vp).C, x1 = X(vp.from), x2 = X(vp.to), yT = Y(vp.pocTop), yB = Y(vp.pocBot), yc = Y(vp.pocPrice);

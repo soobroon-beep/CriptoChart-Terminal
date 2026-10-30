@@ -185,3 +185,39 @@ test('Volume Profile: ventana (199/200 velas o todas), conservación del volumen
   const z = mkc(60); z[59].v = 0; assert.equal(I.volumeProfile(z), null);        // sin volumen en la última vela no hay perfil
   assert.equal(I.volumeProfile(Array.from({length: 30}, () => ({o: 5, h: 5, l: 5, c: 5, v: 1}))), null); // rango plano
 });
+
+/* ── VPVR · perfil de volumen de rango visible ── */
+const cd = (o, h, l, c, v) => ({t: 0, o, h, l, c, v});
+test('VPVR: solo cuenta las velas visibles [from..to] y conserva el volumen', () => {
+  const c = [cd(1, 100, 1, 2, 999), cd(10, 12, 9, 11, 5), cd(11, 14, 10, 13, 7), cd(13, 15, 12, 12.5, 3), cd(1, 100, 1, 2, 999)];
+  const p = I.visibleRangeProfile(c, 1, 3, {rows: 6});
+  assert.equal(p.lo, 9); assert.equal(p.hi, 15); // el rango de precios es el de las 3 velas visibles, no el de las de fuera
+  near(p.total, 15, 1e-9); near(p.rows.reduce((a, r) => a + r.vol, 0), 15, 1e-9);
+  assert.equal(p.from, 1); assert.equal(p.to, 3);
+});
+test('VPVR: el volumen de una vela se reparte proporcional al rango que cubre en cada fila', () => {
+  const c = [cd(0, 4, 0, 0, 0), cd(1, 2.5, .5, 2, 40)]; // la primera solo fija el rango 0–4 (volumen 0); filas de 1
+  const p = I.visibleRangeProfile(c, 0, 1, {rows: 4});
+  near(p.rows[0].vol, 10); near(p.rows[1].vol, 20); near(p.rows[2].vol, 10); near(p.rows[3].vol, 0);
+});
+test('VPVR: vela alcista → comprador, bajista → vendedor, vela plana va entera a su fila', () => {
+  const c = [cd(0, 4, 0, 0, 0), cd(1, 2, 1, 2, 10), cd(2, 3, 2, 2, 6), cd(3.5, 3.5, 3.5, 3.5, 4)]; // 10: sube (cierre>apertura); 6: cierre = apertura → comprador; 4: sin rango
+  const p = I.visibleRangeProfile(c, 0, 3, {rows: 4});
+  near(p.rows[1].up, 10); near(p.rows[1].dn, 0); near(p.rows[2].up, 6); near(p.rows[3].up, 4);
+  const q = I.visibleRangeProfile([cd(0, 4, 0, 0, 0), cd(2, 3, 2, 1, 8)], 0, 1, {rows: 4}); near(q.rows[2].dn, 8); near(q.rows[2].up, 0);
+});
+test('VPVR: POC = fila con más volumen y área de valor del 70 % desde el POC', () => {
+  const rowC = (r, v) => cd(r + .2, r + 1, r, r + .8, v), c = [rowC(0, 10), rowC(1, 50), rowC(2, 30), rowC(3, 10)]; // filas de 1 entre 0 y 4
+  const p = I.visibleRangeProfile(c, 0, 3, {rows: 4, valueArea: 70});
+  assert.equal(p.poc, 1); near(p.pocPrice, 1.5);
+  assert.equal(p.vaLo, 1); assert.equal(p.vaHi, 2); near(p.val, 1); near(p.vah, 3); near(p.vaShare, .8); // 50 + (30+10 por arriba contra 10 por abajo) → sube a la fila 2 (80 ≥ 70)
+  assert.deepEqual(p.rows.map(r => r.inVA), [false, true, true, false]);
+  const all = I.visibleRangeProfile(c, 0, 3, {rows: 4, valueArea: 100}); assert.deepEqual(all.rows.map(r => r.inVA), [true, true, true, true]);
+});
+test('VPVR: sin velas, sin volumen o sin rango devuelve null; from/to se recortan al historial', () => {
+  assert.equal(I.visibleRangeProfile([], 0, 0), null);
+  assert.equal(I.visibleRangeProfile([cd(1, 2, 1, 2, 0)], 0, 0), null); // sin volumen
+  assert.equal(I.visibleRangeProfile([cd(5, 5, 5, 5, 10)], 0, 0), null); // precio plano: no hay rango que dividir
+  const c = [cd(1, 3, 1, 2, 4), cd(2, 4, 2, 3, 6)];
+  const p = I.visibleRangeProfile(c, -5, 99, {rows: 3}); assert.equal(p.from, 0); assert.equal(p.to, 1); near(p.total, 10);
+});

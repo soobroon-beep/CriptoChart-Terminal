@@ -405,3 +405,9 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .ai-brief:disabled{opacity:.5}
 
 .src-menu{position:fixed;z-index:30;width:220px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px #0008;padding:6px;display:flex;flex-direction:column;gap:2px}.src-menu button{background:none;border:0;color:var(--text);text-align:left;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600}.src-menu button:hover{background:var(--raised)}.src-menu button.on{color:var(--accent);background:var(--raised)}.src-menu small{color:var(--muted);font-size:10px;line-height:1.5;padding:6px 10px 4px}#srcLabel{cursor:pointer;text-decoration:underline dotted}
+
+/* ── Mini gráfico (sparkline) en la lista de seguimiento ── */
+.watch-row .spark{flex:0 0 72px;width:72px;height:28px;display:block;overflow:visible}
+.watch-row .row-prices{min-width:84px} /* así los mini gráficos quedan alineados en una columna, aunque cambie el ancho del precio */
+@media (min-width:1024px){.watch-row .spark{flex-basis:60px;width:60px;height:26px}}
+@media (max-width:359px){.watch-row .spark{flex-basis:54px;width:54px;height:22px}}
