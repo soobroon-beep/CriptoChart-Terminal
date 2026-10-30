@@ -1603,10 +1603,10 @@ function renderCore() {
   const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * .08; min -= pad; max += pad;
   if (priceMan) { min = priceMan.min; max = priceMan.max; }
   { const lb = document.querySelector('.chart-label'); if (lb) lb.style.top = (topH + 8) + 'px'; } // la leyenda del precio baja si hay paneles arriba
-  geo = {w, h, left, right, gutter, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
+  geo = {w, h, left, right, gutter, vpOn, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
 
   // VPVR: perfil de volumen de las velas que se ven ahora mismo (índices cuyo centro cae dentro del área de precios); se recalcula en cada dibujo, así sigue al desplazar y al hacer zoom
-  const vpvr = state.indicators.vpvr && window.CCTIndicators ? CCTIndicators.visibleRangeProfile(candles, Math.ceil(start - .5), Math.floor(end - .5), {rows: sp('vpvr', 'rows'), valueArea: sp('vpvr', 'va')}) : null;
+  const vpvr = state.indicators.vpvr && window.CCTIndicators ? CCTIndicators.visibleRangeProfile(candles, Math.ceil(start - .5), Math.floor(end - .5 + (vpOn ? 0 : gutter) / step), {rows: sp('vpvr', 'rows'), valueArea: sp('vpvr', 'va')}) : null;
   if (volH) grips.push({key: 'vol', y: geo.volTop, dir: 'up', h: volH});
   if (rsiH) grips.push({key: 'rsi', y: geo.rsiTop, dir: 'up', h: rsiH});
   panelKeys.forEach((k, i) => grips.push({key: k, y: geo.extraTop + oBot[i], dir: 'up', h: hBot[i]}));
@@ -1725,14 +1725,14 @@ function renderCore() {
   if (vpvr) drawVPVRTags(vpvr); // etiquetas de POC / VAH / VAL en la escala de precios
   // leyenda de indicadores
   let ly2 = plotTop + 54; g.font = '12px system-ui'; const LS = legStep();
-  for (const [name, arr, col, , okey] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const v = [...arr].reverse().find(x => x != null); const tx = `${name.replace('BB sup', 'Bollinger')}  ${v != null ? fmt(v) : '—'}`; g.fillStyle = col; if (okey) legLabel(tx, left + 8, ly2, {t: 'std', key: okey}); else if (legOpen) g.fillText(tx, left + 8, ly2); ly2 += LS; }
+  for (const [name, arr, col, , okey] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const tx = name.replace('BB sup', 'Bollinger'); g.fillStyle = col; if (okey) legLabel(tx, left + 8, ly2, {t: 'std', key: okey}); else if (legOpen) g.fillText(tx, left + 8, ly2); ly2 += LS; }
 
   if (state.indicators.volume && candles.length) { g.fillStyle = text; legLabel('Volumen', left + 8, ly2, {t: 'std', key: 'volume'}); ly2 += LS; }
-  if (state.indicators.vpvr) { g.fillStyle = text; legLabel(vpvr ? `VPVR  ${vpvr.rows.length} filas · POC ${fmt(vpvr.pocPrice)}` : 'VPVR', left + 8, ly2, {t: 'std', key: 'vpvr'}); ly2 += LS; }
+  if (state.indicators.vpvr) { g.fillStyle = text; legLabel('VPVR', left + 8, ly2, {t: 'std', key: 'vpvr'}); ly2 += LS; }
   for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += LS; }
   for (const {p, r} of pHid) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)} (oculto)`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); g.globalAlpha = 1; ly2 += LS; }
   if (novaOn() && ind.nn) { const tx = 'Nova Nexus'; g.fillStyle = '#11cf77'; legLabel(tx, left + 8, ly2, {t: 'nova'}); ly2 += LS; }
-  if (state.indicators.supertrend && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#089981' : '#f23645'; { const tx = `Supertrend ${dv < 0 ? '↑' : '↓'}  ${fmt((dv < 0 ? ind.stUp : ind.stDn)[j])}`; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += LS; } }
+  if (state.indicators.supertrend && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#089981' : '#f23645'; { const tx = 'Supertrend'; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += LS; } }
 
   // volumen
   if (volH) {
@@ -1747,7 +1747,7 @@ function renderCore() {
     const top = geo.rsiTop + 4, height = rsiH - 12;
     g.strokeStyle = line; g.beginPath(); g.moveTo(left, geo.rsiTop); g.lineTo(w - right + 2, geo.rsiTop); g.stroke();
     const lastR = [...ind.rsi].reverse().find(x => x != null);
-    { const tx = `RSI ${sp('rsi', 'len')}  ${lastR != null ? lastR.toFixed(1) : '—'}`; g.fillStyle = text; legLabel(tx, left + 4, top + 16, {t: 'std', key: 'rsi'}); }
+    { const tx = `RSI ${sp('rsi', 'len')}`; g.fillStyle = text; legLabel(tx, left + 4, top + 16, {t: 'std', key: 'rsi'}); }
     g.setLineDash([2, 3]);
     for (const r of [sp('rsi', 'os'), sp('rsi', 'ob')]) { const yy = top + (100 - r) / 100 * height; g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
     g.setLineDash([]);
@@ -1801,7 +1801,7 @@ function drawSubPanel(key, top0, H, lo, hi, o) {
   g.font = '10px system-ui';
   const last = a => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; };
   const label = {macd: `MACD ${sp('macd', 'fast')} ${sp('macd', 'slow')} ${sp('macd', 'sig')}`, stoch: `Estoc ${sp('stoch', 'k')} ${sp('stoch', 'ks')} ${sp('stoch', 'd')}`, atr: `ATR ${sp('atr', 'len')}`, obv: 'OBV'}[key];
-  { const tx = `${label}  ${series.map(([a]) => fmtV(last(a))).join('  ')}`; g.fillStyle = text; legLabel(tx, left + 4, top + 16, {t: 'std', key}); }
+  { const tx = label; g.fillStyle = text; legLabel(tx, left + 4, top + 16, {t: 'std', key}); }
   if (key === 'stoch') {
     g.setLineDash([2, 3]);
     for (const r of [sp('stoch', 'lo'), sp('stoch', 'hi')]) { const yy = Yp(r); g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
@@ -1900,8 +1900,8 @@ function fmtVolPine(v) { // aproxima format.volume: 1.23K · 4.5M · 2B
    por las velas visibles. Arriba/Abajo: comprador (cierre ≥ apertura) junto al borde y vendedor a continuación; Total: una sola barra; Delta: |compra − venta| con el color del lado ganador.
    Las filas dentro del área de valor se ven más intensas. Línea roja = POC; líneas punteadas = VAH / VAL. */
 function drawVPVR(vp) {
-  const P = k => sp('vpvr', k), mode = P('mode'), toRight = P('place') === 'Derecha', maxW = Math.max(10, geo.plotW * P('wpct') / 100);
-  const xE = toRight ? geo.left + geo.plotW : geo.left, sc = mode === 'Delta' ? vp.maxDelta : vp.maxVol, cu = hexArr(P('cUp')), cd = hexArr(P('cDn'));
+  const P = k => sp('vpvr', k), mode = P('mode'), toRight = P('place') === 'Derecha', maxW = Math.max(10, (geo.plotW + (geo.vpOn ? 0 : geo.gutter)) * P('wpct') / 100);
+  const rEdge = geo.left + geo.plotW + (geo.vpOn ? 0 : geo.gutter), xE = toRight ? rEdge : geo.left, sc = mode === 'Delta' ? vp.maxDelta : vp.maxVol, cu = hexArr(P('cUp')), cd = hexArr(P('cDn'));
   const bar = (off, len, c, k, y, h) => { if (len < .3) return; g.fillStyle = rgbaOf(c, c[3] * k); g.fillRect(toRight ? xE - off - len : xE + off, y, len, h); };
   g.save(); g.setLineDash([]);
   if (sc > 0) for (const r of vp.rows) {
@@ -1911,7 +1911,7 @@ function drawVPVR(vp) {
     else if (mode === 'Total') bar(0, r.vol / sc * maxW, cu, k, y, hh);
     else bar(0, Math.abs(r.delta) / sc * maxW, r.delta >= 0 ? cu : cd, k, y, hh);
   }
-  const xa = geo.left, xb = geo.left + geo.plotW, lab = (txt, y, col) => { g.font = '10px system-ui'; g.fillStyle = col; g.textAlign = toRight ? 'left' : 'right'; g.fillText(txt, toRight ? xa + 4 : xb - 4, y - 3); };
+  const xa = geo.left, xb = rEdge, lab = (txt, y, col) => { g.font = '10px system-ui'; g.fillStyle = col; g.textAlign = toRight ? 'left' : 'right'; g.fillText(txt, toRight ? xa + 4 : xb - 4, y - 3); };
   const hl = (p, col, w, dash, txt) => { const y = Y(p); if (y < geo.plotTop - 1 || y > geo.plotTop + geo.plotH + 1) return; g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash); g.beginPath(); g.moveTo(xa, y); g.lineTo(xb, y); g.stroke(); lab(txt, y, col); };
   if (P('vaOn') === 'Sí') { const cv = P('cVa'); hl(vp.vah, cv, 1, [4, 3], 'VAH'); hl(vp.val, cv, 1, [4, 3], 'VAL'); }
   if (P('pocOn') === 'Sí') hl(vp.pocPrice, P('cPoc'), 1.5, [], 'POC');
@@ -2903,7 +2903,7 @@ function drawPinePane(x, top0, H, lo, hi, o) {
   g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip();
   g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
   g.font = '10px system-ui'; g.fillStyle = text; g.textAlign = 'left';
-  { const tx = `${(r.meta.short || r.meta.title || '').slice(0, 22)}  ${CCTPineDraw.legend(r, candles.length - 1).slice(0, 2).map(i => i.text.replace(/^.* /, '')).join('  ')}`; legLabel(tx, left + 4, top + 16, {t: 'pine', sid: x.p.sid, pane: x.p.pane || 'bottom'}); }
+  { const tx = (r.meta.short || r.meta.title || '').slice(0, 22); legLabel(tx, left + 4, top + 16, {t: 'pine', sid: x.p.sid, pane: x.p.pane || 'bottom'}); }
   g.fillText(CCTPineDraw.fmtV(mx - pad), w - right + 6, top + 9); g.fillText(CCTPineDraw.fmtV(mn + pad), w - right + 6, top + height);
   const pr = w - right; // el panel usa todo el ancho hasta el eje (incluye el margen derecho del gráfico): si no, al desplazarse quedaba un cuadro vacío que tapaba las últimas velas
   g.beginPath(); g.rect(left, top0, pr - left + 2, H); g.clip();
