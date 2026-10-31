@@ -1,6 +1,6 @@
 /* Screener Nova Nexus — las 50 criptos con más volumen de Binance Spot, con las señales LONG / SHORT / RANGO de tu indicador.
    Usa la misma lógica de señales de Nova Nexus (IA Signals) sobre las velas de cada moneda en la temporalidad elegida.
-   Una señal se mantiene visible 5 velas (la de la vela donde sale cuenta como la 1) y la lista va de la más reciente a la más vieja. Al tocar una moneda se abre su gráfico con Nova Nexus activo. */
+   Una señal se mantiene visible 5 velas (la de la vela donde sale cuenta como la 1) y la lista va de la más reciente a la más vieja. Al tocar una moneda se abre su gráfico con Nova Nexus activo. Se muestra en el panel lateral derecho (icono de la barra), no en una ventana emergente. */
 (function () {
   'use strict';
   if (/[?&]pane=/.test(location.search)) return;
@@ -70,21 +70,21 @@
       <small class="scr-note">Top ${TOP_N} por volumen en Binance Spot · señales de Nova Nexus (visibles ${SIG_BARS} velas) · ${st.at ? 'actualizado ' + new Date(st.at).toLocaleTimeString('es', {hour: '2-digit', minute: '2-digit'}) : 'calculando…'}. Es una herramienta de análisis, no asesoría financiera.</small>`;
   }
 
-  function open() {
-    const h = H(); if (!h) return; if (!st.tf) st.tf = TFS.includes(h.interval()) ? h.interval() : '1h';
-    const el = document.createElement('div'); el.className = 'cfg-overlay scr-overlay'; el.id = 'scrOverlay';
-    el.innerHTML = `<div class="cfg-dlg scr-dlg" role="dialog" aria-modal="true" aria-label="Screener"><div class="cfg-head"><strong>Screener Nova Nexus</strong><button class="cfg-x" aria-label="Cerrar">✕</button></div><div class="cfg-body" id="scrBody"></div></div>`;
-    document.body.appendChild(el);
-    const close = () => { st.gen++; st.busy = false; el.remove(); };
+  /* El Screener vive en el panel lateral (#screenerView, igual que Noticias o Alertas), no en una ventana emergente. */
+  let bound = false;
+  function bind() {
+    const el = $('#screenerView'); if (!el || bound) return; bound = true;
     el.addEventListener('click', e => {
-      if (e.target === el || e.target.closest('.cfg-x')) { close(); return; }
       const tf = e.target.closest('[data-scr-tf]'); if (tf) { st.tf = tf.dataset.scrTf; scan(); return; }
       const f = e.target.closest('[data-scr-f]'); if (f) { st.filter = f.dataset.scrF; paint(); return; }
       if (e.target.closest('[data-scr-refresh]')) { scan(); return; }
-      const o = e.target.closest('[data-scr-open]'); if (o) { const sym = o.dataset.scrOpen; close(); h.openSignal(sym, st.tf); }
+      const o = e.target.closest('[data-scr-open]'); if (o) { const h = H(); if (h) h.openSignal(o.dataset.scrOpen, st.tf); }
     });
+  }
+  function open() {
+    const h = H(); if (!h) return; bind(); if (!st.tf) st.tf = TFS.includes(h.interval()) ? h.interval() : '1h';
     paint(); if (!st.rows.length || Date.now() - st.at > 120e3 || st.tfDone !== st.tf) { st.tfDone = st.tf; scan(); }
   }
-  document.addEventListener('click', e => { if (e.target.closest('#scrOpen')) open(); });
+  document.addEventListener('click', e => { if (e.target.closest('#scrOpen, [data-side="screenerView"]')) open(); });
   window.CCTScreener = {signalOf, kindOf, open, sortRows, SIG_BARS};
 })();

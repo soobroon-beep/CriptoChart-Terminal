@@ -31,7 +31,7 @@ return{initializeApp(){},auth:Object.assign(()=>auth,{GoogleAuthProvider:functio
   // 1) PC: añade un script ANTES de iniciar sesión y luego inicia sesión
   const A = await mkPage({width: 1400, height: 820});
   await A.evaluate(() => document.querySelector('[data-pine-new]').click()).catch(()=>{});
-  await A.click('.side-tabs [data-side=indicatorView]').catch(()=>{});
+  await A.click('.right-rail [data-side=indicatorView]').catch(()=>{});
   await A.evaluate(() => { const t = document.querySelector('#indicatorList [data-indtab=mine]'); t && t.click(); }); await A.waitForTimeout(200);
   await A.evaluate(() => document.querySelector('[data-pine-new]').click()); await A.waitForTimeout(200);
   await A.fill('#pineName', 'Mi indicador PC'); await A.fill('#pineCode', '//@version=5\nindicator("Mi indicador PC", overlay=true)\nplot(ta.ema(close, 14), "EMA14")\n'); await A.click('#pineRun'); await A.waitForTimeout(1500);
@@ -49,7 +49,7 @@ return{initializeApp(){},auth:Object.assign(()=>auth,{GoogleAuthProvider:functio
   console.log('LS móvil:', await B.evaluate(() => Object.keys(localStorage).map(k => k + '=' + localStorage.getItem(k).match(/"pine":\[[^\]]*\]/)?.[0] || '').filter(x => /mobile/.test(x)).join('\n')));
   await B.screenshot({path: out + 'sync_mobile.png'});
   // 3) Cambio en vivo: el PC añade otro indicador y el móvil lo recibe sin recargar
-  await A.evaluate(() => { document.querySelector('.side-tabs [data-side=indicatorView]').click(); const t = document.querySelector('#indicatorList [data-indtab=mine]'); t && t.click(); });
+  await A.evaluate(() => { document.querySelector('.right-rail [data-side=indicatorView]').click(); const t = document.querySelector('#indicatorList [data-indtab=mine]'); t && t.click(); });
   await A.evaluate(() => document.querySelector('[data-pine-new]').click()); await A.waitForTimeout(200);
   await A.fill('#pineName', 'Segundo PC'); await A.fill('#pineCode', '//@version=5\nindicator("Segundo PC")\nplot(ta.rsi(close, 14), "RSI")\n'); await A.click('#pineRun'); await A.waitForTimeout(2500);
   await B.waitForTimeout(2500);

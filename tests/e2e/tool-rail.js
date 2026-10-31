@@ -22,14 +22,14 @@ let fail = 0; const ok = (c, m) => { console.log((c ? 'OK   ' : 'FALLA') + ' ' +
   await page.goto(`http://localhost:${port}/?cct_debug=1`); await page.waitForSelector('#toolRail .rail-btn'); await page.waitForTimeout(900);
 
   // ── Mi seguimiento junto a Noticias
-  const tabs = await page.$$eval('.side-tabs button', b => b.map(x => x.textContent.trim()));
-  ok(tabs[0].includes('Mi seguimiento') && tabs[1].includes('Noticias'), 'botón «Mi seguimiento» junto a Noticias (' + tabs.join(' | ') + ')');
+  const tabs = await page.$$eval('.right-rail .rr-btn', b => b.map(x => x.dataset.tip));
+  ok(tabs.length === 6, 'botón «Mi seguimiento» junto a Noticias (' + tabs.join(' | ') + ')');
   const lay = await page.evaluate(() => { const r = id => document.querySelector(id).getBoundingClientRect(); return {rail: r('#toolRail'), watch: r('#watchView'), chart: r('#chartView'), railVis: getComputedStyle(document.querySelector('#toolRail')).display, wv: getComputedStyle(document.querySelector('#watchView')).display}; });
   ok(lay.rail.width > 40 && lay.rail.width < 70 && lay.rail.left < 5, 'columna izquierda delgada (' + Math.round(lay.rail.width) + 'px)');
   ok(lay.wv !== 'none' && lay.watch.left > lay.chart.left, 'la lista de seguimiento está en el panel derecho');
   ok(await page.$$eval('#watchRows .watch-row', e => e.length) >= 3 && await page.isVisible('#popSection'), 'se ven las criptomonedas y los populares');
-  await page.click('.side-tabs [data-side="newsView"]'); ok(await page.isHidden('#watchView') && await page.isVisible('#newsView'), 'Noticias oculta el seguimiento');
-  await page.click('.side-tabs [data-side="watchView"]'); ok(await page.isVisible('#watchView') && await page.isHidden('#newsView'), 'Mi seguimiento vuelve a mostrarlo');
+  await page.click('.right-rail [data-side="newsView"]'); ok(await page.isHidden('#watchView') && await page.isVisible('#newsView'), 'Noticias oculta el seguimiento');
+  await page.click('.right-rail [data-side="watchView"]'); ok(await page.isVisible('#watchView') && await page.isHidden('#newsView'), 'Mi seguimiento vuelve a mostrarlo');
   await page.click('#watchRows .watch-row:nth-child(2)'); await page.waitForTimeout(500);
   ok(await page.evaluate(() => CCT_DEBUG.state.symbol) === 'ETHUSDT' && await page.isVisible('#watchView'), 'tocar una moneda abre su gráfico y el panel sigue visible');
   await page.click('#watchRows .watch-row:nth-child(3)'); await page.waitForTimeout(600);

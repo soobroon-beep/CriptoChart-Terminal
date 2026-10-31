@@ -147,3 +147,6 @@ Indicador «Patrones» que detecta y dibuja sobre el gráfico lo que se está fo
 - **Chartistas**: doble techo/suelo, hombro-cabeza-hombro (y el invertido) con línea de cuello y objetivo, triángulos (simétrico/ascendente/descendente) y cuñas.
 - **Ondas de Elliott**: impulso 0-1-2-3-4-5 (reglas: la 2 no pasa del inicio, la 4 no invade la 1, la 3 no es la más corta) o 0-4 con la onda 5 proyectada.
 En su ⚙: longitud del pivote, movimiento mínimo (× ATR), tolerancia, puntuación mínima, máximo de patrones, antigüedad, qué familias activar y colores. Cálculo en `patterns.js` (con `tests/patterns.test.js`). **Es detección por reglas geométricas, no una garantía de que el patrón funcione ni la paridad con el indicador premium de TradingView**; dos patrones que comparten pivotes no se apilan (gana el de más rango). No incluye banderas ni las «bandas de helio» (pendiente de que se aclare cuál es).
+
+## Barra de iconos derecha
+En escritorio, Mi seguimiento, Noticias, Screener, Alertas, IA y Ajustes son iconos en una barra a la derecha (pegada al panel lateral), como en TradingView; al pasar el cursor aparece el nombre. Tocar el icono activo oculta/muestra el panel. El Screener ya no es una ventana emergente: se despliega en ese panel lateral. En móvil se mantiene la navegación inferior y el botón del Screener dentro de Alertas.

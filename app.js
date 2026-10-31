@@ -160,11 +160,11 @@ const deskMQ = window.matchMedia ? window.matchMedia('(min-width: 1024px)') : {m
 const isDesktop = () => deskMQ.matches;
 function setSide(id) {
   document.body.dataset.side = id;
-  $$('.side-tabs button').forEach(b => b.classList.toggle('active', b.dataset.side === id));
+  $$('.right-rail [data-side]').forEach(b => b.classList.toggle('active', b.dataset.side === id));
 }
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
-    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView') { setSide(id); if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
+    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView') { setSide(id); if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
     id = 'chartView';
   }
   currentView = id;
@@ -180,7 +180,9 @@ function switchView(id) {
 }
 $$('.bottom-nav button').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
 $('#settingsBtn').onclick = () => switchView('settingsView');
-$$('.side-tabs button').forEach(b => b.addEventListener('click', () => setSide(b.dataset.side)));
+let prevSide = ''; // panel que estaba abierto antes del clic en la barra de iconos (volver a tocar el mismo lo oculta)
+$$('.right-rail [data-side]').forEach(b => b.addEventListener('click', () => { prevSide = document.body.dataset.side || 'watchView'; setSide(b.dataset.side); }));
+$('#scrOpen').addEventListener('click', () => { if (isDesktop()) setSide('screenerView'); else switchView('screenerView'); }); // celular: el Screener es una vista completa
 function onLayoutChange() {
   if (isDesktop()) { setSide(document.body.dataset.side || 'watchView'); switchView('chartView'); }
   else { delete document.body.dataset.side; document.body.classList.remove('expanded'); switchView('watchView'); }
@@ -3126,7 +3128,7 @@ async function initCloud() {
   };
   bind('splitR', 'side');
   // al cambiar de panel derecho (indicadores / alertas / ajustes) se mantiene el ancho; si estaba oculto, se muestra al elegir una pestaña
-  document.querySelectorAll('.side-tabs button').forEach(b => b.addEventListener('click', () => { if (L.sideOff) { L.sideOff = false; store(); apply(); } }));
+  document.querySelectorAll('.right-rail [data-side]').forEach(b => b.addEventListener('click', () => { if (L.sideOff) L.sideOff = false; else if (prevSide === b.dataset.side) L.sideOff = true; else return; store(); apply(); })); // si estaba oculto se muestra; tocar el icono del panel abierto lo oculta
   window.addEventListener('resize', () => { if (isDesktop()) apply(); });
   apply();
 })();
