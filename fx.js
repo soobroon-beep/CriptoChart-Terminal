@@ -5,7 +5,7 @@
   const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   // Onda de luz en botones desde el punto exacto del toque
   document.addEventListener('pointerdown', e => {
-    const b = e.target.closest && e.target.closest('button, .watch-row, .sheet-item, .setting-row, .small-button'); if (!b || reduced || b.disabled) return;
+    const b = e.target.closest && e.target.closest('button:not(.rr-btn), .watch-row, .sheet-item, .setting-row, .small-button'); if (!b || reduced || b.disabled) return;
     const r = b.getBoundingClientRect(); b.style.setProperty('--rx', (e.clientX - r.left) + 'px'); b.style.setProperty('--ry', (e.clientY - r.top) + 'px');
     b.classList.remove('rip'); void b.offsetWidth; b.classList.add('rip'); setTimeout(() => b.classList.remove('rip'), 650);
   }, {passive: true});

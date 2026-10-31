@@ -1584,8 +1584,18 @@ function renderCore() {
     for (const {r} of pOver) { for (const b of r.boxes || []) { f(b.l); f(b.r); } for (const l of r.lines || []) { f(l.x1); f(l.x2); } for (const l of r.labels || []) f(l.x); for (const pl of r.polylines || []) for (const q of pl.pts || []) f(q && q[0]); }
     return m;
   })();
+  // Margen estable: guarda cuántas barras «futuras» dibuja cada script y, mientras el script aún se calcula (tarda unos segundos), reserva ese mismo margen
+  // para que el gráfico no se encoja de golpe cuando llegue el resultado.
+  const aheadEff = (() => {
+    let mem = {}; try { mem = JSON.parse(localStorage.getItem('cct_ahead') || '{}') || {}; } catch {}
+    let m = aheadBars, dirty = false;
+    for (const {p, r} of pOver) { let a = 0; const N = n - 1, f = v => { if (Number.isFinite(v) && v > N && v < N + 400 && v - N > a) a = v - N; }; for (const b of r.boxes || []) { f(b.l); f(b.r); } for (const l of r.lines || []) { f(l.x1); f(l.x2); } for (const l of r.labels || []) f(l.x); a = Math.round(a); if (mem[p.sid] !== a) { mem[p.sid] = a; dirty = true; } }
+    for (const p of activePine()) if (pineVisibleOn(p, state.interval) && !p.hide && !prAll.some(x => x.p === p) && mem[p.sid] > m) m = mem[p.sid];
+    if (dirty) { try { localStorage.setItem('cct_ahead', JSON.stringify(mem)); } catch {} }
+    return m;
+  })();
   const plotW0 = w - left - right, count0 = clamp(visible, 15, 400);
-  const pineG = aheadBars ? clamp(Math.round(plotW0 * aheadBars / (count0 + aheadBars)) + 8, 0, Math.round(plotW0 * .5)) : 0;
+  const pineG = aheadEff ? clamp(Math.round(plotW0 * aheadEff / (count0 + aheadEff)) + 8, 0, Math.round(plotW0 * .5)) : 0;
   const vpOn = !!(state.indicators.nnVP && ind.vp), gutter = vpOn ? clamp(Math.round((w - left - right) * .4), 110, 300) : pineG; // margen derecho para el perfil
   const plotH = Math.max(80, h - axisH - rsiH - volH - extraH - plotTop), plotW = w - left - right - gutter;
   const count = clamp(visible, 15, 400);
