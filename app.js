@@ -22,7 +22,7 @@ const MULTI = {
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
+  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, patterns:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
   light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
@@ -55,6 +55,9 @@ const STD_SCHEMA = {
   supertrend: [['len', 'Período ATR', 'int', 10, 1, 200], ['factor', 'Factor', 'float', 3, .1, 20], ['up', 'Color alcista', 'color', '#089981'], ['down', 'Color bajista', 'color', '#f23645'], ['width', 'Grosor', 'int', 1, 1, 6]],
   vwap: [['color', 'Color y opacidad', 'color', '#ff8a65'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]], obv: [['color', 'Color y opacidad', 'color', '#2ec4b6'], ['width', 'Grosor', 'int', 1, 1, 6]],
   volume: [['up', 'Color alcista y opacidad', 'color', '#089981aa'], ['down', 'Color bajista y opacidad', 'color', '#f23645aa']],
+  patterns: [['len', 'Longitud del pivote (velas)', 'int', 5, 2, 30], ['dev', 'Movimiento mínimo (× ATR)', 'float', 1.5, .2, 10], ['tol', 'Tolerancia de proporciones (%)', 'int', 10, 2, 30], ['min', 'Puntuación mínima (0-100)', 'int', 60, 0, 100], ['max', 'Máximo de patrones a mostrar', 'int', 3, 1, 10], ['keep', 'Antigüedad máxima (velas)', 'int', 200, 20, 1000],
+    ['g123', '1-2-3', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gabc', 'Corrección ABC', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gharm', 'Armónicos (ABCD, Gartley, Bat, Butterfly, Crab, Cypher)', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gchart', 'Chartistas (dobles, HCH, triángulos, cuñas)', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gell', 'Ondas de Elliott', 'string', 'Sí', 0, 0, ['Sí', 'No']],
+    ['labels', 'Etiquetas de los puntos', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['prz', 'Zona de reversión (PRZ) y objetivos', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['panel', 'Panel con los patrones detectados', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cBull', 'Color alcista', 'color', '#089981'], ['cBear', 'Color bajista', 'color', '#f23645']],
   vpvr: [['rows', 'Número de filas', 'int', 24, 4, 200], ['va', 'Área de valor (% del volumen)', 'int', 70, 10, 100], ['mode', 'Volumen', 'string', 'Arriba/Abajo', 0, 0, ['Arriba/Abajo', 'Total', 'Delta']], ['place', 'Ubicación', 'string', 'Derecha', 0, 0, ['Derecha', 'Izquierda']], ['wpct', 'Ancho (% del gráfico)', 'int', 30, 5, 90],
     ['cUp', 'Volumen comprador (arriba)', 'color', '#2962ff'], ['cDn', 'Volumen vendedor (abajo)', 'color', '#fbc02d'], ['pocOn', 'Línea POC', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cPoc', 'Color POC', 'color', '#ff5252'], ['vaOn', 'Líneas VAH / VAL', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cVa', 'Color VAH / VAL', 'color', '#2962ff']]
 };
@@ -67,7 +70,7 @@ function sanStdParams(p) {
   return o;
 }
 const stdOn = k => !!state.indicators[k] && !(state.stdHide && state.stdHide[k]); // activo y no oculto con el ojito de la leyenda
-const stdName = k => ({ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', vpvr: 'VPVR', cross: 'Cruces EMA 20/50'}[k] || k);
+const stdName = k => ({ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', vpvr: 'VPVR', patterns: 'Patrones', cross: 'Cruces EMA 20/50'}[k] || k);
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
 const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle || {}); if (!(state.chartStyle && state.chartStyle.bg) && document.body.classList.contains('light')) o.bg = ''; return o; }; // fondo por defecto #0d1019 (el tema claro conserva el suyo)
@@ -720,6 +723,7 @@ const indicatorMeta = [
   ['obv','OBV','Volumen en balance en panel inferior','#2ec4b6'],
   ['volume','Volumen','Barras de volumen por vela','#8294a8'],
   ['vpvr','Perfil de volumen de rango visible (VPVR)','Volumen por nivel de precio de las velas que ves en pantalla, con POC y área de valor; se recalcula al mover o hacer zoom','#2962ff'],
+  ['patterns','Patrones (1-2-3, ABC, armónicos, chartistas, Elliott)','Detecta y dibuja sobre el gráfico el patrón que se está formando: 1-2-3, ABC, ABCD/Gartley/Bat/Butterfly/Crab/Cypher con zona de reversión, dobles techos y suelos, hombro-cabeza-hombro, triángulos, cuñas e impulsos de Elliott','#f5a623'],
   ['nnIa','Nova Nexus · Señales IA','BUY/SELL con score ⭐, cooldown y divergencias (v2.7)','#11cf77'],
   ['nnEma','Nova Nexus · EMA Cloud','Nube EMA 55 ± 0.6 ATR','#8a97b3'],
   ['nnTp','Nova Nexus · TP / SL','Niveles de la última señal (SL 1 · TP 1.5 / 2.5 / 4 ATR)','#ff9900'],
@@ -783,6 +787,7 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.sr = I.nnSR ? T.supportResistance(candles, {lookback: NP('srLookback'), retSince: NP('srSince'), retValid: NP('srLimit')}) : null;
   ind.piv = I.nnPiv ? T.pivots(candles, NP('pivLen')) : null;
   ind.liq = I.nnLiq ? T.liquidations(candles, iv, {lookback: NP('liqLookback')}) : null;
+  { const Q = k => sp('patterns', k); ind.pat = I.patterns && window.CCTPatterns ? CCTPatterns.detect(candles, {len: Q('len'), dev: Q('dev'), tol: Q('tol') / 100, min: Q('min'), max: Q('max'), keep: Q('keep'), p123: Q('g123') === 'Sí', abc: Q('gabc') === 'Sí', harm: Q('gharm') === 'Sí', chart: Q('gchart') === 'Sí', ell: Q('gell') === 'Sí'}) : null; }
   ind.vp = I.nnVP ? T.volumeProfile(candles, {rows: NP('vpRows'), lookback: NP('vpLookback'), hiThr: NP('vpHi'), loThr: NP('vpLo')}) : null;
 }
 // Parámetros de Nova Nexus editables (misma presentación que la ventana de TradingView: grupos, filas y ayudas)
@@ -1607,7 +1612,8 @@ function renderCore() {
   if (state.indicators.nnTrail && ind.trail) for (let i = lo; i < hi; i++) { const v = ind.trail.trail[i]; if (v != null) { if (v < min) min = v; if (v > max) max = v; } }
   const nn = ind.nn;
   if (nn && state.indicators.nnEma) for (let i = lo; i < hi; i++) { const a = nn.emaTop[i], b = nn.emaBot[i]; if (Number.isFinite(a) && a > max) max = a; if (Number.isFinite(b) && b < min) min = b; }
-  const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * .08; min -= pad; max += pad;
+  if (stdOn('patterns') && ind.pat) for (const q of ind.pat.list) { for (const t of q.pts) if (t.i >= lo && t.i < hi) { if (t.p < min) min = t.p; if (t.p > max) max = t.p; } if (q.prz && q.pts.length && q.pts[q.pts.length - 1].i >= lo) { min = Math.min(min, q.prz.lo); max = Math.max(max, q.prz.hi); } }
+  const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * (stdOn('patterns') && ind.pat && ind.pat.list.length ? .15 : .08); // con patrones, más aire arriba y abajo para las etiquetas min -= pad; max += pad;
   if (priceMan) { min = priceMan.min; max = priceMan.max; }
   { const lb = document.querySelector('.chart-label'); if (lb) lb.style.top = (topH + 8) + 'px'; } // la leyenda del precio baja si hay paneles arriba
   geo = {w, h, left, right, gutter, vpOn, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
@@ -1692,6 +1698,7 @@ function renderCore() {
   for (const {r} of pSub.concat(pTop)) if (r.strategy) CCTPineDraw.drawTrades(g, r.strategy, {X, Y, lo, hi, candles}); // estrategias con panel propio: las operaciones se marcan igual sobre el precio
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailLine(ind.trail, lo, hi);
   if (state.indicators.nnSR && ind.sr) drawNovaSRLabels(ind.sr, lo, hi);
+  if (stdOn('patterns') && ind.pat) drawPatterns(ind.pat.list);
   // cruces EMA 20 / EMA 50
   if (stdOn('cross') && ind.cross) {
     g.font = 'bold 11px system-ui'; g.textAlign = 'center';
@@ -1735,6 +1742,7 @@ function renderCore() {
   for (const [name, arr, col, , okey] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const tx = name.replace('BB sup', 'Bollinger'); g.fillStyle = col; if (okey) legLabel(tx, left + 8, ly2, {t: 'std', key: okey}); else if (legOpen) g.fillText(tx, left + 8, ly2); ly2 += LS; }
 
   if (stdOn('volume') && candles.length) { g.fillStyle = text; legLabel('Volumen', left + 8, ly2, {t: 'std', key: 'volume'}); ly2 += LS; }
+  if (stdOn('patterns')) { g.fillStyle = text; legLabel('Patrones', left + 8, ly2, {t: 'std', key: 'patterns'}); ly2 += LS; }
   if (stdOn('vpvr')) { g.fillStyle = text; legLabel('VPVR', left + 8, ly2, {t: 'std', key: 'vpvr'}); ly2 += LS; }
   for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += LS; }
   for (const {p, r} of pHid) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)} (oculto)`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); g.globalAlpha = 1; ly2 += LS; }
@@ -1902,6 +1910,45 @@ const rgbaOf = (c, a = c[3]) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${
 function fmtVolPine(v) { // aproxima format.volume: 1.23K · 4.5M · 2B
   const a = Math.abs(v), sg = v < 0 ? '-' : '', t = x => String(+x.toFixed(2));
   return sg + (a >= 1e12 ? t(a / 1e12) + 'T' : a >= 1e9 ? t(a / 1e9) + 'B' : a >= 1e6 ? t(a / 1e6) + 'M' : a >= 1e3 ? t(a / 1e3) + 'K' : t(a));
+}
+/* ───────── Patrones ─────────
+   Dibuja lo que detecta patterns.js: la línea que une los puntos con sus etiquetas (X-A-B-C-D, 1-2-3, 0-5, A-B-C), las diagonales y rellenos de los armónicos, la zona de reversión (PRZ)
+   de la D que se está formando, la línea de cuello, las líneas de triángulos y cuñas, y el objetivo / stop. El panel de arriba a la derecha dice qué patrón es y en qué estado está. */
+const PAT_STATE = {forming: 'en formación', confirmed: 'confirmado', complete: 'completo'};
+function drawPatterns(list) {
+  if (!list.length) return;
+  const P = k => sp('patterns', k), labelsOn = P('labels') === 'Sí', przOn = P('prz') === 'Sí', n = candles.length, xr = geo.left + geo.plotW, xl = geo.left;
+  const clX = x => clamp(x, xl + 4, xr - 4), line = (x1, y1, x2, y2, col, w, dash) => { g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || []); g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); g.setLineDash([]); };
+  const tag = (txt, x, y, col, up) => { g.font = '10px system-ui'; const w = g.measureText(txt).width + 10, bx = clamp(x - w / 2, xl + 2, xr - w - 2), by = up ? y - 20 : y + 4; g.fillStyle = 'rgba(8,12,22,.82)'; roundRect(bx, by, w, 16, 5); g.fill(); g.strokeStyle = col; g.lineWidth = 1; g.stroke(); g.fillStyle = col; g.textAlign = 'left'; g.fillText(txt, bx + 5, by + 11.5); };
+  g.save(); g.lineJoin = 'round'; g.lineCap = 'round';
+  for (const p of list) {
+    const col = p.dir > 0 ? P('cBull') : p.dir < 0 ? P('cBear') : '#9aa7bd', pts = p.pts.map(q => ({x: X(q.i), y: Y(q.p), q}));
+    if (p.kind === 'harm' && pts.length >= 4) { // rellenos XAB y BCD (o ABC y BCD) y diagonales
+      const tri = (a, b, c) => { g.fillStyle = col + '22'; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(c.x, c.y); g.closePath(); g.fill(); };
+      if (pts.length === 5) { tri(pts[0], pts[1], pts[2]); tri(pts[2], pts[3], pts[4]); line(pts[0].x, pts[0].y, pts[2].x, pts[2].y, col + '99', 1, [4, 3]); line(pts[1].x, pts[1].y, pts[3].x, pts[3].y, col + '99', 1, [4, 3]); line(pts[2].x, pts[2].y, pts[4].x, pts[4].y, col + '99', 1, [4, 3]); line(pts[0].x, pts[0].y, pts[4].x, pts[4].y, col + '99', 1, [2, 4]); }
+      else if (pts.length === 4 && p.status !== 'forming' || (pts.length === 4 && p.name.startsWith('ABCD'))) { tri(pts[0], pts[1], pts[2]); tri(pts[1], pts[2], pts[3]); }
+      else if (pts.length === 4) { tri(pts[0], pts[1], pts[2]); line(pts[0].x, pts[0].y, pts[2].x, pts[2].y, col + '99', 1, [4, 3]); line(pts[1].x, pts[1].y, pts[3].x, pts[3].y, col + '99', 1, [4, 3]); }
+    }
+    if (pts.length > 1) { g.strokeStyle = col; g.lineWidth = 2; g.setLineDash(p.status === 'forming' && p.kind !== 'harm' ? [] : []); g.beginPath(); pts.forEach((o, k) => k ? g.lineTo(o.x, o.y) : g.moveTo(o.x, o.y)); g.stroke(); }
+    for (const l of p.lines || []) line(X(l.i1), Y(l.p1), X(l.i2), Y(l.p2), col, 1.6, []);
+    if (p.neck) line(X(p.neck.i1), Y(p.neck.p1), X(p.neck.i2), Y(p.neck.p2), col, 1.4, [6, 4]);
+    const lp = pts[pts.length - 1] || {x: X(n - 1), y: Y(p.lines && p.lines[0] ? p.lines[0].p2 : candles[n - 1].c), q: {hi: true}};
+    if (przOn && p.prz) { // zona de reversión donde se espera la D
+      const x0 = X(p.pts[p.pts.length - 1].i), x1 = Math.min(xr, Math.max(X(n - 1), x0) + Math.max(geo.step * 16, 70)), y0 = Y(p.prz.hi), y1 = Y(p.prz.lo);
+      g.fillStyle = col + '30'; g.fillRect(x0, y0, x1 - x0, y1 - y0); g.strokeStyle = col; g.lineWidth = 1; g.setLineDash([4, 3]); g.strokeRect(x0, y0, x1 - x0, y1 - y0); g.setLineDash([]);
+      line(lp.x, lp.y, x0 + (x1 - x0) * .55, (y0 + y1) / 2, col, 1.2, [2, 4]); g.fillStyle = col; g.font = 'bold 10px system-ui'; g.textAlign = 'left'; g.fillText('PRZ · D', x0 + 4, y0 - 4);
+    }
+    if (przOn && Number.isFinite(p.target)) { const x0 = pts.length ? lp.x : xl, x1 = Math.min(xr, Math.max(X(n - 1), x0) + Math.max(geo.step * 14, 60)); line(x0, Y(p.target), x1, Y(p.target), col, 1, [5, 4]); g.fillStyle = col; g.font = '10px system-ui'; g.textAlign = 'right'; g.fillText((p.kind === 'ell' ? 'Onda 5 ≈ ' : 'Objetivo ') + fmt(p.target), clX(x1), Y(p.target) - 3); }
+    if (przOn && Number.isFinite(p.stop)) { const x0 = pts.length ? pts[0].x : xl, x1 = Math.min(xr, Math.max(X(n - 1), lp.x) + Math.max(geo.step * 14, 60)); line(x0, Y(p.stop), x1, Y(p.stop), '#9aa7bd', 1, [2, 4]); g.fillStyle = '#9aa7bd'; g.font = '10px system-ui'; g.textAlign = 'right'; g.fillText('Stop ' + fmt(p.stop), clX(x1), Y(p.stop) - 3); }
+    if (labelsOn) for (const o of pts) { if (!o.q.t) continue; g.fillStyle = col; g.beginPath(); g.arc(o.x, o.y, 3, 0, 7); g.fill(); g.font = 'bold 11px system-ui'; g.textAlign = 'center'; g.fillText(o.q.t, o.x, o.q.hi ? o.y - 8 : o.y + 17); }
+    tag(`${p.name} · ${PAT_STATE[p.status]} ${Math.round(p.score)} %`, lp.x, lp.y, col, !!(lp.q && lp.q.hi));
+  }
+  if (P('panel') === 'Sí') { // panel: qué patrones hay ahora
+    g.font = '11px system-ui'; const rows = list.map(p => ({col: p.dir > 0 ? P('cBull') : p.dir < 0 ? P('cBear') : '#9aa7bd', txt: `${p.name} — ${PAT_STATE[p.status]}`})), w = Math.max(...rows.map(r => g.measureText(r.txt).width)) + 30, h = rows.length * 17 + 12, x = xr - w - 8, y = geo.plotTop + 8;
+    g.fillStyle = 'rgba(8,12,22,.78)'; roundRect(x, y, w, h, 7); g.fill(); g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1; g.stroke(); g.textAlign = 'left';
+    rows.forEach((r, k) => { g.fillStyle = r.col; g.beginPath(); g.arc(x + 12, y + 14 + k * 17, 4, 0, 7); g.fill(); g.fillStyle = '#dfe7f5'; g.fillText(r.txt, x + 22, y + 18 + k * 17); });
+  }
+  g.restore(); g.textAlign = 'left';
 }
 /* ───────── VPVR · perfil de volumen de rango visible ─────────
    Histograma horizontal pegado al borde derecho (o izquierdo) del área de precios, detrás de las velas. Cada fila es un tramo de precio y su largo es el volumen negociado ahí

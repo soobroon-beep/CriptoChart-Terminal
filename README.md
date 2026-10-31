@@ -139,3 +139,11 @@ Arrastra el borde entre *Seguimiento* y el gráfico, o entre el gráfico y *Indi
 
 ## Screener
 Las señales de Nova Nexus del Screener se muestran como máximo 5 velas (1/5 = la vela donde sale la señal o recién cerrada, 5/5 = hace 4 velas) y la lista va de la más reciente a la más vieja; a igual edad, primero la de mayor puntaje y luego la de más volumen. Pruebas en `tests/screener.test.js`. El indicador Pine «Screener 40 Cryptos» del catálogo conserva su propia entrada «Duración señal (velas)» (7 por defecto) y no se tocó.
+
+## Patrones (Indicadores → Comunes)
+Indicador «Patrones» que detecta y dibuja sobre el gráfico lo que se está formando, con un panel arriba a la derecha que dice qué patrón es y su estado (en formación / confirmado / completo) y una puntuación 0-100 de qué tan cerca están las proporciones de las ideales:
+- **1-2-3** (reversión, confirmado al romper el máximo/mínimo del 2, con objetivo y stop) y **ABC** (corrección en zigzag).
+- **Armónicos**: ABCD, Gartley, Bat, Butterfly, Crab y Cypher; con la D en formación se dibuja la **zona de reversión (PRZ)**.
+- **Chartistas**: doble techo/suelo, hombro-cabeza-hombro (y el invertido) con línea de cuello y objetivo, triángulos (simétrico/ascendente/descendente) y cuñas.
+- **Ondas de Elliott**: impulso 0-1-2-3-4-5 (reglas: la 2 no pasa del inicio, la 4 no invade la 1, la 3 no es la más corta) o 0-4 con la onda 5 proyectada.
+En su ⚙: longitud del pivote, movimiento mínimo (× ATR), tolerancia, puntuación mínima, máximo de patrones, antigüedad, qué familias activar y colores. Cálculo en `patterns.js` (con `tests/patterns.test.js`). **Es detección por reglas geométricas, no una garantía de que el patrón funcione ni la paridad con el indicador premium de TradingView**; dos patrones que comparten pivotes no se apilan (gana el de más rango). No incluye banderas ni las «bandas de helio» (pendiente de que se aclare cuál es).
