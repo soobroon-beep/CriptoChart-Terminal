@@ -150,3 +150,6 @@ En su ⚙: longitud del pivote, movimiento mínimo (× ATR), tolerancia, puntuac
 
 ## Barra de iconos derecha
 En escritorio, Mi seguimiento, Noticias, Screener, Alertas, IA y Ajustes son iconos en una barra a la derecha (pegada al panel lateral), como en TradingView; al pasar el cursor aparece el nombre. Tocar el icono activo oculta/muestra el panel. El Screener ya no es una ventana emergente: se despliega en ese panel lateral. En móvil se mantiene la navegación inferior y el botón del Screener dentro de Alertas.
+
+## Heatmap de liquidaciones
+Botón en la barra derecha (escritorio) o en Indicadores comunes → «Mapa de calor de liquidaciones». Dibuja detrás de las velas, al estilo CoinGlass, las zonas donde se **estima** que hay liquidaciones (morado = pocas, amarillo = muchas). Binance no publica dónde están las posiciones, así que es un modelo: el volumen de cada vela se reparte entre apalancamientos de 5x a 100x, cada banda se mantiene hasta que el precio la toca y entonces desaparece. No usa los datos reales de CoinGlass. Parámetros (resolución, intensidad, opacidad) en el engrane del indicador. Código en `indicators.js` (`liquidationHeatmap`), pruebas en `tests/liqmap.test.js`.

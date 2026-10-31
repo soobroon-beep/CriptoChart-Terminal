@@ -22,7 +22,7 @@ const MULTI = {
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, patterns:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
+  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, patterns:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
   light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
@@ -58,6 +58,7 @@ const STD_SCHEMA = {
   patterns: [['len', 'Longitud del pivote (velas)', 'int', 5, 2, 30], ['dev', 'Movimiento mínimo (× ATR)', 'float', 1.5, .2, 10], ['tol', 'Tolerancia de proporciones (%)', 'int', 10, 2, 30], ['min', 'Puntuación mínima (0-100)', 'int', 60, 0, 100], ['max', 'Máximo de patrones a mostrar', 'int', 3, 1, 10], ['keep', 'Antigüedad máxima (velas)', 'int', 200, 20, 1000],
     ['g123', '1-2-3', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gabc', 'Corrección ABC', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gharm', 'Armónicos (ABCD, Gartley, Bat, Butterfly, Crab, Cypher)', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gchart', 'Chartistas (dobles, HCH, triángulos, cuñas)', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gell', 'Ondas de Elliott', 'string', 'Sí', 0, 0, ['Sí', 'No']],
     ['labels', 'Etiquetas de los puntos', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['prz', 'Zona de reversión (PRZ) y objetivos', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['panel', 'Panel con los patrones detectados', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cBull', 'Color alcista', 'color', '#089981'], ['cBear', 'Color bajista', 'color', '#f23645']],
+  liqmap: [['rows', 'Resolución (filas de precio)', 'int', 140, 40, 300], ['gain', 'Intensidad (%)', 'int', 100, 30, 400], ['alpha', 'Opacidad (%)', 'int', 80, 20, 100]],
   vpvr: [['rows', 'Número de filas', 'int', 24, 4, 200], ['va', 'Área de valor (% del volumen)', 'int', 70, 10, 100], ['mode', 'Volumen', 'string', 'Arriba/Abajo', 0, 0, ['Arriba/Abajo', 'Total', 'Delta']], ['place', 'Ubicación', 'string', 'Derecha', 0, 0, ['Derecha', 'Izquierda']], ['wpct', 'Ancho (% del gráfico)', 'int', 30, 5, 90],
     ['cUp', 'Volumen comprador (arriba)', 'color', '#2962ff'], ['cDn', 'Volumen vendedor (abajo)', 'color', '#fbc02d'], ['pocOn', 'Línea POC', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cPoc', 'Color POC', 'color', '#ff5252'], ['vaOn', 'Líneas VAH / VAL', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cVa', 'Color VAH / VAL', 'color', '#2962ff']]
 };
@@ -70,7 +71,7 @@ function sanStdParams(p) {
   return o;
 }
 const stdOn = k => !!state.indicators[k] && !(state.stdHide && state.stdHide[k]); // activo y no oculto con el ojito de la leyenda
-const stdName = k => ({ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', vpvr: 'VPVR', patterns: 'Patrones', cross: 'Cruces EMA 20/50'}[k] || k);
+const stdName = k => ({ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', vpvr: 'VPVR', liqmap: 'Liquidaciones (heatmap)', patterns: 'Patrones', cross: 'Cruces EMA 20/50'}[k] || k);
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
 const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle || {}); if (!(state.chartStyle && state.chartStyle.bg) && document.body.classList.contains('light')) o.bg = ''; return o; }; // fondo por defecto #0d1019 (el tema claro conserva el suyo)
@@ -724,6 +725,7 @@ const indicatorMeta = [
   ['atr','ATR 14','Rango verdadero medio (Wilder) en panel inferior','#e07b53'],
   ['obv','OBV','Volumen en balance en panel inferior','#2ec4b6'],
   ['volume','Volumen','Barras de volumen por vela','#8294a8'],
+  ['liqmap','Mapa de calor de liquidaciones','Zonas donde se estima que hay liquidaciones apalancadas (estilo CoinGlass): se calcula con el volumen de cada vela y varios apalancamientos; cuanto más claro, más liquidaciones esperadas','#f5d90a'],
   ['vpvr','Perfil de volumen de rango visible (VPVR)','Volumen por nivel de precio de las velas que ves en pantalla, con POC y área de valor; se recalcula al mover o hacer zoom','#2962ff'],
   ['patterns','Patrones (1-2-3, ABC, armónicos, chartistas, Elliott)','Detecta y dibuja sobre el gráfico el patrón que se está formando: 1-2-3, ABC, ABCD/Gartley/Bat/Butterfly/Crab/Cypher con zona de reversión, dobles techos y suelos, hombro-cabeza-hombro, triángulos, cuñas e impulsos de Elliott','#f5a623'],
   ['nnIa','Nova Nexus · Señales IA','BUY/SELL con score ⭐, cooldown y divergencias (v2.7)','#11cf77'],
@@ -788,6 +790,7 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.rev = I.nnRev ? T.reversalBands(candles, NP('revLen')) : null;
   ind.sr = I.nnSR ? T.supportResistance(candles, {lookback: NP('srLookback'), retSince: NP('srSince'), retValid: NP('srLimit')}) : null;
   ind.piv = I.nnPiv ? T.pivots(candles, NP('pivLen')) : null;
+  { const lk = `${state.symbol}|${state.interval}|${candles.length}|${candles[0].t}|${sp('liqmap', 'rows')}|${Math.floor(Date.now() / 20000)}`; if (!I.liqmap) ind.lm = null; else if (!ind.lm || ind.lm._k !== lk) { ind.lm = T.liquidationHeatmap(candles, {rows: sp('liqmap', 'rows')}); if (ind.lm) ind.lm._k = lk; } }
   ind.liq = I.nnLiq ? T.liquidations(candles, iv, {lookback: NP('liqLookback')}) : null;
   { const Q = k => sp('patterns', k); ind.pat = I.patterns && window.CCTPatterns ? CCTPatterns.detect(candles, {len: Q('len'), dev: Q('dev'), tol: Q('tol') / 100, min: Q('min'), max: Q('max'), keep: Q('keep'), p123: Q('g123') === 'Sí', abc: Q('gabc') === 'Sí', harm: Q('gharm') === 'Sí', chart: Q('gchart') === 'Sí', ell: Q('gell') === 'Sí'}) : null; }
   ind.vp = I.nnVP ? T.volumeProfile(candles, {rows: NP('vpRows'), lookback: NP('vpLookback'), hiThr: NP('vpHi'), loThr: NP('vpLo')}) : null;
@@ -878,7 +881,9 @@ const indicatorRows = () => { document.body.dataset.indtab = indTab; return indT
 document.addEventListener('change', e => { const s = e.target.closest('[data-pine-pane]'); if (!s) return; const p = state.pine.find(x => x.sid === s.dataset.pinePane); if (!p) return; if (s.value) p.pane = s.value; else delete p.pane; save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); scheduleRender(); });
 document.addEventListener('click', e => { const t = e.target.closest('[data-indtab]'); if (!t) return; indTab = t.dataset.indtab; renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); });
 function renderIndicators() { $('#indicatorList').innerHTML = indicatorRows(); }
-function countIndicators() { const n = Object.entries(state.indicators).filter(([k, v]) => v && !k.startsWith('nn')).length + (novaOn() ? 1 : 0); $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
+function syncLiqBtn() { const b = $('#rrLiq'); if (!b) return; const on = !!state.indicators.liqmap; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }
+{ const b = $('#rrLiq'); if (b) b.addEventListener('click', () => { state.indicators.liqmap = !state.indicators.liqmap; if (state.stdHide) delete state.stdHide.liqmap; save(); renderIndicators(); countIndicators(); if (candles.length) { calcNova(); calcExtra(); } scheduleRender(); toast(state.indicators.liqmap ? 'Heatmap de liquidaciones activado (estimado)' : 'Heatmap de liquidaciones apagado'); }); }
+function countIndicators() { syncLiqBtn(); const n = Object.entries(state.indicators).filter(([k, v]) => v && !k.startsWith('nn')).length + (novaOn() ? 1 : 0); $('#indicatorCount').textContent = n ? `Indicadores (${n})` : 'Indicadores'; }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-ind]'); if (!b) return;
   state.indicators[b.dataset.ind] = !state.indicators[b.dataset.ind]; if (state.stdHide) delete state.stdHide[b.dataset.ind];
@@ -1667,6 +1672,7 @@ function renderCore() {
     const none = {plots: [], shapes: [], lines: [], labels: [], polylines: [], hlines: [], fills: [], bgcolors: [], barcolors: [], candles: [], linefills: [], tables: [], strategy: null};
     for (const {r} of pOver) CCTPineDraw.draw(g, Object.assign({}, r, none), {X, Y, lo, hi, left, right: left + plotW + (vpOn ? 0 : pineG), top: plotTop, bottom: plotTop + plotH, step, candles, overlay: true, pass: 'back'});
   }
+  if (stdOn('liqmap') && ind.lm) drawLiqMap(ind.lm, lo, hi);
   if (vpvr) drawVPVR(vpvr); // detrás de las velas, como en TradingView
   // velas
   const barW = clamp(step * .66, 1.5, 16), limeBars = !!(state.indicators.nnLiq && state.indicators.nnLiqBars && ind.liq);
@@ -1755,6 +1761,7 @@ function renderCore() {
 
   if (stdOn('volume') && candles.length) { g.fillStyle = text; legLabel('Volumen', left + 8, ly2, {t: 'std', key: 'volume'}); ly2 += LS; }
   if (stdOn('patterns')) { g.fillStyle = text; legLabel('Patrones', left + 8, ly2, {t: 'std', key: 'patterns'}); ly2 += LS; }
+  if (stdOn('liqmap')) { g.fillStyle = text; legLabel('Liquidaciones', left + 8, ly2, {t: 'std', key: 'liqmap'}); ly2 += LS; }
   if (stdOn('vpvr')) { g.fillStyle = text; legLabel('VPVR', left + 8, ly2, {t: 'std', key: 'vpvr'}); ly2 += LS; }
   for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += LS; }
   for (const {p, r} of pHid) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)} (oculto)`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); g.globalAlpha = 1; ly2 += LS; }
@@ -1966,6 +1973,24 @@ function drawPatterns(list) {
    Histograma horizontal pegado al borde derecho (o izquierdo) del área de precios, detrás de las velas. Cada fila es un tramo de precio y su largo es el volumen negociado ahí
    por las velas visibles. Arriba/Abajo: comprador (cierre ≥ apertura) junto al borde y vendedor a continuación; Total: una sola barra; Delta: |compra − venta| con el color del lado ganador.
    Las filas dentro del área de valor se ven más intensas. Línea roja = POC; líneas punteadas = VAH / VAL. */
+/* ───────── Heatmap de liquidaciones estimadas (estilo CoinGlass) ─────────
+   Cada celda (vela × tramo de precio) se pinta según cuántas liquidaciones se estiman ahí; la escala va de morado oscuro (poco) a amarillo (mucho). Se dibuja detrás de las velas. */
+const LIQ_RAMP = ['#2b0a5e', '#3a1590', '#3b2fb5', '#2a5fd1', '#1f94b8', '#26b97f', '#7ad24a', '#d6e035', '#ffe81a'];
+function drawLiqMap(m, lo, hi) {
+  const P = k => sp('liqmap', k), gain = P('gain') / 100, a = P('alpha') / 100, n = Math.min(hi, m.n), top = geo.plotTop, bot = geo.plotTop + geo.plotH;
+  const r0 = Math.max(0, Math.floor((geo.min - m.pMin) / m.step)), r1 = Math.min(m.rows - 1, Math.ceil((geo.max - m.pMin) / m.step));
+  g.save(); g.beginPath(); g.rect(geo.left, top, geo.plotW + 2 + (geo.vpOn ? 0 : geo.gutter), geo.plotH); g.clip(); g.globalAlpha = a;
+  const nl = LIQ_RAMP.length - 1, x0 = i => Math.max(geo.left, X(i - .5)), W = geo.step;
+  for (let r = r0; r <= r1; r++) {
+    const d = m.data[r], yt = Math.max(top, Y(m.pMin + (r + 1) * m.step)), yb = Math.min(bot, Y(m.pMin + r * m.step)), hgt = yb - yt + .6; if (hgt <= 0) continue;
+    let runLv = -1, runStart = 0;
+    for (let i = Math.max(0, lo); i <= n; i++) {
+      const lv = i < n ? Math.min(nl, Math.floor(Math.pow(Math.min(1.3, d[i] / m.ref * gain), .75) * nl * .85)) : -1;
+      if (lv !== runLv) { if (runLv > 0) { g.fillStyle = LIQ_RAMP[runLv]; const xs = x0(runStart); g.fillRect(xs, yt, X(i - .5) - xs + .5, hgt); } runLv = lv; runStart = i; }
+    }
+  }
+  g.restore();
+}
 function drawVPVR(vp) {
   const P = k => sp('vpvr', k), mode = P('mode'), toRight = P('place') === 'Derecha', maxW = Math.max(10, (geo.plotW + (geo.vpOn ? 0 : geo.gutter)) * P('wpct') / 100);
   const rEdge = geo.left + geo.plotW + (geo.vpOn ? 0 : geo.gutter), xE = toRight ? rEdge : geo.left, sc = mode === 'Delta' ? vp.maxDelta : vp.maxVol, cu = hexArr(P('cUp')), cd = hexArr(P('cDn'));

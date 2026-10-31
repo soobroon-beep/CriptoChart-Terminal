@@ -459,3 +459,4 @@ body.pane #chartView{display:flex!important;height:100dvh}
   .chart-bar .chart-toolbar{padding:6px 0;gap:3px}
   .chart-bar .chart-toolbar button{padding:5px 7px}
 }
+.right-rail .rr-btn.on{color:#ffd83a;background:rgba(255,216,58,.12)}

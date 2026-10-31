@@ -271,6 +271,32 @@
      La línea nace en la barra del pivote y se alarga cada barra mientras la vela NO contenga el nivel (high>y y low<y);
      al primer cruce deja de alargarse. Máximo 500 líneas por apalancamiento. Solo cuenta desde `after` (2023-01-01 UTC por defecto).
      Suposición: timestamp("2023-01-01") sin zona horaria se toma como UTC. */
+
+  /* Mapa de calor de liquidaciones estimadas (estilo CoinGlass). Binance no publica dónde están las posiciones abiertas, así que se estima con un modelo:
+     en cada vela se asume que se abrieron posiciones (volumen de la vela) con varios apalancamientos; un largo con apalancamiento L se liquida cerca de precio·(1−1/L+mm)
+     y un corto cerca de precio·(1+1/L−mm). La banda vive hasta que el precio la toca (ahí se «liquidó» y desaparece). Devuelve una matriz filas × velas. */
+  const LIQ_TIERS = [[5, .08], [10, .2], [25, .3], [50, .25], [100, .17]];
+  function liquidationHeatmap(c, o = {}) {
+    const n = c.length; if (n < 3) return null;
+    const res = Math.max(20, Math.min(400, o.rows | 0 || 140)), mm = o.mm == null ? .005 : o.mm, tiers = o.tiers || LIQ_TIERS;
+    let lo = Infinity, hi = -Infinity; for (let i = 0; i < n; i++) { if (c[i].l < lo) lo = c[i].l; if (c[i].h > hi) hi = c[i].h; }
+    const pMin = Math.max(lo - (hi - lo) * .6, lo * .8, 1e-9), pMax = Math.min(hi + (hi - lo) * .6, hi * 1.2), step = (hi - lo) / res, rows = Math.max(res, Math.min(900, Math.ceil((pMax - pMin) / step)));
+    const diff = Array.from({length: rows}, () => new Float32Array(n + 1));
+    let vsum = 0; for (let i = 0; i < n; i++) vsum += c[i].v; const vavg = vsum / n || 1;
+    for (let i = 0; i < n - 1; i++) {
+      const k = c[i], w = k.v / vavg, up = k.c >= k.o, wl = up ? .6 : .4, ws = 1 - wl;
+      for (const [L, tw] of tiers) {
+        const pl = k.c * (1 - 1 / L + mm), ps = k.c * (1 + 1 / L - mm);
+        if (pl > pMin && k.l > pl) { const r = Math.floor((pl - pMin) / step); if (r >= 0 && r < rows) { let e = i + 1; while (e < n && c[e].l > pl) e++; diff[r][i + 1] += w * tw * wl; diff[r][e] -= w * tw * wl; } }
+        if (ps < pMax && k.h < ps) { const r = Math.floor((ps - pMin) / step); if (r >= 0 && r < rows) { let e = i + 1; while (e < n && c[e].h < ps) e++; diff[r][i + 1] += w * tw * ws; diff[r][e] -= w * tw * ws; } }
+      }
+    }
+    const samples = [];
+    for (let r = 0; r < rows; r++) { const d = diff[r]; let a = 0; for (let i = 0; i < n; i++) { a += d[i]; d[i] = a > 1e-3 ? a : 0; if (d[i] > 0 && (i + r) % 7 === 0) samples.push(d[i]); } }
+    samples.sort((a, b) => a - b);
+    const ref = samples.length ? samples[Math.min(samples.length - 1, Math.floor(samples.length * .97))] : 1;
+    return {rows, n, pMin, step, data: diff.map(d => d.subarray(0, n)), ref: ref || 1};
+  }
   const LIQ_AFTER = Date.UTC(2023, 0, 1);
   const LIQ_SPEC = [
     {lev: 5, risk: .20, ok: (a, m) => a > m}, {lev: 10, risk: .10, ok: (a, m) => a >= 1.025 * m},
@@ -373,6 +399,6 @@
     return {from: f, to: t, lo, hi, step, rows, total, maxVol: maxV, maxDelta: Math.max(...rows.map(x => Math.abs(x.delta))), poc, pocPrice: lo + (poc + .5) * step, pocBot: lo + poc * step, pocTop: lo + (poc + 1) * step, vaLo: a, vaHi: z, val: lo + a * step, vah: lo + (z + 1) * step, vaShare: acc / total};
   }
 
-  root.CCTIndicators = {visibleRangeProfile, volumeProfile, gradient, liquidations, LIQ_AFTER, pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
+  root.CCTIndicators = {visibleRangeProfile, liquidationHeatmap, volumeProfile, gradient, liquidations, LIQ_AFTER, pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTIndicators;
 })(typeof window !== 'undefined' ? window : globalThis);
