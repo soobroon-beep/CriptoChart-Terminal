@@ -162,3 +162,6 @@ Al buscar un activo (＋ Añadir, o tocar el par del gráfico) salen todos los p
 
 ## Clic derecho en el gráfico
 Menú con «Restablecer gráfico» (vuelve zoom, desplazamiento, escala de precio y alturas de los paneles al tamaño original) y «Escala de precio automática».
+
+## Cursor (cruz) personalizable
+En **Aspecto** hay una sección «✛ CURSOR»: color, opacidad (5–100 %), estilo de línea (guiones, sólida, puntos) y grosor (1–4 px). El color también se aplica a las etiquetas de precio y fecha de la cruz. «Restablecer todo» lo devuelve al estilo original.
