@@ -165,3 +165,6 @@ Menú con «Restablecer gráfico» (vuelve zoom, desplazamiento, escala de preci
 
 ## Cursor (cruz) personalizable
 En **Aspecto** hay una sección «✛ CURSOR»: color, opacidad (5–100 %), estilo de línea (guiones, sólida, puntos) y grosor (1–4 px). El color también se aplica a las etiquetas de precio y fecha de la cruz. «Restablecer todo» lo devuelve al estilo original.
+
+## Más indicadores
+EMA única con periodo editable (⚙), y nuevos: ADX/DMI, CCI, Williams %R, MFI, ROC, Estocástico RSI, Awesome Oscillator, CMF (paneles), Donchian, Keltner, Ichimoku (con nube) y Parabolic SAR (sobre el precio).

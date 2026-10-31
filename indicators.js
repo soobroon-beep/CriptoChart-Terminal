@@ -275,6 +275,62 @@
   /* Mapa de calor de liquidaciones estimadas (estilo CoinGlass). Binance no publica dónde están las posiciones abiertas, así que se estima con un modelo:
      en cada vela se asume que se abrieron posiciones (volumen de la vela) con varios apalancamientos; un largo con apalancamiento L se liquida cerca de precio·(1−1/L+mm)
      y un corto cerca de precio·(1+1/L−mm). La banda vive hasta que el precio la toca (ahí se «liquidó» y desaparece). Devuelve una matriz filas × velas. */
+
+  /* ───────── Indicadores comunes adicionales (osciladores en panel y superposiciones) ───────── */
+  const hhll = (c, i, n) => { let hh = -Infinity, ll = Infinity; for (let k = 0; k < n; k++) { const q = c[i - k]; if (q.h > hh) hh = q.h; if (q.l < ll) ll = q.l; } return [hh, ll]; };
+  function cci(c, n = 20) {
+    const tp = c.map(x => (x.h + x.l + x.c) / 3), m = sma(tp, n), out = blank(c.length);
+    for (let i = n - 1; i < c.length; i++) { let d = 0; for (let k = 0; k < n; k++) d += Math.abs(tp[i - k] - m[i]); d /= n; out[i] = d ? (tp[i] - m[i]) / (.015 * d) : 0; }
+    return out;
+  }
+  function willr(c, n = 14) { const out = blank(c.length); for (let i = n - 1; i < c.length; i++) { const [hh, ll] = hhll(c, i, n); out[i] = hh === ll ? -50 : -100 * (hh - c[i].c) / (hh - ll); } return out; }
+  function mfi(c, n = 14) {
+    const out = blank(c.length), tp = c.map(x => (x.h + x.l + x.c) / 3);
+    for (let i = n; i < c.length; i++) { let p = 0, q = 0; for (let k = 0; k < n; k++) { const j = i - k, f = tp[j] * c[j].v; if (tp[j] > tp[j - 1]) p += f; else if (tp[j] < tp[j - 1]) q += f; } out[i] = q === 0 ? 100 : 100 - 100 / (1 + p / q); }
+    return out;
+  }
+  function roc(c, n = 12) { const out = blank(c.length); for (let i = n; i < c.length; i++) out[i] = c[i - n].c ? (c[i].c / c[i - n].c - 1) * 100 : 0; return out; }
+  function adx(c, n = 14) {
+    const L = c.length, pdm = Array(L).fill(0), mdm = Array(L).fill(0), tr = trueRange(c);
+    for (let i = 1; i < L; i++) { const up = c[i].h - c[i - 1].h, dn = c[i - 1].l - c[i].l; pdm[i] = up > dn && up > 0 ? up : 0; mdm[i] = dn > up && dn > 0 ? dn : 0; }
+    const a = rma(tr, n), p = rma(pdm, n), m = rma(mdm, n), pdi = blank(L), mdi = blank(L), dx = Array(L).fill(null);
+    for (let i = 0; i < L; i++) if (a[i] != null && p[i] != null && m[i] != null && a[i] > 0) { pdi[i] = 100 * p[i] / a[i]; mdi[i] = 100 * m[i] / a[i]; const s = pdi[i] + mdi[i]; dx[i] = s ? 100 * Math.abs(pdi[i] - mdi[i]) / s : 0; }
+    const first = dx.findIndex(v => v != null), out = blank(L); if (first >= 0) { const r = rma(dx.slice(first), n); for (let i = 0; i < r.length; i++) out[first + i] = r[i]; }
+    return {adx: out, pdi, mdi};
+  }
+  function rsiOf(xs, n) { const g = [0], l = [0]; for (let i = 1; i < xs.length; i++) { const d = xs[i] - xs[i - 1]; g.push(d > 0 ? d : 0); l.push(d < 0 ? -d : 0); } const ag = rma(g, n), al = rma(l, n); return xs.map((_, i) => ag[i] == null || al[i] == null ? null : al[i] === 0 ? 100 : 100 - 100 / (1 + ag[i] / al[i])); }
+  function stochRsi(c, rl = 14, sl = 14, ks = 3, ds = 3) {
+    const r = rsiOf(c.map(x => x.c), rl), raw = blank(c.length);
+    for (let i = 0; i < c.length; i++) { if (i < sl - 1 || r[i] == null) continue; let hh = -Infinity, ll = Infinity, ok = true; for (let k = 0; k < sl; k++) { const v = r[i - k]; if (v == null) { ok = false; break; } if (v > hh) hh = v; if (v < ll) ll = v; } if (ok) raw[i] = hh === ll ? 50 : 100 * (r[i] - ll) / (hh - ll); }
+    const sm = (a, n) => { const f = a.findIndex(v => v != null); const out = blank(a.length); if (f < 0) return out; const s = sma(a.slice(f), n); for (let i = 0; i < s.length; i++) out[f + i] = s[i]; return out; };
+    const k = sm(raw, ks); return {k, d: sm(k, ds)};
+  }
+  function awesome(c, f = 5, s = 34) { const hl = c.map(x => (x.h + x.l) / 2), a = sma(hl, f), b = sma(hl, s); return hl.map((_, i) => a[i] == null || b[i] == null ? null : a[i] - b[i]); }
+  function cmf(c, n = 20) {
+    const out = blank(c.length), mv = c.map(x => x.h === x.l ? 0 : ((x.c - x.l) - (x.h - x.c)) / (x.h - x.l) * x.v);
+    for (let i = n - 1; i < c.length; i++) { let a = 0, v = 0; for (let k = 0; k < n; k++) { a += mv[i - k]; v += c[i - k].v; } out[i] = v ? a / v : 0; }
+    return out;
+  }
+  function donchian(c, n = 20) { const up = blank(c.length), lo = blank(c.length), mid = blank(c.length); for (let i = n - 1; i < c.length; i++) { const [hh, ll] = hhll(c, i, n); up[i] = hh; lo[i] = ll; mid[i] = (hh + ll) / 2; } return {up, lo, mid}; }
+  function keltner(c, n = 20, mult = 2, an = 10) { const mid = ema(c.map(x => x.c), n), a = atr(c, an); return {mid, up: mid.map((v, i) => v == null || a[i] == null ? null : v + mult * a[i]), lo: mid.map((v, i) => v == null || a[i] == null ? null : v - mult * a[i])}; }
+  function psar(c, step = .02, max = .2) {
+    const L = c.length, v = blank(L), dir = blank(L); if (L < 3) return {v, dir};
+    let up = c[1].c >= c[0].c, af = step, ep = up ? c[0].h : c[0].l, sar = up ? c[0].l : c[0].h;
+    for (let i = 1; i < L; i++) {
+      sar = sar + af * (ep - sar);
+      if (up) { sar = Math.min(sar, c[i - 1].l, i > 1 ? c[i - 2].l : c[i - 1].l); if (c[i].l < sar) { up = false; sar = ep; ep = c[i].l; af = step; } else if (c[i].h > ep) { ep = c[i].h; af = Math.min(max, af + step); } }
+      else { sar = Math.max(sar, c[i - 1].h, i > 1 ? c[i - 2].h : c[i - 1].h); if (c[i].h > sar) { up = true; sar = ep; ep = c[i].h; af = step; } else if (c[i].l < ep) { ep = c[i].l; af = Math.min(max, af + step); } }
+      v[i] = sar; dir[i] = up ? 1 : -1;
+    }
+    return {v, dir};
+  }
+  function ichimoku(c, t = 9, k = 26, b = 52, disp = 26) {
+    const L = c.length, mid = n => { const o = blank(L); for (let i = n - 1; i < L; i++) { const [hh, ll] = hhll(c, i, n); o[i] = (hh + ll) / 2; } return o; };
+    const ten = mid(t), kij = mid(k), sb = mid(b), sa = blank(L), sbb = blank(L), chi = blank(L);
+    for (let i = 0; i < L; i++) { const j = i + disp; if (j < L) { sa[j] = ten[i] != null && kij[i] != null ? (ten[i] + kij[i]) / 2 : null; sbb[j] = sb[i]; } if (i - disp >= 0) chi[i - disp] = c[i].c; }
+    return {tenkan: ten, kijun: kij, spanA: sa, spanB: sbb, chikou: chi};
+  }
+
   const LIQ_TIERS = [[5, .08], [10, .2], [25, .3], [50, .25], [100, .17]];
   function liquidationHeatmap(c, o = {}) {
     const n = c.length; if (n < 3) return null;
@@ -399,6 +455,6 @@
     return {from: f, to: t, lo, hi, step, rows, total, maxVol: maxV, maxDelta: Math.max(...rows.map(x => Math.abs(x.delta))), poc, pocPrice: lo + (poc + .5) * step, pocBot: lo + poc * step, pocTop: lo + (poc + 1) * step, vaLo: a, vaHi: z, val: lo + a * step, vah: lo + (z + 1) * step, vaShare: acc / total};
   }
 
-  root.CCTIndicators = {visibleRangeProfile, liquidationHeatmap, volumeProfile, gradient, liquidations, LIQ_AFTER, pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
+  root.CCTIndicators = {visibleRangeProfile, liquidationHeatmap, cci, willr, mfi, roc, adx, stochRsi, awesome, cmf, donchian, keltner, psar, ichimoku, rsiOf, volumeProfile, gradient, liquidations, LIQ_AFTER, pivots, pivotAt, supportResistance, smoothTrail, reversalBands, wma, sma, ema, rma, atr, trueRange, vwap, macd, stoch, obv, supertrend, crosses};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTIndicators;
 })(typeof window !== 'undefined' ? window : globalThis);

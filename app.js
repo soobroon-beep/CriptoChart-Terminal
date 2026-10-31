@@ -22,7 +22,7 @@ const MULTI = {
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, patterns:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
+  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
   groups: [], symGroup: {}, light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
@@ -61,6 +61,18 @@ const STD_SCHEMA = {
   patterns: [['len', 'Longitud del pivote (velas)', 'int', 5, 2, 30], ['dev', 'Movimiento mínimo (× ATR)', 'float', 1.5, .2, 10], ['tol', 'Tolerancia de proporciones (%)', 'int', 10, 2, 30], ['min', 'Puntuación mínima (0-100)', 'int', 60, 0, 100], ['max', 'Máximo de patrones a mostrar', 'int', 3, 1, 10], ['keep', 'Antigüedad máxima (velas)', 'int', 200, 20, 1000],
     ['g123', '1-2-3', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gabc', 'Corrección ABC', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gharm', 'Armónicos (ABCD, Gartley, Bat, Butterfly, Crab, Cypher)', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gchart', 'Chartistas (dobles, HCH, triángulos, cuñas)', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gell', 'Ondas de Elliott', 'string', 'Sí', 0, 0, ['Sí', 'No']],
     ['labels', 'Etiquetas de los puntos', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['prz', 'Zona de reversión (PRZ) y objetivos', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['panel', 'Panel con los patrones detectados', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cBull', 'Color alcista', 'color', '#089981'], ['cBear', 'Color bajista', 'color', '#f23645']],
+  adx: [['len', 'Período', 'int', 14, 2, 100], ['cAdx', 'Color ADX', 'color', '#f5c568'], ['cP', 'Color +DI', 'color', '#089981'], ['cM', 'Color −DI', 'color', '#f23645'], ['lvl', 'Nivel de tendencia', 'int', 25, 5, 60], ['width', 'Grosor', 'int', 1, 1, 6]],
+  cci: [['len', 'Período', 'int', 20, 2, 200], ['color', 'Color y opacidad', 'color', '#4dd0e1'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  willr: [['len', 'Período', 'int', 14, 2, 200], ['color', 'Color y opacidad', 'color', '#b58dff'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  mfi: [['len', 'Período', 'int', 14, 2, 200], ['color', 'Color y opacidad', 'color', '#ff8a65'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  roc: [['len', 'Período', 'int', 12, 1, 200], ['color', 'Color y opacidad', 'color', '#6ca5f9'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  stochrsi: [['rl', 'Longitud RSI', 'int', 14, 2, 100], ['sl', 'Longitud Estocástico', 'int', 14, 2, 100], ['ks', 'Suavizado %K', 'int', 3, 1, 50], ['ds', 'Suavizado %D', 'int', 3, 1, 50], ['cK', 'Color %K', 'color', '#548fff'], ['cD', 'Color %D', 'color', '#f5a623'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  ao: [['fast', 'Rápida', 'int', 5, 1, 100], ['slow', 'Lenta', 'int', 34, 2, 300], ['hUp', 'Color positivo', 'color', '#089981'], ['hDn', 'Color negativo', 'color', '#f23645']],
+  cmf: [['len', 'Período', 'int', 20, 2, 200], ['hUp', 'Color positivo', 'color', '#089981'], ['hDn', 'Color negativo', 'color', '#f23645']],
+  donchian: [['len', 'Período', 'int', 20, 2, 300], ['color', 'Color y opacidad', 'color', '#4dd0e1'], ['width', 'Grosor', 'int', 1, 1, 6], ['fill', 'Relleno entre bandas', 'color', '#4dd0e114']],
+  keltner: [['len', 'Período EMA', 'int', 20, 2, 300], ['mult', 'Multiplicador ATR', 'float', 2, .1, 10], ['atr', 'Período ATR', 'int', 10, 1, 200], ['color', 'Color y opacidad', 'color', '#f5c568'], ['width', 'Grosor', 'int', 1, 1, 6], ['fill', 'Relleno entre bandas', 'color', '#f5c56814']],
+  ichimoku: [['t', 'Tenkan', 'int', 9, 1, 100], ['k', 'Kijun', 'int', 26, 1, 200], ['b', 'Senkou B', 'int', 52, 1, 300], ['cT', 'Color Tenkan', 'color', '#2962ff'], ['cK', 'Color Kijun', 'color', '#b71c1c'], ['cUp', 'Nube alcista', 'color', '#08998133'], ['cDn', 'Nube bajista', 'color', '#f2364533'], ['cC', 'Color Chikou', 'color', '#43a047'], ['width', 'Grosor', 'int', 1, 1, 6]],
+  psar: [['step', 'Paso', 'float', .02, .001, .5], ['max', 'Máximo', 'float', .2, .01, 1], ['up', 'Color alcista', 'color', '#089981'], ['down', 'Color bajista', 'color', '#f23645']],
   liqmap: [['rows', 'Resolución (filas de precio)', 'int', 140, 40, 300], ['gain', 'Intensidad (%)', 'int', 100, 30, 400], ['alpha', 'Opacidad (%)', 'int', 80, 20, 100]],
   vpvr: [['rows', 'Número de filas', 'int', 24, 4, 200], ['va', 'Área de valor (% del volumen)', 'int', 70, 10, 100], ['mode', 'Volumen', 'string', 'Arriba/Abajo', 0, 0, ['Arriba/Abajo', 'Total', 'Delta']], ['place', 'Ubicación', 'string', 'Derecha', 0, 0, ['Derecha', 'Izquierda']], ['wpct', 'Ancho (% del gráfico)', 'int', 30, 5, 90],
     ['cUp', 'Volumen comprador (arriba)', 'color', '#2962ff'], ['cDn', 'Volumen vendedor (abajo)', 'color', '#fbc02d'], ['pocOn', 'Línea POC', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cPoc', 'Color POC', 'color', '#ff5252'], ['vaOn', 'Líneas VAH / VAL', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cVa', 'Color VAH / VAL', 'color', '#2962ff']]
@@ -74,7 +86,7 @@ function sanStdParams(p) {
   return o;
 }
 const stdOn = k => !!state.indicators[k] && !(state.stdHide && state.stdHide[k]); // activo y no oculto con el ojito de la leyenda
-const stdName = k => ({ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', vpvr: 'VPVR', liqmap: 'Liquidaciones (heatmap)', patterns: 'Patrones', cross: 'Cruces EMA 20/50'}[k] || k);
+const stdName = k => ({ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', adx: `ADX ${sp('adx', 'len')}`, cci: `CCI ${sp('cci', 'len')}`, willr: `Williams %R ${sp('willr', 'len')}`, mfi: `MFI ${sp('mfi', 'len')}`, roc: `ROC ${sp('roc', 'len')}`, stochrsi: 'Estoc. RSI', ao: 'Awesome Osc.', cmf: `CMF ${sp('cmf', 'len')}`, donchian: `Donchian ${sp('donchian', 'len')}`, keltner: `Keltner ${sp('keltner', 'len')}`, ichimoku: 'Ichimoku', psar: 'Parabolic SAR', vpvr: 'VPVR', liqmap: 'Liquidaciones (heatmap)', patterns: 'Patrones', cross: 'Cruces EMA 20/50'}[k] || k);
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
 const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle || {}); if (!(state.chartStyle && state.chartStyle.bg) && document.body.classList.contains('light')) o.bg = ''; return o; }; // fondo por defecto #0d1019 (el tema claro conserva el suyo)
@@ -800,7 +812,7 @@ document.addEventListener('visibilitychange', () => {
 
 /* ───────── Indicadores ───────── */
 const indicatorMeta = [
-  ['ema20','EMA 20','Media móvil exponencial de 20 períodos','#f5c568'],
+  ['ema20','EMA','Media móvil exponencial: cambia el período en el engrane ⚙ (20 por defecto)','#f5c568'],
   ['ema50','EMA 50','Media móvil exponencial de 50 períodos','#6ca5f9'],
   ['sma200','SMA 200','Media móvil simple de 200 períodos','#b58dff'],
   ['bollinger','Bandas de Bollinger','20 períodos · 2 desviaciones','#a3b0c3'],
@@ -809,6 +821,18 @@ const indicatorMeta = [
   ['vwap','VWAP','Precio medio ponderado por volumen, reinicia cada día UTC (solo intradía)','#ff8a65'],
   ['supertrend','Supertrend','ATR 10 · factor 3 · verde = alcista, rojo = bajista','#089981'],
   ['cross','Cruces EMA 20/50','Marca los cruces de la EMA 20 con la EMA 50','#f5c568'],
+  ['ichimoku','Ichimoku Kinko Hyo','Tenkan, Kijun, nube (Senkou A/B) y Chikou','#2962ff'],
+  ['psar','Parabolic SAR','Puntos de parada y reversa (paso 0.02, máx. 0.2)','#089981'],
+  ['donchian','Canales de Donchian','Máximo y mínimo de N velas con línea media','#4dd0e1'],
+  ['keltner','Canales de Keltner','EMA ± múltiplo del ATR','#f5c568'],
+  ['adx','ADX / DMI','Fuerza de la tendencia con +DI y −DI en panel inferior','#f5c568'],
+  ['cci','CCI','Índice de canal de materias primas en panel inferior','#4dd0e1'],
+  ['willr','Williams %R','Oscilador −100 a 0 en panel inferior (−20 / −80)','#b58dff'],
+  ['mfi','MFI','Índice de flujo de dinero (RSI con volumen) en panel inferior','#ff8a65'],
+  ['roc','ROC','Tasa de cambio (%) en panel inferior','#6ca5f9'],
+  ['stochrsi','Estocástico RSI','%K y %D del RSI en panel inferior','#548fff'],
+  ['ao','Awesome Oscillator','Histograma SMA 5 − SMA 34 del punto medio','#089981'],
+  ['cmf','Chaikin Money Flow','Flujo de dinero de Chaikin (20) en panel inferior','#2ec4b6'],
   ['macd','MACD 12 26 9','Línea, señal e histograma en panel inferior','#548fff'],
   ['stoch','Estocástico 14 3 3','%K y %D en panel inferior (niveles 20/80)','#548fff'],
   ['atr','ATR 14','Rango verdadero medio (Wilder) en panel inferior','#e07b53'],
@@ -861,7 +885,7 @@ function recalc() {
   ind = {ema20: ema(c, sp('ema20', 'len')), ema50: ema(c, sp('ema50', 'len')), sma200: sma(c, sp('sma200', 'len')), bbU: up, bbL: lo, rsi: rsi(c, sp('rsi', 'len'))};
   ind.nn = null; calcNova(); calcExtra(); schedulePine();
 }
-const PANELS = ['macd', 'stoch', 'atr', 'obv'];
+const PANELS = ['macd', 'stoch', 'atr', 'obv', 'adx', 'cci', 'willr', 'mfi', 'roc', 'stochrsi', 'ao', 'cmf'];
 function calcExtra() { // indicadores de la fase 2: solo se calculan los activados
   const I = state.indicators, T = window.CCTIndicators, n = candles.length;
   if (!T || !n) return;
@@ -874,6 +898,18 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.stoch = I.stoch ? T.stoch(candles, sp('stoch', 'k'), sp('stoch', 'ks'), sp('stoch', 'd')) : null;
   ind.atr = I.atr ? T.atr(candles, sp('atr', 'len')) : null;
   ind.obv = I.obv ? T.obv(candles) : null;
+  ind.adx = I.adx ? T.adx(candles, sp('adx', 'len')) : null;
+  ind.cci = I.cci ? T.cci(candles, sp('cci', 'len')) : null;
+  ind.willr = I.willr ? T.willr(candles, sp('willr', 'len')) : null;
+  ind.mfi = I.mfi ? T.mfi(candles, sp('mfi', 'len')) : null;
+  ind.roc = I.roc ? T.roc(candles, sp('roc', 'len')) : null;
+  ind.stochrsi = I.stochrsi ? T.stochRsi(candles, sp('stochrsi', 'rl'), sp('stochrsi', 'sl'), sp('stochrsi', 'ks'), sp('stochrsi', 'ds')) : null;
+  ind.ao = I.ao ? T.awesome(candles, sp('ao', 'fast'), sp('ao', 'slow')) : null;
+  ind.cmf = I.cmf ? T.cmf(candles, sp('cmf', 'len')) : null;
+  ind.donchian = I.donchian ? T.donchian(candles, sp('donchian', 'len')) : null;
+  ind.keltner = I.keltner ? T.keltner(candles, sp('keltner', 'len'), sp('keltner', 'mult'), sp('keltner', 'atr')) : null;
+  ind.ichimoku = I.ichimoku ? T.ichimoku(candles, sp('ichimoku', 't'), sp('ichimoku', 'k'), sp('ichimoku', 'b')) : null;
+  ind.psar = I.psar ? T.psar(candles, sp('psar', 'step'), sp('psar', 'max')) : null;
   const NP = novaP;
   ind.trail = I.nnTrail ? T.smoothTrail(candles, NP('trailLen'), NP('trailAtr'), NP('trailMult'), NP('trailSmooth')) : null;
   ind.rev = I.nnRev ? T.reversalBands(candles, NP('revLen')) : null;
@@ -963,8 +999,9 @@ function calcNova() {
 const NN_KEYS = indicatorMeta.map(m => m[0]).filter(k => k.startsWith('nn')), novaOn = () => NN_KEYS.some(k => state.indicators[k]);
 let indTab = 'std';
 const indTabs = () => `<div class="ind-tabs"><button data-indtab="std" class="${indTab === 'std' ? 'active' : ''}">Comunes</button><button data-indtab="mine" class="${indTab === 'mine' ? 'active' : ''}">Mis indicadores</button></div>`;
+const LEGACY_IND = ['ema50', 'sma200', 'wma20', 'cross']; // la lista muestra una sola EMA (con período editable); estos solo aparecen si ya los tenías encendidos
 const indicatorRows = () => { document.body.dataset.indtab = indTab; return indTabs() + (indTab === 'std'
-  ? indicatorMeta.filter(m => !m[0].startsWith('nn')).map(([key, title, desc]) =>
+  ? indicatorMeta.filter(m => !m[0].startsWith('nn') && !(LEGACY_IND.includes(m[0]) && !state.indicators[m[0]])).map(([key, title, desc]) =>
     `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><div class="script-btns">${STD_SCHEMA[key] ? `<button class="small-button" data-std-set="${key}" aria-label="Ajustes de ${title}">⚙</button>` : ''}<button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div></div>`).join('')
   : catalogCards() + pineSection()); };
 document.addEventListener('change', e => { const s = e.target.closest('[data-pine-pane]'); if (!s) return; const p = state.pine.find(x => x.sid === s.dataset.pinePane); if (!p) return; if (s.value) p.pane = s.value; else delete p.pane; save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); scheduleRender(); });
@@ -1721,6 +1758,9 @@ function renderCore() {
   if (stdOn('wma20') && ind.wma20) overlays.push([`WMA ${sp('wma20', 'len')}`, ind.wma20, sp('wma20', 'color'), false, 'wma20', lineSty('wma20')]);
   if (stdOn('vwap') && ind.vwap) overlays.push(['VWAP', ind.vwap, sp('vwap', 'color'), false, 'vwap', lineSty('vwap')]);
   if (stdOn('supertrend') && ind.stUp) overlays.push(['Supertrend ↑', ind.stUp, sp('supertrend', 'up'), false, null, {w: sp('supertrend', 'width'), d: []}], ['Supertrend ↓', ind.stDn, sp('supertrend', 'down'), false, null, {w: sp('supertrend', 'width'), d: []}]);
+  if (stdOn('donchian') && ind.donchian) { const c0 = sp('donchian', 'color'), ls = lineSty('donchian'); overlays.push(['Donchian', ind.donchian.up, c0, false, 'donchian', ls], ['Donchian inf', ind.donchian.lo, c0, false, null, ls], ['Donchian medio', ind.donchian.mid, c0, false, null, {w: 1, d: [4, 4]}]); }
+  if (stdOn('keltner') && ind.keltner) { const c0 = sp('keltner', 'color'), ls = lineSty('keltner'); overlays.push(['Keltner', ind.keltner.up, c0, false, 'keltner', ls], ['Keltner inf', ind.keltner.lo, c0, false, null, ls], ['Keltner medio', ind.keltner.mid, c0, false, null, {w: 1, d: [4, 4]}]); }
+  if (stdOn('ichimoku') && ind.ichimoku) { const w = sp('ichimoku', 'width'), I2 = ind.ichimoku; overlays.push(['Ichimoku', I2.tenkan, sp('ichimoku', 'cT'), false, 'ichimoku', {w, d: []}], ['Kijun', I2.kijun, sp('ichimoku', 'cK'), false, null, {w, d: []}], ['Chikou', I2.chikou, sp('ichimoku', 'cC'), false, null, {w: 1, d: []}], ['Senkou A', I2.spanA, sp('ichimoku', 'cUp').slice(0, 7), false, null, {w: 1, d: []}], ['Senkou B', I2.spanB, sp('ichimoku', 'cDn').slice(0, 7), false, null, {w: 1, d: []}]); }
   if (stdOn('bollinger')) overlays.push(['BB sup', ind.bbU, sp('bollinger', 'color'), false, 'bollinger', lineSty('bollinger')], ['BB inf', ind.bbL, sp('bollinger', 'color'), false, null, lineSty('bollinger')]);
   for (const [, arr] of overlays) for (let i = lo; i < hi; i++) if (arr[i] != null) { if (arr[i] < min) min = arr[i]; if (arr[i] > max) max = arr[i]; }
   if (state.indicators.nnTrail && ind.trail) for (let i = lo; i < hi; i++) { const v = ind.trail.trail[i]; if (v != null) { if (v < min) min = v; if (v > max) max = v; } }
@@ -1803,12 +1843,20 @@ function renderCore() {
   }
   // medias y bandas
   if (stdOn('bollinger') && ind.bbU && sp('bollinger', 'fill') !== '#748bab00') fillBetween(ind.bbU, ind.bbL, lo, hi, sp('bollinger', 'fill'), 1);
+  if (stdOn('donchian') && ind.donchian && sp('donchian', 'fill') !== '#4dd0e100') fillBetween(ind.donchian.up, ind.donchian.lo, lo, hi, sp('donchian', 'fill'), 1);
+  if (stdOn('keltner') && ind.keltner && sp('keltner', 'fill') !== '#f5c56800') fillBetween(ind.keltner.up, ind.keltner.lo, lo, hi, sp('keltner', 'fill'), 1);
+  if (stdOn('ichimoku') && ind.ichimoku) { // nube: verde cuando Senkou A > Senkou B, roja cuando no
+    const A = ind.ichimoku.spanA, B = ind.ichimoku.spanB, tU = [], bU = [], tD = [], bD = [];
+    for (let i = 0; i < A.length; i++) { const a = A[i], b = B[i]; if (a == null || b == null) { tU[i] = bU[i] = tD[i] = bD[i] = null; continue; } if (a >= b) { tU[i] = a; bU[i] = b; tD[i] = bD[i] = null; } else { tD[i] = b; bD[i] = a; tU[i] = bU[i] = null; } }
+    fillBetween(tU, bU, lo, hi, sp('ichimoku', 'cUp'), 1); fillBetween(tD, bD, lo, hi, sp('ichimoku', 'cDn'), 1);
+  }
   for (const [, arr, col, , , sty] of overlays) {
     g.strokeStyle = col; g.lineWidth = sty ? sty.w : 1.4; g.setLineDash(sty ? sty.d : []); g.beginPath();
     let on = false;
     for (let i = lo; i < hi; i++) { if (arr[i] == null) { on = false; continue; } const xx = X(i), yy = Y(arr[i]); if (!on) { g.moveTo(xx, yy); on = true; } else g.lineTo(xx, yy); }
     g.stroke(); g.setLineDash([]);
   }
+  if (stdOn('psar') && ind.psar) { const P = ind.psar, cu = sp('psar', 'up'), cd = sp('psar', 'down'), rr = clamp(step * .22, 1.3, 3); for (let i = lo; i < hi; i++) { if (P.v[i] == null) continue; g.fillStyle = P.dir[i] > 0 ? cu : cd; g.beginPath(); g.arc(X(i), Y(P.v[i]), rr, 0, 7); g.fill(); } }
   for (const {r} of pOver) CCTPineDraw.draw(g, r, {X, Y, lo, hi, left, right: left + plotW + (vpOn ? 0 : pineG), top: plotTop, bottom: plotTop + plotH, step, candles, overlay: true, zoneBack: true});
   for (const {r} of pSub.concat(pTop)) if (r.strategy) CCTPineDraw.drawTrades(g, r.strategy, {X, Y, lo, hi, candles}); // estrategias con panel propio: las operaciones se marcan igual sobre el precio
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailLine(ind.trail, lo, hi);
@@ -1858,7 +1906,7 @@ function renderCore() {
   const dimRow = (tx, act) => { g.globalAlpha = .5; g.fillStyle = text; legLabel(tx + ' (oculto)', left + 8, ly2, act, true); g.globalAlpha = 1; ly2 += LS; };
   const isHid = k => !!(state.indicators[k] && state.stdHide && state.stdHide[k]);
   const ovBy = {}; for (const o of overlays) if (o[4]) ovBy[o[4]] = o;
-  const SLOTS = ['ema20', 'ema50', 'sma200', 'wma20', 'vwap', 'bollinger', 'volume', 'patterns', 'liqmap', 'vpvr'], PLAIN = {volume: 'Volumen', patterns: 'Patrones', liqmap: 'Liquidaciones', vpvr: 'VPVR'};
+  const SLOTS = ['ema20', 'ema50', 'sma200', 'wma20', 'vwap', 'bollinger', 'donchian', 'keltner', 'ichimoku', 'psar', 'volume', 'patterns', 'liqmap', 'vpvr'], PLAIN = {psar: 'Parabolic SAR', volume: 'Volumen', patterns: 'Patrones', liqmap: 'Liquidaciones', vpvr: 'VPVR'};
   for (const k of SLOTS) {
     if (!state.indicators[k]) continue;
     if (isHid(k)) { dimRow(stdName(k), {t: 'std', key: k}); continue; }
@@ -1922,27 +1970,43 @@ function renderCore() {
   }
 }
 /* ───────── Paneles inferiores: MACD · Estocástico · ATR · OBV ───────── */
+const PANEL_DEF = { // paneles adicionales: etiqueta, series [valores, color], rango fijo, niveles de referencia y si es histograma
+  adx: {label: () => `ADX ${sp('adx', 'len')}`, series: D => [[D.adx, sp('adx', 'cAdx')], [D.pdi, sp('adx', 'cP')], [D.mdi, sp('adx', 'cM')]], levels: () => [sp('adx', 'lvl')], range: [0, 100]},
+  cci: {label: () => `CCI ${sp('cci', 'len')}`, series: D => [[D, sp('cci', 'color')]], levels: () => [-100, 0, 100]},
+  willr: {label: () => `%R ${sp('willr', 'len')}`, series: D => [[D, sp('willr', 'color')]], levels: () => [-80, -20], range: [-100, 0]},
+  mfi: {label: () => `MFI ${sp('mfi', 'len')}`, series: D => [[D, sp('mfi', 'color')]], levels: () => [20, 80], range: [0, 100]},
+  roc: {label: () => `ROC ${sp('roc', 'len')}`, series: D => [[D, sp('roc', 'color')]], levels: () => [0]},
+  stochrsi: {label: () => `Estoc. RSI ${sp('stochrsi', 'rl')} ${sp('stochrsi', 'sl')}`, series: D => [[D.k, sp('stochrsi', 'cK')], [D.d, sp('stochrsi', 'cD')]], levels: () => [20, 80], range: [0, 100]},
+  ao: {label: () => 'AO', series: () => [], hist: true, levels: () => [0], hUp: () => sp('ao', 'hUp'), hDn: () => sp('ao', 'hDn')},
+  cmf: {label: () => `CMF ${sp('cmf', 'len')}`, series: () => [], hist: true, levels: () => [0], hUp: () => sp('cmf', 'hUp'), hDn: () => sp('cmf', 'hDn')}
+};
 function drawSubPanel(key, top0, H, lo, hi, o) {
   const {left, w, right, line, text} = o, top = top0 + 4, height = H - 10, fmtV = v => v == null ? '—' : Math.abs(v) >= 1000 ? v.toLocaleString('en-US', {maximumFractionDigits: 0}) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(6);
-  const D = ind[key]; if (!D) return;
-  const series = key === 'macd' ? [[D.line, sp('macd', 'cLine')], [D.signal, sp('macd', 'cSig')]] : key === 'stoch' ? [[D.k, sp('stoch', 'cK')], [D.d, sp('stoch', 'cD')]] : [[D, key === 'atr' ? sp('atr', 'color') : sp('obv', 'color')]];
-  const hist = key === 'macd' ? D.hist : null;
+  const D = ind[key]; if (!D) return; const PD = PANEL_DEF[key];
+  const series = PD ? PD.series(D) : key === 'macd' ? [[D.line, sp('macd', 'cLine')], [D.signal, sp('macd', 'cSig')]] : key === 'stoch' ? [[D.k, sp('stoch', 'cK')], [D.d, sp('stoch', 'cD')]] : [[D, key === 'atr' ? sp('atr', 'color') : sp('obv', 'color')]];
+  const hist = PD ? (PD.hist ? D : null) : key === 'macd' ? D.hist : null;
   let mn = Infinity, mx = -Infinity;
   const take = arr => { for (let i = lo; i < hi; i++) { const v = arr[i]; if (v != null) { if (v < mn) mn = v; if (v > mx) mx = v; } } };
-  if (key === 'stoch') { mn = 0; mx = 100; } else { series.forEach(([a]) => take(a)); if (hist) take(hist); }
+  if (PD && PD.range) { mn = PD.range[0]; mx = PD.range[1]; } else if (key === 'stoch') { mn = 0; mx = 100; } else { series.forEach(([a]) => take(a)); if (hist) take(hist); }
   if (!Number.isFinite(mn) || !Number.isFinite(mx)) return;
+  if (PD && PD.hist) { const m = Math.max(Math.abs(mn), Math.abs(mx)) || 1; mn = -m; mx = m; }
   if (key === 'macd') { const m = Math.max(Math.abs(mn), Math.abs(mx)) || 1; mn = -m; mx = m; } // el cero queda al centro
   if (mx === mn) { mx += 1; mn -= 1; }
-  const pad = key === 'stoch' ? 0 : (mx - mn) * .08; mn -= pad; mx += pad;
+  const pad = key === 'stoch' || (PD && PD.range) ? 0 : (mx - mn) * .08; mn -= pad; mx += pad;
   { const pm = paneMan[key]; if (pm) { mn = pm.min; mx = pm.max; } paneHit.push({key, top0, H, mn, mx}); }
   const Yp = v => top + (mx - v) / (mx - mn) * height;
   g.save(); g.beginPath(); g.rect(left, top0, w - left, H); g.clip(); // incluye el eje derecho para que se vean los niveles y la escala
   g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, top0); g.lineTo(w - right + 2, top0); g.stroke();
   g.font = '10px system-ui';
   const last = a => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; };
-  const label = {macd: `MACD ${sp('macd', 'fast')} ${sp('macd', 'slow')} ${sp('macd', 'sig')}`, stoch: `Estoc ${sp('stoch', 'k')} ${sp('stoch', 'ks')} ${sp('stoch', 'd')}`, atr: `ATR ${sp('atr', 'len')}`, obv: 'OBV'}[key];
+  const label = PD ? PD.label() : {macd: `MACD ${sp('macd', 'fast')} ${sp('macd', 'slow')} ${sp('macd', 'sig')}`, stoch: `Estoc ${sp('stoch', 'k')} ${sp('stoch', 'ks')} ${sp('stoch', 'd')}`, atr: `ATR ${sp('atr', 'len')}`, obv: 'OBV'}[key];
   { const tx = label; g.fillStyle = text; legLabel(tx, left + 4, top + 16, {t: 'std', key}); }
-  if (key === 'stoch') {
+  if (PD) {
+    g.setLineDash([2, 3]); for (const r of PD.levels()) { const yy = Yp(r); if (yy < top - 2 || yy > top + height + 2) continue; g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
+    g.setLineDash([]);
+    if (PD.hist) { const y0 = Yp(0), bw = clamp(geo.step * .6, 1, 12); for (let i = lo; i < hi; i++) { const v = hist[i]; if (v == null) continue; const pv = i > 0 ? hist[i - 1] : null; g.globalAlpha = (v >= 0 ? (pv != null && v < pv) : (pv != null && v > pv)) ? .55 : .85; g.fillStyle = v >= 0 ? PD.hUp() : PD.hDn(); g.fillRect(X(i) - bw / 2, Math.min(y0, Yp(v)), bw, Math.max(1, Math.abs(Yp(v) - y0))); } g.globalAlpha = 1; }
+    else { g.fillStyle = text; }
+  } else if (key === 'stoch') {
     g.setLineDash([2, 3]);
     for (const r of [sp('stoch', 'lo'), sp('stoch', 'hi')]) { const yy = Yp(r); g.strokeStyle = line; g.beginPath(); g.moveTo(left, yy); g.lineTo(w - right, yy); g.stroke(); g.fillStyle = text; g.fillText(String(r), w - right + 6, yy + 3); }
     g.setLineDash([]);
