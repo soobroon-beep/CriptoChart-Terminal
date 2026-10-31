@@ -433,3 +433,29 @@ body.pane #chartView{display:flex!important;height:100dvh}
 }
 @media(min-width:1024px) and (max-height:700px){.topbar{height:40px;min-height:40px}}
 #screenerView .scr-list{padding-bottom:6px}
+
+/* Escritorio: temporalidades a la izquierda y botones del gráfico a la derecha, en la misma hilera */
+.chart-bar{display:contents}
+@media(min-width:1024px){
+  .chart-bar{display:flex;flex-wrap:wrap;align-items:center;column-gap:28px;row-gap:0;padding-right:6px}
+  .chart-bar .timeframes{flex:0 1 auto;padding-bottom:0}
+  .chart-bar .chart-toolbar{flex:1 1 auto;margin-left:auto;justify-content:flex-end;padding:6px 8px;border:0}
+  .chart-bar .chart-toolbar .more-group{display:contents}
+  #themeBtn{display:none}
+  .right-rail .rr-btn.rr-end{margin-top:auto}
+  .right-rail #rrAccount+.rr-btn{margin-top:0}
+  #accountBtn{display:none!important}
+}
+@media(min-width:1024px){
+  .chart-bar .timeframes{display:flex;gap:0;padding:0 0 0 8px}
+  .chart-bar .timeframes button{padding:6px 8px;font-size:12px}
+  .chart-bar .chart-toolbar{display:flex;flex-wrap:nowrap;gap:4px;min-width:0;overflow:visible}
+  .chart-bar .chart-toolbar button{padding:5px 8px;font-size:12px;white-space:nowrap}
+  .chart-bar .chart-toolbar .more-lbl{display:none}
+  .chart-bar .chart-toolbar #tfBtn,.chart-bar .chart-toolbar #moreBtn{display:none}
+}
+@media(min-width:1024px){
+  .chart-bar{column-gap:10px;padding-right:4px}
+  .chart-bar .chart-toolbar{padding:6px 0;gap:3px}
+  .chart-bar .chart-toolbar button{padding:5px 7px}
+}
