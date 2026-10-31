@@ -168,3 +168,6 @@ En **Aspecto** hay una sección «✛ CURSOR»: color, opacidad (5–100 %), est
 
 ## Más indicadores
 EMA única con periodo editable (⚙), y nuevos: ADX/DMI, CCI, Williams %R, MFI, ROC, Estocástico RSI, Awesome Oscillator, CMF (paneles), Donchian, Keltner, Ichimoku (con nube) y Parabolic SAR (sobre el precio).
+
+## Dibujo: favoritos y más herramientas
+Cada herramienta tiene una estrella (menú de la barra izquierda y hoja del celular): las marcadas salen en «Favoritos», arriba de todo (el pincel viene de inicio). Nuevas: canal de regresión, líneas cíclicas, línea sinusoidal, abanico y caja de Gann, círculo, rombo, paralelogramo, llamada, bandera, ✓, ✕, estrella y flechas izquierda/derecha.

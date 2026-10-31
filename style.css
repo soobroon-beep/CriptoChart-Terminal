@@ -505,3 +505,8 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .watch-row.dragging,.wl-sec.dragging{opacity:.25}
 .wl-ghost{opacity:.95;box-shadow:0 12px 30px #000a;border:1px solid var(--accent)!important;border-radius:12px;background:var(--raised)!important;transform:scale(1.02)}
 .watch-row.drop-before,.wl-sec.drop-before{box-shadow:0 -3px 0 0 var(--accent)}.watch-row.drop-after,.wl-sec.drop-after{box-shadow:0 3px 0 0 var(--accent)}
+
+.rail-fly .tn{flex:1}
+.star{display:inline-grid;place-items:center;margin-left:auto;padding:2px;color:var(--muted);opacity:.45;cursor:pointer;border-radius:6px}
+.rail-fly button:hover .star,.sheet-item .star{opacity:.8}.star.on{color:#f5c542;opacity:1}.star.on svg{fill:currentColor}.star:hover{color:#f5c542;opacity:1}
+.sheet-item .tool-line{width:100%}.rail-btn.fav.on{background:var(--raised);color:var(--accent)}

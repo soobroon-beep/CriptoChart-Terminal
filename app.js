@@ -11,7 +11,7 @@ const PANE = /[?&]pane=/.test(location.search); // segundo gráfico: la misma ap
 const STORE = PANE ? 'cct_pane2_v1' : 'cct_mobile_v1';
 const FIB = [0, .236, .382, .5, .618, .786, 1];
 const FIBEXT = [0, .618, 1, 1.272, 1.618, 2.618];
-const ONEPT = ['horizontal', 'vertical', 'text', 'marker', 'hray', 'crossline', 'note', 'label', 'arrowup', 'arrowdown'], THREEPT = ['channel', 'fibext', 'pitchfork', 'triangle'];
+const ONEPT = ['horizontal', 'vertical', 'text', 'marker', 'hray', 'crossline', 'note', 'label', 'arrowup', 'arrowdown', 'flag', 'check', 'xmark', 'star', 'arrowleft', 'arrowright'], THREEPT = ['channel', 'fibext', 'pitchfork', 'triangle', 'parallelogram'];
 /* Patrones de varios puntos: se toca cada punto en orden (n = cuántos) */
 const MULTI = {
   xabcd: {n: 5, labels: ['X', 'A', 'B', 'C', 'D']}, abcd: {n: 4, labels: ['A', 'B', 'C', 'D']}, trianglep: {n: 4, labels: ['A', 'B', 'C', 'D']},
@@ -1074,6 +1074,22 @@ const IC = {
   arrowup: '<path d="M12 20V6M6 12l6-6 6 6"/>',
   arrowdown: '<path d="M12 4v14M6 12l6 6 6-6"/>',
   marker: '<path d="M12 21 6 11a6 6 0 1 1 12 0z"/><circle cx="12" cy="10" r="2"/>',
+  regression: '<path d="M3 17 21 7M3 11 21 1M3 23 21 13" opacity=".9"/>',
+  cyclic: '<path d="M5 4v16M10 4v16M15 4v16M20 4v16"/>',
+  sinewave: '<path d="M2 12c3-9 5-9 8 0s5 9 8 0 3-5 4-4"/>',
+  gannfan: '<path d="M4 20 20 4M4 20 20 9M4 20 20 14M4 20 14 4M4 20 9 4M4 20h16"/>',
+  gannbox: '<rect x="4" y="4" width="16" height="16"/><path d="M4 4 20 20M20 4 4 20M12 4v16M4 12h16"/>',
+  circle: '<circle cx="12" cy="12" r="8"/>',
+  diamond: '<path d="M12 3 21 12 12 21 3 12z"/>',
+  parallelogram: '<path d="M7 6h14l-4 12H3z"/>',
+  callout: '<path d="M4 4h12v8H9l-3 3v-3H4z"/><path d="M13 12l6 7"/>',
+  flag: '<path d="M6 21V4M6 4h12l-3 4 3 4H6"/>',
+  check: '<path d="m4 12.5 5 5L20 6.5"/>',
+  xmark: '<path d="M6 6l12 12M18 6 6 18"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
+  arrowleft: '<path d="M20 12H5M11 6l-6 6 6 6"/>',
+  arrowright: '<path d="M4 12h15M13 6l6 6-6 6"/>',
+  starfill: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" fill="currentColor"/>',
   magnet: '<path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4zM6 8h4M14 8h4"/>',
   keep: '<path d="M9 4h6v5l3 4H6l3-4zM12 13v7"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
@@ -1096,7 +1112,10 @@ const TOOL_GROUPS = [
     ['hray', 'Rayo horizontal', 'Toca un punto; sigue hacia la derecha', IC.hray],
     ['vertical', 'Línea vertical', 'Toca una vela', IC.vertical],
     ['crossline', 'Línea cruzada', 'Toca un punto: horizontal y vertical', IC.crossline],
-    ['channel', 'Canal paralelo', 'Dos puntos y un tercero para el ancho', IC.channel]
+    ['channel', 'Canal paralelo', 'Dos puntos y un tercero para el ancho', IC.channel],
+    ['regression', 'Canal de regresión', 'Dos velas; regresión lineal ±2σ', IC.regression],
+    ['cyclic', 'Líneas cíclicas', 'Dos puntos; verticales a intervalos iguales', IC.cyclic],
+    ['sinewave', 'Línea sinusoidal', 'Dos puntos; onda que se repite', IC.sinewave]
   ]},
   {id: 'fib', name: 'Fibonacci y horquillas', tools: [
     ['fib', 'Retroceso de Fibonacci', 'Inicio y fin del movimiento', IC.fib],
@@ -1104,6 +1123,8 @@ const TOOL_GROUPS = [
     ['fibtime', 'Zonas de tiempo de Fibonacci', 'Dos puntos; marca 1, 2, 3, 5, 8, 13…', IC.fibtime],
     ['fibfan', 'Abanico de Fibonacci', 'Dos puntos; abanico de velocidad', IC.fibfan],
     ['fibcircle', 'Círculos de Fibonacci', 'Dos puntos; círculos concéntricos', IC.fibcircle],
+    ['gannfan', 'Abanico de Gann', 'Dos puntos; rayos 1x1, 1x2, 2x1…', IC.gannfan],
+    ['gannbox', 'Caja de Gann', 'Dos esquinas; diagonales y divisiones', IC.gannbox],
     ['pitchfork', 'Horquilla de Andrews', 'Tres puntos: mango y dos extremos', IC.pitchfork]
   ]},
   {id: 'patterns', name: 'Patrones de gráficos', tools: [
@@ -1126,7 +1147,10 @@ const TOOL_GROUPS = [
     ['highlighter', 'Resaltador', 'Trazo ancho y translúcido', IC.highlighter],
     ['rect', 'Rectángulo', 'Dos esquinas', IC.rect],
     ['ellipse', 'Elipse', 'Dos esquinas del recuadro', IC.ellipse],
-    ['triangle', 'Triángulo', 'Tres puntos', IC.triangle]
+    ['triangle', 'Triángulo', 'Tres puntos', IC.triangle],
+    ['circle', 'Círculo', 'Centro y borde', IC.circle],
+    ['diamond', 'Rombo', 'Dos esquinas del recuadro', IC.diamond],
+    ['parallelogram', 'Paralelogramo', 'Tres puntos', IC.parallelogram]
   ]},
   {id: 'notes', name: 'Texto y notas', tools: [
     ['text', 'Texto', 'Toca dónde quieres escribir', IC.text],
@@ -1135,9 +1159,27 @@ const TOOL_GROUPS = [
     ['arrow', 'Flecha', 'Inicio y punta', IC.arrow],
     ['arrowup', 'Flecha arriba', 'Toca un punto', IC.arrowup],
     ['arrowdown', 'Flecha abajo', 'Toca un punto', IC.arrowdown],
-    ['marker', 'Marcador de máximo/mínimo', 'Toca un máximo o mínimo', IC.marker]
+    ['marker', 'Marcador de máximo/mínimo', 'Toca un máximo o mínimo', IC.marker],
+    ['callout', 'Llamada', 'Punto señalado y posición del texto', IC.callout],
+    ['flag', 'Bandera', 'Toca un punto', IC.flag],
+    ['check', 'Marca ✓', 'Toca un punto', IC.check],
+    ['xmark', 'Marca ✕', 'Toca un punto', IC.xmark],
+    ['star', 'Estrella', 'Toca un punto', IC.star],
+    ['arrowleft', 'Flecha izquierda', 'Toca un punto', IC.arrowleft],
+    ['arrowright', 'Flecha derecha', 'Toca un punto', IC.arrowright]
   ]}
 ];
+/* Favoritos: la estrella de cada herramienta la sube a la sección «Favoritos» (arriba de la barra y de la hoja del celular) */
+const FAV_KEY = 'cct_favtools_v1';
+let FAVS = ['brush']; try { const f = JSON.parse(lsGet(FAV_KEY) || 'null'); if (Array.isArray(f)) FAVS = f.filter(x => typeof x === 'string').slice(0, 24); } catch {}
+const favTools = () => FAVS.map(k => toolOf(k)).filter(Boolean);
+function toggleFav(k) {
+  FAVS = FAVS.includes(k) ? FAVS.filter(x => x !== k) : [...FAVS, k];
+  try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch {}
+  buildRail(); const fl = $('#railFly'); if (fl) { fl.querySelectorAll('[data-star]').forEach(b => b.classList.toggle('on', FAVS.includes(b.dataset.star))); }
+  if (typeof sheetMode !== 'undefined' && sheetMode === 'tools' && typeof renderSheet === 'function') renderSheet();
+}
+const starBtn = k => `<span class="star${FAVS.includes(k) ? ' on' : ''}" data-star="${k}" role="button" aria-label="Favorito" title="Añadir o quitar de favoritos">${SV(IC.star, 16)}</span>`;
 /* Opciones de la barra: imán (ajusta a O/H/L/C), mantener herramienta, bloquear y ocultar dibujos */
 const DOPT_KEY = 'cct_dopts_v1';
 const DOPT = Object.assign({magnet: true, stay: false, lock: false, hide: false}, (() => { try { return JSON.parse(lsGet(DOPT_KEY) || '{}') || {}; } catch { return {}; } })());
@@ -1160,9 +1202,11 @@ function renderSheet() {
     return;
   }
   if (sheetMode === 'tools') {
-    list.innerHTML = TOOL_GROUPS.map(gr => `<div class="section-label">${esc(gr.name).toUpperCase()}</div>` + gr.tools.map(([k, t, d, ic]) => `<button class="sheet-item" data-tool="${k}"><span class="tool-line"><span class="ti">${SV(ic, 18)}</span>${esc(t)}</span><small>${esc(d)}</small></button>`).join('')).join('')
+    const item = ([k, t, d, ic]) => `<button class="sheet-item" data-tool="${k}"><span class="tool-line"><span class="ti">${SV(ic, 18)}</span>${esc(t)}${starBtn(k)}</span><small>${esc(d)}</small></button>`;
+    list.innerHTML = (FAVS.length ? `<div class="section-label">FAVORITOS</div>` + favTools().map(item).join('') : '') + TOOL_GROUPS.map(gr => `<div class="section-label">${esc(gr.name).toUpperCase()}</div>` + gr.tools.map(item).join('')).join('')
       + `<div class="section-label">OPCIONES</div><button class="sheet-item" data-tool="clear"><span class="tool-line"><span class="ti">${SV(IC.trash, 18)}</span>Borrar todos los dibujos</span><small>Solo de este activo</small></button>`;
-    $$('.sheet-item[data-tool]').forEach(b => b.onclick = () => {
+    $$('.sheet-item[data-tool]').forEach(b => b.onclick = e => {
+      const st = e.target.closest('[data-star]'); if (st) { e.stopPropagation(); toggleFav(st.dataset.star); return; }
       const k = b.dataset.tool; closeSheet();
       if (k === 'clear') { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); toast('Dibujos borrados'); }
       else pickTool(k);
@@ -1283,6 +1327,7 @@ const RAIL_OPTS = [['magnet', 'Imán: ajusta a máximo, mínimo, apertura y cier
 function buildRail() {
   const rail = $('#toolRail'); if (!rail) return;
   rail.innerHTML = `<button class="rail-btn" data-rail="cursor" title="Cursor (Esc)" aria-label="Cursor">${SV(IC.cursor)}</button><div class="rail-sep"></div>`
+    + (FAVS.length ? favTools().map(t => `<button class="rail-btn fav" data-ftool="${t[0]}" title="${esc(t[1])} (favorito)" aria-label="${esc(t[1])}">${SV(t[3])}</button>`).join('') + `<div class="rail-sep"></div>` : '')
     + TOOL_GROUPS.map(gr => { const t = toolOf(lastOf(gr)); return `<button class="rail-btn grp" data-group="${gr.id}" data-last="${t[0]}" title="${esc(t[1])}" aria-label="${esc(gr.name)}">${SV(t[3])}<i class="caret" data-fly="${gr.id}" title="${esc(gr.name)}: ver todas"></i></button>`; }).join('')
     + `<div class="rail-spacer"></div><div class="rail-sep"></div>`
     + RAIL_OPTS.map(([k, t, ic]) => `<button class="rail-btn" data-opt="${k}" title="${esc(t)}" aria-label="${esc(t)}">${SV(ic)}</button>`).join('');
@@ -1292,6 +1337,7 @@ function syncRail() {
   const rail = $('#toolRail'); if (!rail || !rail.firstChild) return;
   const cg = drawTool ? groupOf(drawTool) : null;
   rail.querySelector('[data-rail="cursor"]').classList.toggle('on', !drawTool);
+  rail.querySelectorAll('[data-ftool]').forEach(b => b.classList.toggle('on', drawTool === b.dataset.ftool));
   rail.querySelectorAll('[data-group]').forEach(b => {
     const gr = TOOL_GROUPS.find(x => x.id === b.dataset.group), active = !!cg && cg.id === gr.id, k = active ? drawTool : lastOf(gr), t = toolOf(k);
     b.classList.toggle('on', active);
@@ -1305,7 +1351,7 @@ function openFly(id, btn) {
   const old = $('#railFly'); if (old) { const same = old.dataset.g === id; old.remove(); if (same) return; }
   const gr = TOOL_GROUPS.find(x => x.id === id); if (!gr) return;
   const f = document.createElement('div'); f.id = 'railFly'; f.className = 'rail-fly'; f.dataset.g = id;
-  f.innerHTML = `<h4>${esc(gr.name)}</h4>` + gr.tools.map(([k, t, d, ic]) => `<button data-rtool="${k}" title="${esc(d)}" class="${drawTool === k ? 'on' : ''}"><span class="ti">${SV(ic, 20)}</span><span class="tn">${esc(t)}</span></button>`).join('');
+  f.innerHTML = `<h4>${esc(gr.name)}</h4>` + gr.tools.map(([k, t, d, ic]) => `<button data-rtool="${k}" title="${esc(d)}" class="${drawTool === k ? 'on' : ''}"><span class="ti">${SV(ic, 20)}</span><span class="tn">${esc(t)}</span>${starBtn(k)}</button>`).join('');
   document.body.appendChild(f);
   const r = btn.getBoundingClientRect(); f.style.left = (r.right + 6) + 'px'; f.style.top = Math.max(8, Math.min(innerHeight - f.offsetHeight - 8, r.top)) + 'px';
 }
@@ -1331,6 +1377,7 @@ function toggleOpt(k) {
 (() => {
   const rail = $('#toolRail'); if (!rail) return;
   rail.addEventListener('click', e => {
+    const fav = e.target.closest('[data-ftool]'); if (fav) { closeFly(); pickTool(fav.dataset.ftool); return; }
     const cav = e.target.closest('[data-fly]'), grp = e.target.closest('[data-group]'), opt = e.target.closest('[data-opt]');
     if (cav) { openFly(cav.dataset.fly, cav.closest('.rail-btn')); return; }
     closeFly();
@@ -1340,6 +1387,7 @@ function toggleOpt(k) {
   });
   rail.addEventListener('contextmenu', e => { const grp = e.target.closest('[data-group]'); if (!grp) return; e.preventDefault(); openFly(grp.dataset.group, grp); });
   document.addEventListener('click', e => {
+    const stf = e.target.closest('#railFly [data-star]'); if (stf) { e.stopPropagation(); toggleFav(stf.dataset.star); return; }
     const it = e.target.closest('#railFly [data-rtool]'); if (it) { const k = it.dataset.rtool; closeFly(); pickTool(k); return; }
     if (!e.target.closest('#railFly,#toolRail')) closeFly();
   });
@@ -1411,6 +1459,21 @@ function segDist(p, a, b) {
   const t = l2 ? clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0, 1) : 0;
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
+const GANLV = [1 / 8, 1 / 4, 1 / 3, 1 / 2, 1, 2, 3, 4, 8], GANLAB = ['1x8', '1x4', '1x3', '1x2', '1x1', '2x1', '3x1', '4x1', '8x1'];
+function gannRays(d) { const A = px(d.a), B = px(d.b); return GANLV.map(lv => [A, farPt(A, {x: B.x, y: A.y + (B.y - A.y) * lv})]); }
+function regLines(d) { // regresión lineal de los cierres entre dos velas, con bandas a ±2 desviaciones
+  const n = candles.length; if (!n) return null; let i0 = clamp(Math.round(idxOfTime(d.a.t)), 0, n - 1), i1 = clamp(Math.round(idxOfTime(d.b.t)), 0, n - 1); if (i0 > i1) [i0, i1] = [i1, i0];
+  const m = i1 - i0 + 1; if (m < 3) return null; let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = i0; i <= i1; i++) { const x = i - i0, y = candles[i].c; sx += x; sy += y; sxx += x * x; sxy += x * y; }
+  const k = (m * sxy - sx * sy) / (m * sxx - sx * sx || 1), c0 = (sy - k * sx) / m; let v = 0; for (let i = i0; i <= i1; i++) { const e = candles[i].c - (c0 + k * (i - i0)); v += e * e; }
+  const sd = Math.sqrt(v / m), f = (i, o) => ({x: X(i), y: Y(c0 + k * (i - i0) + o)});
+  return {sd, lines: [0, 2, -2].map(o => [f(i0, o * sd), f(i1, o * sd)])};
+}
+function sinePts(d, rightX) { // onda: a es una cresta/valle y b la siguiente; se repite hacia la derecha
+  const A = px(d.a), B = px(d.b), dx = B.x - A.x; if (Math.abs(dx) < 6) return []; const mid = (A.y + B.y) / 2, amp = (A.y - B.y) / 2, s = Math.sign(dx), P = [];
+  for (let x = A.x, n = 0; n < 900 && x >= geo.left - 12 && x <= rightX + 12; x += 4 * s, n++) P.push({x, y: mid + amp * Math.cos(Math.PI * (x - A.x) / dx)});
+  return P;
+}
 function distToDrawing(d, pt) {
   if (d.type === 'brush') { let m = 1e9, prev = null; for (const q of d.pts) { const c = {x: X(idxOfTime(q[0])), y: Y(q[1])}; m = Math.min(m, prev ? segDist(pt, prev, c) : Math.hypot(pt.x - c.x, pt.y - c.y)); prev = c; } return Math.max(0, m - (d.w || 3) / 2); }
   if (d.type === 'horizontal') return Math.abs(pt.y - Y(d.a.p));
@@ -1421,6 +1484,12 @@ function distToDrawing(d, pt) {
   if (d.type === 'arrowup' || d.type === 'arrowdown') { const A = px(d.a), s = d.type === 'arrowup' ? 1 : -1; return Math.abs(pt.x - A.x) <= 10 && (pt.y - A.y) * s >= -4 && (pt.y - A.y) * s <= 30 ? 0 : Math.hypot(pt.x - A.x, pt.y - A.y); }
   if (d.type === 'note') { const A = px(d.a), w = (d.text || '').length * 7 + 16; return pt.x >= A.x - 6 && pt.x <= A.x + w && pt.y >= A.y - 34 && pt.y <= A.y + 2 ? 0 : Math.hypot(pt.x - A.x, pt.y - A.y); }
   if (d.type === 'label') { const A = px(d.a); return pt.x >= A.x - 4 && pt.x <= A.x + 70 && Math.abs(pt.y - A.y) <= 10 ? 0 : Math.hypot(pt.x - A.x, pt.y - A.y); }
+  if (['flag', 'check', 'xmark', 'star', 'arrowleft', 'arrowright'].includes(d.type)) {
+    const A = px(d.a);
+    if (d.type === 'flag') return Math.min(segDist(pt, A, {x: A.x, y: A.y - 26}), Math.max(0, Math.hypot(pt.x - A.x - 8, pt.y - A.y + 20) - 10));
+    if (d.type === 'arrowleft' || d.type === 'arrowright') { const sx = d.type === 'arrowleft' ? 1 : -1, dx = (pt.x - A.x) * sx; return dx >= -2 && dx <= 36 && Math.abs(pt.y - A.y) <= 9 ? 0 : Math.hypot(pt.x - A.x, pt.y - A.y); }
+    return Math.max(0, Math.hypot(pt.x - A.x, pt.y - A.y) - 9);
+  }
   if (d.type === 'text' || d.type === 'marker') {
     const A = px(d.a);
     if (d.type === 'text' && pt.x >= A.x - 4 && pt.x <= A.x + (d.text || '').length * 7 + 10 && pt.y >= A.y - 16 && pt.y <= A.y + 4) return 0;
@@ -1429,6 +1498,13 @@ function distToDrawing(d, pt) {
   const a = px(d.a), b = px(d.b);
   if (d.type === 'trend' || d.type === 'arrow' || d.type === 'info' || d.type === 'angle') return segDist(pt, a, b);
   if (d.type === 'extended') return segDist(pt, farPt(a, b, -1), farPt(a, b, 1));
+  if (d.type === 'regression') { const R = regLines(d); return R ? Math.min(...R.lines.map(([p, q]) => segDist(pt, p, q))) : segDist(pt, a, b); }
+  if (d.type === 'cyclic') { if (pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH) return 1e9; const i0 = idxOfTime(d.a.t), u = idxOfTime(d.b.t) - i0; if (!u) return 1e9; let m = 1e9; for (let k = 0; k < 200; k++) m = Math.min(m, Math.abs(pt.x - X(i0 + u * k))); return m; }
+  if (d.type === 'sinewave') { const P = sinePts(d, geo.w - geo.right); let m = 1e9; for (let i = 1; i < P.length; i++) m = Math.min(m, segDist(pt, P[i - 1], P[i])); return P.length ? m : segDist(pt, a, b); }
+  if (d.type === 'gannfan') return Math.min(...gannRays(d).map(([p, q]) => segDist(pt, p, q)));
+  if (d.type === 'circle') { const r = Math.hypot(pt.x - a.x, pt.y - a.y), R = Math.hypot(b.x - a.x, b.y - a.y); return r <= R ? 0 : r - R; }
+  if (d.type === 'callout') { const w = (d.text || '').length * 7 + 16; return pt.x >= b.x - w / 2 && pt.x <= b.x + w / 2 && pt.y >= b.y - 12 && pt.y <= b.y + 12 ? 0 : segDist(pt, a, b); }
+  if (d.type === 'parallelogram') { if (!d.c) return segDist(pt, a, b); const c = px(d.c), e = {x: a.x + c.x - b.x, y: a.y + c.y - b.y}; return inTri(pt, a, b, c) || inTri(pt, a, c, e) ? 0 : Math.min(segDist(pt, a, b), segDist(pt, b, c), segDist(pt, c, e), segDist(pt, e, a)); }
   if (d.type === 'ellipse') { const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2, rx = Math.max(1, Math.abs(b.x - a.x) / 2), ry = Math.max(1, Math.abs(b.y - a.y) / 2), r = Math.hypot((pt.x - cx) / rx, (pt.y - cy) / ry); return r <= 1 ? 0 : (r - 1) * Math.min(rx, ry); }
   if (d.type === 'triangle') { if (!d.c) return segDist(pt, a, b); const c = px(d.c); return inTri(pt, a, b, c) ? 0 : Math.min(segDist(pt, a, b), segDist(pt, b, c), segDist(pt, c, a)); }
   if (d.type === 'pitchfork') { if (!d.c) return segDist(pt, a, b); return Math.min(...pitchRays(d).map(([p, q]) => segDist(pt, p, q))); }
@@ -1449,7 +1525,7 @@ function distToDrawing(d, pt) {
     const c = px(d.c); if (pt.x < Math.min(a.x, c.x) - 10) return 1e9;
     return Math.min(...FIBEXT.map(lv => Math.abs(pt.y - Y(d.c.p + (d.b.p - d.a.p) * lv))));
   }
-  if (d.type === 'rect' || d.type === 'measure' || d.type === 'pricerange' || d.type === 'daterange') {
+  if (d.type === 'rect' || d.type === 'gannbox' || d.type === 'diamond' || d.type === 'measure' || d.type === 'pricerange' || d.type === 'daterange') {
     const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
     if (pt.x >= x1 && pt.x <= x2 && pt.y >= y1 && pt.y <= y2) return 0;
     return Math.min(segDist(pt, {x: x1, y: y1}, {x: x2, y: y1}), segDist(pt, {x: x2, y: y1}, {x: x2, y: y2}), segDist(pt, {x: x2, y: y2}, {x: x1, y: y2}), segDist(pt, {x: x1, y: y2}, {x: x1, y: y1}));
@@ -1468,7 +1544,7 @@ function commitDrawing(a, b, c) {
   }
   if (three && !c) { pending2 = {a, b}; pending = null; preview = null; updateDrawUI(); scheduleRender(); return; }
   const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: drawTool, a, ...(one ? {} : {b}), ...(three ? {c} : {})};
-  if (drawTool === 'text' || drawTool === 'note') {
+  if (drawTool === 'text' || drawTool === 'note' || drawTool === 'callout') {
     const txt = (prompt(drawTool === 'note' ? 'Texto de la nota:' : 'Texto del dibujo:') || '').trim().slice(0, 80);
     if (!txt) { drawTool = ''; pending = null; preview = null; updateDrawUI(); render(); return; }
     d.text = txt;
@@ -2502,6 +2578,42 @@ function drawShapeNew(d, a, b, rightX, col, selected) {
     const {m, R} = fibCircle(d); dash(() => seg(a, b)); g.font = '10px system-ui';
     FIBCIRC.forEach(lv => { g.globalAlpha = lv === 1 ? 1 : .75; g.lineWidth = 1; g.strokeStyle = col; g.beginPath(); g.arc(m.x, m.y, R * lv, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1; g.fillStyle = col; g.fillText(String(lv), m.x + 3, m.y - R * lv - 2); }); g.lineWidth = lw;
   }
+  else if (t === 'regression') {
+    const R = regLines(d); if (!R) { seg(a, b); return; }
+    const [m, u, l] = R.lines; poly([u[0], u[1], l[1], l[0]], true); fillA(.08, () => g.fill());
+    g.lineWidth = lw; seg(m[0], m[1]); dash(() => { seg(u[0], u[1]); seg(l[0], l[1]); });
+    g.font = '10px system-ui'; g.fillStyle = col; g.fillText('±2σ', Math.max(u[1].x, l[1].x) + 6, u[1].y + 3); g.fillText('-2σ', Math.max(u[1].x, l[1].x) + 6, l[1].y + 3);
+  }
+  else if (t === 'cyclic') {
+    const i0 = idxOfTime(d.a.t), u = idxOfTime(d.b.t) - i0; dash(() => seg(a, b)); if (!u) return;
+    for (let k = 0; k < 200; k++) { const x = X(i0 + u * k); if (x > rightX) break; if (x < geo.left) continue; g.globalAlpha = .75; g.lineWidth = 1; seg({x, y: geo.plotTop}, {x, y: geo.h - geo.axisH}); g.globalAlpha = 1; }
+    g.lineWidth = lw;
+  }
+  else if (t === 'sinewave') { const P = sinePts(d, rightX); if (P.length > 1) { poly(P); g.stroke(); } dash(() => seg(a, b)); }
+  else if (t === 'gannfan') {
+    g.font = '10px system-ui';
+    gannRays(d).forEach(([p, q], k) => { const one = GANLV[k] === 1; g.globalAlpha = one ? 1 : .75; g.lineWidth = one ? lw : 1; g.strokeStyle = col; seg(p, q); g.globalAlpha = 1; g.fillStyle = col; const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1, tx = Math.min(rightX - 26, p.x + dx / L * Math.min(L, 200)), ty = p.y + dy / L * Math.min(L, 200); if (tx > p.x + 20) g.fillText(GANLAB[k], tx, ty - 3); });
+    g.lineWidth = lw;
+  }
+  else if (t === 'gannbox') {
+    const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x), y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y), w = x2 - x1, h = y2 - y1;
+    fillA(.07, () => g.fillRect(x1, y1, w, h)); g.strokeRect(x1, y1, w, h); g.lineWidth = 1;
+    [.25, .5, .75].forEach(f => { g.globalAlpha = f === .5 ? .8 : .45; seg({x: x1, y: y1 + h * f}, {x: x2, y: y1 + h * f}); seg({x: x1 + w * f, y: y1}, {x: x1 + w * f, y: y2}); });
+    g.globalAlpha = .8; seg({x: x1, y: y1}, {x: x2, y: y2}); seg({x: x2, y: y1}, {x: x1, y: y2}); g.globalAlpha = 1; g.lineWidth = lw;
+  }
+  else if (t === 'circle') { g.beginPath(); g.arc(a.x, a.y, Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), 0, Math.PI * 2); fillA(.12, () => g.fill()); g.stroke(); }
+  else if (t === 'diamond') { const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2; poly([{x: cx, y: Math.min(a.y, b.y)}, {x: Math.max(a.x, b.x), y: cy}, {x: cx, y: Math.max(a.y, b.y)}, {x: Math.min(a.x, b.x), y: cy}], true); fillA(.12, () => g.fill()); g.stroke(); }
+  else if (t === 'parallelogram') { if (!d.c) seg(a, b); else { const c = px(d.c); poly([a, b, c, {x: a.x + c.x - b.x, y: a.y + c.y - b.y}], true); fillA(.12, () => g.fill()); g.stroke(); } }
+  else if (t === 'callout') {
+    g.font = '12px system-ui'; const txt = d.text || '', w = g.measureText(txt).width + 16;
+    seg(a, b); g.beginPath(); g.arc(a.x, a.y, 3, 0, 7); g.fill();
+    g.fillStyle = col; fillA(.95, () => { roundRect(b.x - w / 2, b.y - 12, w, 24, 5); g.fill(); }); g.fillStyle = readableOn(col); g.textAlign = 'center'; g.fillText(txt, b.x, b.y + 4); g.textAlign = 'left';
+  }
+  else if (t === 'flag') { seg(a, {x: a.x, y: a.y - 26}); poly([{x: a.x, y: a.y - 26}, {x: a.x + 17, y: a.y - 20}, {x: a.x, y: a.y - 13}], true); g.fill(); g.beginPath(); g.arc(a.x, a.y, 2.5, 0, 7); g.fill(); }
+  else if (t === 'check') { g.lineWidth = 3.2; g.lineCap = 'round'; g.lineJoin = 'round'; poly([{x: a.x - 8, y: a.y}, {x: a.x - 2.5, y: a.y + 6}, {x: a.x + 8, y: a.y - 7}]); g.stroke(); g.lineCap = 'butt'; g.lineJoin = 'miter'; g.lineWidth = lw; }
+  else if (t === 'xmark') { g.lineWidth = 3.2; g.lineCap = 'round'; seg({x: a.x - 7, y: a.y - 7}, {x: a.x + 7, y: a.y + 7}); seg({x: a.x + 7, y: a.y - 7}, {x: a.x - 7, y: a.y + 7}); g.lineCap = 'butt'; g.lineWidth = lw; }
+  else if (t === 'star') { const P = []; for (let i = 0; i < 10; i++) { const r = i % 2 ? 4.8 : 11, an = -Math.PI / 2 + i * Math.PI / 5; P.push({x: a.x + Math.cos(an) * r, y: a.y + Math.sin(an) * r}); } poly(P, true); g.fill(); g.lineJoin = 'round'; g.stroke(); g.lineJoin = 'miter'; }
+  else if (t === 'arrowleft' || t === 'arrowright') { const sx = t === 'arrowleft' ? 1 : -1; poly([a, {x: a.x + 13 * sx, y: a.y - 9}, {x: a.x + 13 * sx, y: a.y - 3.5}, {x: a.x + 36 * sx, y: a.y - 3.5}, {x: a.x + 36 * sx, y: a.y + 3.5}, {x: a.x + 13 * sx, y: a.y + 3.5}, {x: a.x + 13 * sx, y: a.y + 9}], true); g.fill(); }
   else if (t === 'note') {
     g.font = '12px system-ui'; const txt = d.text || '', w = g.measureText(txt).width + 14, h = 24, bx = a.x - 6, by = a.y - h - 9;
     g.fillStyle = col; fillA(.95, () => { roundRect(bx, by, w, h, 5); g.fill(); });
