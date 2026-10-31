@@ -23,7 +23,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, patterns:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
+  groups: [], symGroup: {}, light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -115,6 +115,11 @@ function merge(s) {
   if (o.source !== 'binance' && window.CCTMarkets) { // antes la fuente era global: ahora cada activo lleva su exchange; se conservan los que ya usaba
     const sv = o.source, cv = k => { if (k.includes('@')) return k; const p = CCTMarkets.splitQ(k); return CCTMarkets.mk(['okx', 'coinbase', 'bingx'].includes(sv) && p ? p[0] + '-' + p[1] : k, sv); };
     o.symbols = o.symbols.map(cv); if (typeof o.symbol === 'string') o.symbol = cv(o.symbol); o.source = 'binance';
+  }
+  { // secciones del seguimiento: [{id, name, collapsed}] y a cuál pertenece cada activo
+    const gs = []; if (Array.isArray(o.groups)) for (const x of o.groups.slice(0, 30)) if (x && typeof x.id === 'string' && /^[\w-]{1,24}$/.test(x.id) && typeof x.name === 'string' && !gs.some(y => y.id === x.id)) gs.push({id: x.id, name: x.name.slice(0, 40), collapsed: !!x.collapsed});
+    o.groups = gs; const sg = {}; if (o.symGroup && typeof o.symGroup === 'object' && !Array.isArray(o.symGroup)) for (const [k, v] of Object.entries(o.symGroup)) if (o.symbols.includes(k) && gs.some(y => y.id === v)) sg[k] = v;
+    o.symGroup = sg;
   }
   o.layout = ['1', '2v', '2h'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.stdHide = o.stdHide && typeof o.stdHide === 'object' && !Array.isArray(o.stdHide) ? Object.fromEntries(Object.keys(o.stdHide).filter(k => o.stdHide[k] === true && Object.prototype.hasOwnProperty.call(o.indicators, k) && !k.startsWith('nn') && o.indicators[k]).map(k => [k, true])) : {}; // «oculto» (ojito) ≠ «apagado»: sigue activo en Indicadores, solo no se dibuja
@@ -231,29 +236,65 @@ function sparkSVG(s, change) {
   const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(''), rising = Number.isFinite(change) ? change >= 0 : v[n - 1] >= v[0], end = pts[n - 1];
   return `<svg class="spark ${rising ? 'positive' : 'negative'}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${rising ? 'Subiendo' : 'Bajando'} en las últimas 24 horas"><path d="${d}L${W} ${H}L0 ${H}Z" fill="currentColor" fill-opacity=".13"/><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${end[0]}" cy="${end[1]}" r="2.2" fill="currentColor"/></svg>`;
 }
+const grpOf = k => (state.symGroup && state.symGroup[k]) || '';
+function watchRow(s) {
+  const t = tickers[s], change = Number(t?.priceChangePercent), price = Number(t?.lastPrice);
+  let flash = '';
+  if (Number.isFinite(price) && lastShown[s] != null && price !== lastShown[s]) flash = price > lastShown[s] ? ' flash-up' : ' flash-down';
+  if (Number.isFinite(price)) lastShown[s] = price;
+  const main = `${coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small><span class="nm">${esc(meta(s)[0])}</span>${srcOf(s) !== 'binance' ? `<em class="ex-tag ex-${srcOf(s)}">${esc(CCTMarkets.SHORT[srcOf(s)])}</em>` : ''}</small></span>`;
+  if (editMode) {
+    const opts = `<option value="">Sin sección</option>` + state.groups.map(g => `<option value="${g.id}" ${grpOf(s) === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
+    return `<div class="watch-row editing" draggable="true" data-symbol="${esc(s)}"><span class="drag-h" aria-hidden="true">⠿</span>${main}<span class="row-edit">${state.groups.length ? `<select class="sec-pick" data-assign="${esc(s)}" aria-label="Sección de ${esc(base(s))}">${opts}</select>` : ''}<button data-move="${esc(s)}" aria-label="Subir ${esc(base(s))}">▲</button><button data-movedn="${esc(s)}" aria-label="Bajar ${esc(base(s))}">▼</button><button data-remove="${esc(s)}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
+  }
+  return `<button class="watch-row" data-symbol="${esc(s)}">${main}${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
+}
 function renderWatch() {
   const q = $('#searchCoins').value.trim().toUpperCase();
-  const list = state.symbols.filter(s => s.includes(q) || meta(s)[0].toUpperCase().includes(q));
-  $('#watchRows').innerHTML = list.map(s => {
-    const t = tickers[s], change = Number(t?.priceChangePercent), price = Number(t?.lastPrice);
-    let flash = '';
-    if (Number.isFinite(price) && lastShown[s] != null && price !== lastShown[s]) flash = price > lastShown[s] ? ' flash-up' : ' flash-down';
-    if (Number.isFinite(price)) lastShown[s] = price;
-    const main = `${coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small><span class="nm">${esc(meta(s)[0])}</span>${srcOf(s) !== 'binance' ? `<em class="ex-tag ex-${srcOf(s)}">${esc(CCTMarkets.SHORT[srcOf(s)])}</em>` : ''}</small></span>`;
-    if (editMode) return `<div class="watch-row editing" data-symbol="${s}">${main}<span class="row-edit"><button data-move="${s}" aria-label="Subir ${esc(base(s))}">▲</button><button data-remove="${s}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
-    return `<button class="watch-row" data-symbol="${s}">${main}${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
-  }).join('') || '<p class="small-note">No hay activos con ese nombre.</p>';
+  const list = state.symbols.filter(s => s.toUpperCase().includes(q) || meta(s)[0].toUpperCase().includes(q));
+  const none = list.filter(s => !grpOf(s)), html = [none.map(watchRow).join('')];
+  state.groups.forEach((g, gi) => {
+    const items = list.filter(s => grpOf(s) === g.id), open = q || !g.collapsed;
+    if (!items.length && q) return;
+    html.push(`<div class="wl-sec ${g.collapsed ? 'closed' : ''}" data-sec="${g.id}"><button class="wl-sec-t" data-tog="${g.id}" aria-expanded="${!g.collapsed}"><span class="wl-car">▾</span><span class="wl-nm">${esc(g.name)}</span><small>${items.length}</small></button>${editMode ? `<span class="wl-sec-ed"><button data-secren="${g.id}" aria-label="Renombrar sección">✎</button><button data-secup="${g.id}" ${gi ? '' : 'disabled'} aria-label="Subir sección">▲</button><button data-secdn="${g.id}" ${gi < state.groups.length - 1 ? '' : 'disabled'} aria-label="Bajar sección">▼</button><button data-secdel="${g.id}" class="danger" aria-label="Eliminar sección">✕</button></span>` : ''}</div>`);
+    if (open) html.push(items.map(watchRow).join('') || (editMode ? '<p class="small-note wl-empty">Sección vacía: arrastra aquí o elige la sección en cada activo.</p>' : ''));
+  });
+  $('#watchRows').innerHTML = html.join('') || '<p class="small-note">No hay activos con ese nombre.</p>';
   $('#totalAssets').textContent = state.symbols.length;
   $('#winners').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) > 0).length;
   $('#losers').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) < 0).length;
   $('#editWatch').textContent = editMode ? 'Listo' : 'Editar';
+  const as = $('#addSection'); if (as) as.hidden = !editMode;
 }
+const moveInGroup = (k, dir) => { const g = grpOf(k), idx = state.symbols.map((x, i) => grpOf(x) === g ? i : -1).filter(i => i >= 0), p = idx.indexOf(state.symbols.indexOf(k)), o = idx[p + dir]; if (o === undefined) return; const i = state.symbols.indexOf(k); [state.symbols[i], state.symbols[o]] = [state.symbols[o], state.symbols[i]]; };
+const newSecId = () => 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36);
+let dragKey = null;
 $('#watchRows').addEventListener('click', e => {
-  const rm = e.target.closest('[data-remove]'), mv = e.target.closest('[data-move]'), row = e.target.closest('.watch-row');
-  if (rm) { state.symbols = state.symbols.filter(s => s !== rm.dataset.remove); if (!state.symbols.length) editMode = false; save(); renderWatch(); return; }
-  if (mv) { const i = state.symbols.indexOf(mv.dataset.move); if (i > 0) { [state.symbols[i - 1], state.symbols[i]] = [state.symbols[i], state.symbols[i - 1]]; save(); renderWatch(); } return; }
+  const rm = e.target.closest('[data-remove]'), mv = e.target.closest('[data-move]'), md = e.target.closest('[data-movedn]'), row = e.target.closest('.watch-row'), tog = e.target.closest('[data-tog]');
+  const sren = e.target.closest('[data-secren]'), sdel = e.target.closest('[data-secdel]'), sup = e.target.closest('[data-secup]'), sdn = e.target.closest('[data-secdn]');
+  if (tog) { const g = state.groups.find(x => x.id === tog.dataset.tog); if (g) { g.collapsed = !g.collapsed; save(); renderWatch(); } return; }
+  if (sren) { const g = state.groups.find(x => x.id === sren.dataset.secren), n = g && prompt('Nombre de la sección', g.name); if (n && n.trim()) { g.name = n.trim().slice(0, 40); save(); renderWatch(); } return; }
+  if (sdel) { const id = sdel.dataset.secdel; state.groups = state.groups.filter(x => x.id !== id); for (const k of Object.keys(state.symGroup)) if (state.symGroup[k] === id) delete state.symGroup[k]; save(); renderWatch(); return; }
+  if (sup || sdn) { const id = (sup || sdn).dataset[sup ? 'secup' : 'secdn'], i = state.groups.findIndex(x => x.id === id), j = i + (sup ? -1 : 1); if (i >= 0 && state.groups[j]) { [state.groups[i], state.groups[j]] = [state.groups[j], state.groups[i]]; save(); renderWatch(); } return; }
+  if (rm) { const k = rm.dataset.remove; state.symbols = state.symbols.filter(s => s !== k); delete state.symGroup[k]; if (!state.symbols.length) editMode = false; save(); renderWatch(); return; }
+  if (mv) { moveInGroup(mv.dataset.move, -1); save(); renderWatch(); return; }
+  if (md) { moveInGroup(md.dataset.movedn, 1); save(); renderWatch(); return; }
+  if (e.target.closest('.sec-pick, .drag-h')) return;
   if (row && !editMode) selectSymbol(row.dataset.symbol);
 });
+$('#watchRows').addEventListener('change', e => { const sel = e.target.closest('[data-assign]'); if (!sel) return; const k = sel.dataset.assign; if (sel.value) state.symGroup[k] = sel.value; else delete state.symGroup[k]; save(); renderWatch(); });
+// Arrastrar y soltar (modo Editar): sobre otro activo = ponerlo justo antes y en su sección; sobre el encabezado de una sección = mandarlo al final de esa sección
+$('#watchRows').addEventListener('dragstart', e => { const r = e.target.closest('.watch-row.editing'); if (!r) return; dragKey = r.dataset.symbol; r.classList.add('dragging'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragKey); } catch {} });
+$('#watchRows').addEventListener('dragend', () => { dragKey = null; $$('#watchRows .dragging, #watchRows .drop-on').forEach(x => x.classList.remove('dragging', 'drop-on')); });
+$('#watchRows').addEventListener('dragover', e => { if (!dragKey) return; const t = e.target.closest('.watch-row.editing, .wl-sec'); if (!t) return; e.preventDefault(); $$('#watchRows .drop-on').forEach(x => x !== t && x.classList.remove('drop-on')); t.classList.add('drop-on'); });
+$('#watchRows').addEventListener('drop', e => {
+  if (!dragKey) return; const t = e.target.closest('.watch-row.editing, .wl-sec'); if (!t) return; e.preventDefault();
+  const k = dragKey; dragKey = null;
+  if (t.classList.contains('wl-sec')) { const id = t.dataset.sec; state.symbols = state.symbols.filter(x => x !== k); state.symbols.push(k); state.symGroup[k] = id; }
+  else { const tk = t.dataset.symbol; if (tk === k) { renderWatch(); return; } state.symbols = state.symbols.filter(x => x !== k); state.symbols.splice(state.symbols.indexOf(tk), 0, k); if (grpOf(tk)) state.symGroup[k] = grpOf(tk); else delete state.symGroup[k]; }
+  save(); renderWatch();
+});
+$('#addSection').onclick = () => { const n = prompt('Nombre de la sección (por ejemplo: BingX)'); if (!n || !n.trim()) return; state.groups.push({id: newSecId(), name: n.trim().slice(0, 40), collapsed: false}); save(); renderWatch(); };
 $('#editWatch').onclick = () => { editMode = !editMode; renderWatch(); };
 
 async function fetchTicker() {
@@ -1780,17 +1821,25 @@ function renderCore() {
   if (vpvr) drawVPVRTags(vpvr); // etiquetas de POC / VAH / VAL en la escala de precios
   // leyenda de indicadores
   let ly2 = plotTop + 54; g.font = '12px system-ui'; const LS = legStep();
-  for (const [name, arr, col, , okey] of overlays) { if (/^BB inf|^Supertrend/.test(name)) continue; const tx = name.replace('BB sup', 'Bollinger'); g.fillStyle = col; if (okey) legLabel(tx, left + 8, ly2, {t: 'std', key: okey}); else if (legOpen) g.fillText(tx, left + 8, ly2); ly2 += LS; }
-
-  if (stdOn('volume') && candles.length) { g.fillStyle = text; legLabel('Volumen', left + 8, ly2, {t: 'std', key: 'volume'}); ly2 += LS; }
-  if (stdOn('patterns')) { g.fillStyle = text; legLabel('Patrones', left + 8, ly2, {t: 'std', key: 'patterns'}); ly2 += LS; }
-  if (stdOn('liqmap')) { g.fillStyle = text; legLabel('Liquidaciones', left + 8, ly2, {t: 'std', key: 'liqmap'}); ly2 += LS; }
-  if (stdOn('vpvr')) { g.fillStyle = text; legLabel('VPVR', left + 8, ly2, {t: 'std', key: 'vpvr'}); ly2 += LS; }
-  for (const {p, r} of pOver) { g.fillStyle = text; { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); } ly2 += LS; }
-  for (const {p, r} of pHid) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)} (oculto)`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); g.globalAlpha = 1; ly2 += LS; }
-  for (const k of Object.keys(state.stdHide || {})) { if (!state.indicators[k] || !state.stdHide[k]) continue; g.globalAlpha = .5; g.fillStyle = text; legLabel(stdName(k) + ' (oculto)', left + 8, ly2, {t: 'std', key: k}, true); g.globalAlpha = 1; ly2 += LS; }
+  // Cada indicador conserva SIEMPRE su lugar en la leyenda: al ocultarlo con el ojito queda en la misma fila (atenuado, «oculto») y no salta al final.
+  const dimRow = (tx, act) => { g.globalAlpha = .5; g.fillStyle = text; legLabel(tx + ' (oculto)', left + 8, ly2, act, true); g.globalAlpha = 1; ly2 += LS; };
+  const isHid = k => !!(state.indicators[k] && state.stdHide && state.stdHide[k]);
+  const ovBy = {}; for (const o of overlays) if (o[4]) ovBy[o[4]] = o;
+  const SLOTS = ['ema20', 'ema50', 'sma200', 'wma20', 'vwap', 'bollinger', 'volume', 'patterns', 'liqmap', 'vpvr'], PLAIN = {volume: 'Volumen', patterns: 'Patrones', liqmap: 'Liquidaciones', vpvr: 'VPVR'};
+  for (const k of SLOTS) {
+    if (!state.indicators[k]) continue;
+    if (isHid(k)) { dimRow(stdName(k), {t: 'std', key: k}); continue; }
+    if (ovBy[k]) { const [name, , col] = ovBy[k]; g.fillStyle = col; legLabel(name.replace('BB sup', 'Bollinger'), left + 8, ly2, {t: 'std', key: k}); ly2 += LS; }
+    else if (PLAIN[k] && (k !== 'volume' || candles.length)) { g.fillStyle = text; legLabel(PLAIN[k], left + 8, ly2, {t: 'std', key: k}); ly2 += LS; }
+  }
+  for (const {p, r} of prAll) {
+    if (paneOf({p, r}) !== 'main') continue;
+    if (p.hide) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)}`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx + ' (oculto)', left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); g.globalAlpha = 1; ly2 += LS; }
+    else { g.fillStyle = text; const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); ly2 += LS; }
+  }
   if (novaOn() && ind.nn) { const tx = 'Nova Nexus'; g.fillStyle = '#11cf77'; legLabel(tx, left + 8, ly2, {t: 'nova'}); ly2 += LS; }
-  if (stdOn('supertrend') && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#089981' : '#f23645'; { const tx = 'Supertrend'; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += LS; } }
+  if (isHid('supertrend')) dimRow(stdName('supertrend'), {t: 'std', key: 'supertrend'});
+  else if (stdOn('supertrend') && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#089981' : '#f23645'; { const tx = 'Supertrend'; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += LS; } }
 
   // volumen
   if (volH) {
