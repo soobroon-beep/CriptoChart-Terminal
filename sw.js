@@ -1,10 +1,10 @@
 'use strict';
 // Bump this version when changing cached application files. No API responses or account data are cached.
-const CACHE = 'cct-shell-v21';
+const CACHE = 'cct-shell-v22';
 const ROOT = new URL('./', self.location.href);
 const SHELL = ['index.html', 'style.css', 'glass.css', 'pwa.css', 'themes.css', 'pwa-icons.js', 'pwa.js',
   'app.js', 'screener.js', 'firebase-config.js', 'indicators.js', 'patterns.js', 'nova-nexus.js', 'catalog.js', 'pine.js',
-  'pine-draw.js', 'pine-settings.js', 'news.js', 'ai.js', 'ai-ui.js', 'fx.js'];
+  'pine-draw.js', 'pine-settings.js', 'news.js', 'ai.js', 'ai-ui.js', 'fx.js', 'lens.html'];
 const ASSETS = new Set(SHELL.map(p => new URL(p, ROOT).href));
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL.map(p => new Request(new URL(p, ROOT), {cache:'reload'})))));

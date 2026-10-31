@@ -69,12 +69,13 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   #watchView{display:block!important;grid-area:watch;border-right:1px solid var(--line);padding:18px 16px 20px}
   #chartView{display:flex!important;grid-area:chart;min-width:0}
   #indicatorView{display:none!important}
-  #newsView,#aiView,#settingsView,#alertsView,#screenerView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
+  #newsView,#aiView,#settingsView,#alertsView,#screenerView,#lensView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
   body:not([data-side]) #newsView,body[data-side="newsView"] #newsView{display:block}
   body[data-side="aiView"] #aiView{display:block}
   body[data-side="settingsView"] #settingsView{display:block}
   body[data-side="alertsView"] #alertsView{display:block}
   body[data-side="screenerView"] #screenerView{display:block}
+  body[data-side="lensView"] #lensView{display:block}
   #goChart{display:none}
   h1{font-size:21px}
   .view-head{margin-bottom:16px}
@@ -93,7 +94,7 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   .sheet-handle{display:none}
   #toast{bottom:36px}
   .expanded .topbar{display:flex}
-  .expanded #watchView,.expanded #newsView,.expanded #aiView,.expanded #alertsView,.expanded #settingsView,.expanded #screenerView{display:none!important}
+  .expanded #watchView,.expanded #newsView,.expanded #aiView,.expanded #alertsView,.expanded #settingsView,.expanded #screenerView,.expanded #lensView{display:none!important}
   .expanded main{grid-template-columns:1fr;grid-template-areas:"chart"}
 }
 @media(min-width:1024px){
@@ -186,7 +187,7 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
   #splitL{left:calc(var(--wl-w) - 4px)}#splitR{right:calc(var(--side-w) - 4px)}
   .split-btn{position:absolute;top:50%;left:-3px;transform:translateY(-50%);width:16px;height:44px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:14px;line-height:1;opacity:0;transition:opacity .15s;cursor:pointer}
   .splitter:hover .split-btn,.splitter.collapsed .split-btn{opacity:1}
-  body.wl-off #watchView,body.side-off #newsView,body.side-off #aiView,body.side-off #settingsView,body.side-off #alertsView,body.side-off #screenerView{display:none!important}
+  body.wl-off #watchView,body.side-off #newsView,body.side-off #aiView,body.side-off #settingsView,body.side-off #alertsView,body.side-off #screenerView,body.side-off #lensView{display:none!important}
   body.wl-off #splitL{left:0}body.side-off #splitR{right:0}
 }
 
@@ -245,7 +246,7 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
 
 /* ── Segundo gráfico (división) ── */
 #pane2{display:none;border:0;width:100%;height:100%;background:var(--bg);min-height:0}
-body.pane .topbar,body.pane .bottom-nav,body.pane .splitter,body.pane #watchView,body.pane #newsView,body.pane #aiView,body.pane #alertsView,body.pane #screenerView,body.pane #settingsView,body.pane #indicatorView{display:none!important}
+body.pane .topbar,body.pane .bottom-nav,body.pane .splitter,body.pane #watchView,body.pane #newsView,body.pane #aiView,body.pane #alertsView,body.pane #lensView,body.pane #screenerView,body.pane #settingsView,body.pane #indicatorView{display:none!important}
 body.pane #layoutBtn{display:none}
 body.pane #app,body.pane main{max-width:none;border:0;margin:0}
 body.pane main{display:block!important}
@@ -460,3 +461,6 @@ body.pane #chartView{display:flex!important;height:100dvh}
   .chart-bar .chart-toolbar button{padding:5px 7px}
 }
 .right-rail .rr-btn.on{color:#ffd83a;background:rgba(255,216,58,.12)}
+
+#lensView{position:relative;padding:0!important;overflow:hidden;background:#07060f}
+#lensView iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#07060f}
