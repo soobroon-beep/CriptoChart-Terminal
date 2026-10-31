@@ -170,6 +170,7 @@ function switchView(id) {
     id = 'chartView';
   }
   currentView = id;
+  if (id === 'lensView') { const f = $('#lensFrame'); if (f && !f.src) f.src = f.dataset.src; }
   $$('.view').forEach(x => x.classList.toggle('active', x.id === id));
   $$('.bottom-nav button').forEach(x => x.classList.toggle('active', x.dataset.view === id));
   document.body.classList.toggle('chart-mode', id === 'chartView');
