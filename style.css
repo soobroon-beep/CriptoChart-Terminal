@@ -488,3 +488,20 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .wl-empty{margin:4px 0 8px;font-size:11px}
 .watch-row.editing .row-edit{gap:4px;margin-left:auto}.watch-row.editing .row-edit button{width:30px;height:32px;font-size:12px}.watch-row.editing .row-main{flex:1}
 .watch-row.editing{flex-wrap:wrap;row-gap:4px}.watch-row.editing .row-main{flex:1 1 120px;min-width:90px}.watch-row.editing .row-edit{flex:1 1 100%;justify-content:flex-end;margin-left:0}
+
+/* Escritorio: sin barra superior; el logo de VORTEX flota en la esquina del gráfico (como el de TradingView) */
+.brand-fab{display:none}
+@media(min-width:1024px){
+  .topbar,.chart-mode .topbar,.expanded .topbar{display:none!important}
+  .brand-fab{display:flex;align-items:center;position:absolute;left:6px;bottom:2px;z-index:6;height:22px;opacity:.75;transition:opacity .15s}
+  .brand-fab:hover{opacity:1}.brand-fab img{width:20px;height:20px;border-radius:6px;display:block}
+  .brand-fab .bf-tip{position:absolute;left:26px;bottom:0;display:none;flex-direction:column;white-space:nowrap;background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:6px 10px;box-shadow:0 6px 18px #0008}
+  .brand-fab:hover .bf-tip{display:flex}.bf-tip b{font-size:12px;letter-spacing:1.5px;color:#edf3fc}.bf-tip small{font-size:10px;color:#8796ab}
+  .right-rail{top:0}
+}
+
+.watch-row,.wl-sec{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.wl-dragging .watch-row,.wl-dragging .wl-sec{touch-action:none}
+.watch-row.dragging,.wl-sec.dragging{opacity:.25}
+.wl-ghost{opacity:.95;box-shadow:0 12px 30px #000a;border:1px solid var(--accent)!important;border-radius:12px;background:var(--raised)!important;transform:scale(1.02)}
+.watch-row.drop-before,.wl-sec.drop-before{box-shadow:0 -3px 0 0 var(--accent)}.watch-row.drop-after,.wl-sec.drop-after{box-shadow:0 3px 0 0 var(--accent)}

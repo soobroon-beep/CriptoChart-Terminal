@@ -245,7 +245,7 @@ function watchRow(s) {
   const main = `${coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small><span class="nm">${esc(meta(s)[0])}</span>${srcOf(s) !== 'binance' ? `<em class="ex-tag ex-${srcOf(s)}">${esc(CCTMarkets.SHORT[srcOf(s)])}</em>` : ''}</small></span>`;
   if (editMode) {
     const opts = `<option value="">Sin sección</option>` + state.groups.map(g => `<option value="${g.id}" ${grpOf(s) === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
-    return `<div class="watch-row editing" draggable="true" data-symbol="${esc(s)}"><span class="drag-h" aria-hidden="true">⠿</span>${main}<span class="row-edit">${state.groups.length ? `<select class="sec-pick" data-assign="${esc(s)}" aria-label="Sección de ${esc(base(s))}">${opts}</select>` : ''}<button data-move="${esc(s)}" aria-label="Subir ${esc(base(s))}">▲</button><button data-movedn="${esc(s)}" aria-label="Bajar ${esc(base(s))}">▼</button><button data-remove="${esc(s)}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
+    return `<div class="watch-row editing" data-symbol="${esc(s)}"><span class="drag-h" aria-hidden="true">⠿</span>${main}<span class="row-edit">${state.groups.length ? `<select class="sec-pick" data-assign="${esc(s)}" aria-label="Sección de ${esc(base(s))}">${opts}</select>` : ''}<button data-remove="${esc(s)}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
   }
   return `<button class="watch-row" data-symbol="${esc(s)}">${main}${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
 }
@@ -256,7 +256,7 @@ function renderWatch() {
   state.groups.forEach((g, gi) => {
     const items = list.filter(s => grpOf(s) === g.id), open = q || !g.collapsed;
     if (!items.length && q) return;
-    html.push(`<div class="wl-sec ${g.collapsed ? 'closed' : ''}" data-sec="${g.id}"><button class="wl-sec-t" data-tog="${g.id}" aria-expanded="${!g.collapsed}"><span class="wl-car">▾</span><span class="wl-nm">${esc(g.name)}</span><small>${items.length}</small></button>${editMode ? `<span class="wl-sec-ed"><button data-secren="${g.id}" aria-label="Renombrar sección">✎</button><button data-secup="${g.id}" ${gi ? '' : 'disabled'} aria-label="Subir sección">▲</button><button data-secdn="${g.id}" ${gi < state.groups.length - 1 ? '' : 'disabled'} aria-label="Bajar sección">▼</button><button data-secdel="${g.id}" class="danger" aria-label="Eliminar sección">✕</button></span>` : ''}</div>`);
+    html.push(`<div class="wl-sec ${g.collapsed ? 'closed' : ''}" data-sec="${g.id}"><button class="wl-sec-t" data-tog="${g.id}" aria-expanded="${!g.collapsed}"><span class="wl-car">▾</span><span class="wl-nm">${esc(g.name)}</span><small>${items.length}</small></button>${editMode ? `<span class="wl-sec-ed"><button data-secren="${g.id}" aria-label="Renombrar sección">✎</button><button data-secdel="${g.id}" class="danger" aria-label="Eliminar sección">✕</button></span>` : ''}</div>`);
     if (open) html.push(items.map(watchRow).join('') || (editMode ? '<p class="small-note wl-empty">Sección vacía: arrastra aquí o elige la sección en cada activo.</p>' : ''));
   });
   $('#watchRows').innerHTML = html.join('') || '<p class="small-note">No hay activos con ese nombre.</p>';
@@ -270,30 +270,64 @@ const moveInGroup = (k, dir) => { const g = grpOf(k), idx = state.symbols.map((x
 const newSecId = () => 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36);
 let dragKey = null;
 $('#watchRows').addEventListener('click', e => {
-  const rm = e.target.closest('[data-remove]'), mv = e.target.closest('[data-move]'), md = e.target.closest('[data-movedn]'), row = e.target.closest('.watch-row'), tog = e.target.closest('[data-tog]');
-  const sren = e.target.closest('[data-secren]'), sdel = e.target.closest('[data-secdel]'), sup = e.target.closest('[data-secup]'), sdn = e.target.closest('[data-secdn]');
+  const rm = e.target.closest('[data-remove]'), row = e.target.closest('.watch-row'), tog = e.target.closest('[data-tog]');
+  const sren = e.target.closest('[data-secren]'), sdel = e.target.closest('[data-secdel]');
+  if (tog && Date.now() - suppressClick < 400) return;
   if (tog) { const g = state.groups.find(x => x.id === tog.dataset.tog); if (g) { g.collapsed = !g.collapsed; save(); renderWatch(); } return; }
   if (sren) { const g = state.groups.find(x => x.id === sren.dataset.secren), n = g && prompt('Nombre de la sección', g.name); if (n && n.trim()) { g.name = n.trim().slice(0, 40); save(); renderWatch(); } return; }
   if (sdel) { const id = sdel.dataset.secdel; state.groups = state.groups.filter(x => x.id !== id); for (const k of Object.keys(state.symGroup)) if (state.symGroup[k] === id) delete state.symGroup[k]; save(); renderWatch(); return; }
-  if (sup || sdn) { const id = (sup || sdn).dataset[sup ? 'secup' : 'secdn'], i = state.groups.findIndex(x => x.id === id), j = i + (sup ? -1 : 1); if (i >= 0 && state.groups[j]) { [state.groups[i], state.groups[j]] = [state.groups[j], state.groups[i]]; save(); renderWatch(); } return; }
   if (rm) { const k = rm.dataset.remove; state.symbols = state.symbols.filter(s => s !== k); delete state.symGroup[k]; if (!state.symbols.length) editMode = false; save(); renderWatch(); return; }
-  if (mv) { moveInGroup(mv.dataset.move, -1); save(); renderWatch(); return; }
-  if (md) { moveInGroup(md.dataset.movedn, 1); save(); renderWatch(); return; }
   if (e.target.closest('.sec-pick, .drag-h')) return;
+  if (Date.now() - suppressClick < 400) return;
   if (row && !editMode) selectSymbol(row.dataset.symbol);
 });
 $('#watchRows').addEventListener('change', e => { const sel = e.target.closest('[data-assign]'); if (!sel) return; const k = sel.dataset.assign; if (sel.value) state.symGroup[k] = sel.value; else delete state.symGroup[k]; save(); renderWatch(); });
-// Arrastrar y soltar (modo Editar): sobre otro activo = ponerlo justo antes y en su sección; sobre el encabezado de una sección = mandarlo al final de esa sección
-$('#watchRows').addEventListener('dragstart', e => { const r = e.target.closest('.watch-row.editing'); if (!r) return; dragKey = r.dataset.symbol; r.classList.add('dragging'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragKey); } catch {} });
-$('#watchRows').addEventListener('dragend', () => { dragKey = null; $$('#watchRows .dragging, #watchRows .drop-on').forEach(x => x.classList.remove('dragging', 'drop-on')); });
-$('#watchRows').addEventListener('dragover', e => { if (!dragKey) return; const t = e.target.closest('.watch-row.editing, .wl-sec'); if (!t) return; e.preventDefault(); $$('#watchRows .drop-on').forEach(x => x !== t && x.classList.remove('drop-on')); t.classList.add('drop-on'); });
-$('#watchRows').addEventListener('drop', e => {
-  if (!dragKey) return; const t = e.target.closest('.watch-row.editing, .wl-sec'); if (!t) return; e.preventDefault();
-  const k = dragKey; dragKey = null;
-  if (t.classList.contains('wl-sec')) { const id = t.dataset.sec; state.symbols = state.symbols.filter(x => x !== k); state.symbols.push(k); state.symGroup[k] = id; }
-  else { const tk = t.dataset.symbol; if (tk === k) { renderWatch(); return; } state.symbols = state.symbols.filter(x => x !== k); state.symbols.splice(state.symbols.indexOf(tk), 0, k); if (grpOf(tk)) state.symGroup[k] = grpOf(tk); else delete state.symGroup[k]; }
-  save(); renderWatch();
-});
+/* Mover monedas y secciones DEJANDO PRESIONADO (≈0.4 s) y arrastrando, con el dedo o el mouse; al soltar queda guardado.
+   Sobre otra moneda = se coloca justo antes (o después) y entra a su sección; sobre el encabezado de una sección = al inicio de esa sección; un encabezado arrastrado se reordena entre secciones. */
+(() => {
+  const box = $('#watchRows'); let st = null;
+  const clear = () => { if (!st) return; clearTimeout(st.timer); if (st.ghost) st.ghost.remove(); box.classList.remove('wl-dragging'); $$('#watchRows .dragging, #watchRows .drop-before, #watchRows .drop-after, #watchRows .drop-on').forEach(x => x.classList.remove('dragging', 'drop-before', 'drop-after', 'drop-on')); st = null; };
+  const target = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest ? el.closest('.watch-row[data-symbol]:not(.pop-row), .wl-sec') : null; };
+  box.addEventListener('pointerdown', e => {
+    if (e.button > 0 || e.target.closest('button:not(.watch-row):not(.wl-sec-t), select, input, .wl-sec-ed')) return;
+    const el = e.target.closest('.watch-row[data-symbol]:not(.pop-row), .wl-sec'); if (!el) return;
+    clear(); st = {el, x: e.clientX, y: e.clientY, id: e.pointerId, on: false, sec: el.classList.contains('wl-sec'), key: el.dataset.symbol || el.dataset.sec};
+    st.timer = setTimeout(() => {
+      if (!st) return; st.on = true; el.classList.add('dragging'); box.classList.add('wl-dragging');
+      const r = el.getBoundingClientRect(), gh = el.cloneNode(true); gh.className += ' wl-ghost'; gh.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;pointer-events:none;z-index:300`; document.body.appendChild(gh); st.ghost = gh; st.dy = e.clientY - r.top;
+      try { navigator.vibrate && navigator.vibrate(12); } catch {}
+    }, 400);
+  });
+  box.addEventListener('touchmove', e => { if (st && st.on) e.preventDefault(); }, {passive: false});
+  document.addEventListener('pointermove', e => {
+    if (!st || e.pointerId !== st.id) return;
+    if (!st.on) { if (Math.hypot(e.clientX - st.x, e.clientY - st.y) > 9) clear(); return; } // se movió antes del tiempo: era un desplazamiento
+    e.preventDefault(); st.ghost.style.top = (e.clientY - st.dy) + 'px';
+    $$('#watchRows .drop-before, #watchRows .drop-after, #watchRows .drop-on').forEach(x => x.classList.remove('drop-before', 'drop-after', 'drop-on'));
+    const t = target(e.clientX, e.clientY); if (!t || t === st.el) { st.drop = null; return; }
+    const r = t.getBoundingClientRect();
+    if (t.classList.contains('wl-sec')) { if (st.sec) { st.drop = {t, after: e.clientY > r.top + r.height / 2}; t.classList.add(st.drop.after ? 'drop-after' : 'drop-before'); } else { st.drop = {t, into: true}; t.classList.add('drop-on'); } }
+    else if (!st.sec) { st.drop = {t, after: e.clientY > r.top + r.height / 2}; t.classList.add(st.drop.after ? 'drop-after' : 'drop-before'); }
+    else st.drop = null;
+    const sc = box.closest('.view'); if (sc) { const vr = sc.getBoundingClientRect(); if (e.clientY < vr.top + 50) sc.scrollTop -= 10; else if (e.clientY > vr.bottom - 50) sc.scrollTop += 10; }
+  }, {passive: false});
+  const end = e => {
+    if (!st || (e && e.pointerId !== st.id)) return;
+    const s0 = st, d = s0.on ? s0.drop : null; clear();
+    if (s0.on) { suppressClick = Date.now(); }
+    if (!d) { if (s0.on) renderWatch(); return; }
+    if (s0.sec) { const from = state.groups.findIndex(x => x.id === s0.key), tid = d.t.dataset.sec; if (from < 0 || !tid || tid === s0.key) return renderWatch(); const [g1] = state.groups.splice(from, 1); let to = state.groups.findIndex(x => x.id === tid); if (d.after) to++; state.groups.splice(to, 0, g1); }
+    else {
+      const k = s0.key; state.symbols = state.symbols.filter(x => x !== k);
+      if (d.t.classList.contains('wl-sec')) { const id = d.t.dataset.sec, first = state.symbols.findIndex(x => grpOf(x) === id); if (first < 0) state.symbols.push(k); else state.symbols.splice(first, 0, k); state.symGroup[k] = id; }
+      else { const tk = d.t.dataset.symbol; let at = state.symbols.indexOf(tk); if (d.after) at++; state.symbols.splice(at, 0, k); if (grpOf(tk)) state.symGroup[k] = grpOf(tk); else delete state.symGroup[k]; }
+    }
+    save(); renderWatch();
+  };
+  document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+  document.addEventListener('contextmenu', e => { if (st && st.on) e.preventDefault(); });
+})();
+let suppressClick = 0;
 $('#addSection').onclick = () => { const n = prompt('Nombre de la sección (por ejemplo: BingX)'); if (!n || !n.trim()) return; state.groups.push({id: newSecId(), name: n.trim().slice(0, 40), collapsed: false}); save(); renderWatch(); };
 $('#editWatch').onclick = () => { editMode = !editMode; renderWatch(); };
 
@@ -639,7 +673,6 @@ function renderFrames() {
   more.onclick = e => { e.stopPropagation(); toggle('more-open', more, $('#moreGroup')); };
   document.addEventListener('click', e => {
     if (!view.classList.contains('tf-open') && !view.classList.contains('more-open')) return;
-    if (e.target.closest && e.target.closest('#paneSmall,#paneBig')) return; // se pueden pulsar varias veces seguidas
     close();
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
@@ -2604,7 +2637,6 @@ area.addEventListener('contextmenu', e => {
 });
 function syncFullscreenLabel() { $('#fullscreen').textContent = document.body.classList.contains('expanded') ? '⤓ Reducir' : '⛶ Expandir'; }
 const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} syncUi(); scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
-$('#paneBig').onclick = () => setPaneScale(paneScale * 1.2); $('#paneSmall').onclick = () => setPaneScale(paneScale / 1.2);
 $('#fullscreen').onclick = () => { document.body.classList.toggle('expanded'); syncFullscreenLabel(); requestAnimationFrame(render); };
 if (window.ResizeObserver) new ResizeObserver(() => scheduleRender()).observe(area);
 window.addEventListener('resize', scheduleRender);
