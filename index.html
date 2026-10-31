@@ -189,10 +189,6 @@
       </div>
       <div id="appInstall"></div>
       <div class="section-label">DATOS Y SEGUIMIENTO</div>
-      <div class="setting-row">
-        <div><b>Fuente de velas</b><small>Binance Spot o Futuros, Bybit, OKX o Coinbase (con Bybit el POC coincide con TradingView/Bybit). También puedes tocar el nombre de la fuente bajo el par en el gráfico. Se guarda en tu cuenta.</small></div>
-        <button id="sourceSetting" class="small-button">Binance Spot</button>
-      </div>
       <button class="setting-row action-row" id="exportData"><span>Exportar mi configuración (JSON)</span><span>↗</span></button>
       <label class="setting-row action-row" for="importFile"><span>Importar configuración (JSON)</span><span>↙</span></label>
       <input type="file" id="importFile" accept="application/json" hidden>
@@ -219,6 +215,7 @@
   <div id="toast" role="status"></div>
 </div>
 <script src="firebase-config.js"></script>
+<script src="markets.js"></script>
 <script src="indicators.js"></script>
 <script src="patterns.js"></script>
 <script src="nova-nexus.js"></script>

@@ -36,7 +36,7 @@ function sanAlert(a) {
   return Object.assign(base0, {price: a.price, dir: a.dir, firedPrice: Number.isFinite(a.firedPrice) ? a.firedPrice : null});
 }
 const CTYPES = [['candles', 'Velas', '🕯'], ['hollow', 'Velas huecas', '▯'], ['ha', 'Heikin Ashi', '◩'], ['bars', 'Barras OHLC', '╫'], ['hlc', 'Barras HLC', '┿'], ['line', 'Línea', '╱'], ['area', 'Área', '◢'], ['step', 'Línea escalonada', '⌐']];
-const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', okx: 'OKX Spot', coinbase: 'Coinbase'}; // fuentes de velas
+const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', okx: 'OKX Spot', coinbase: 'Coinbase', bingx: 'BingX'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
 const CHART_DEF = {bg: '#0d1019', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false};
 function sanChartStyle(c) {
   const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
@@ -109,6 +109,10 @@ function merge(s) {
     if (nnWasOn && !o.pine.some(p => p.sid === 'cat:nova-nexus') && o.pine.length < 12) o.pine.unshift({sid: 'cat:nova-nexus', on: true, inputs: {}});
   }
   o.source = Object.prototype.hasOwnProperty.call(SOURCES, o.source) ? o.source : 'binance';
+  if (o.source !== 'binance' && window.CCTMarkets) { // antes la fuente era global: ahora cada activo lleva su exchange; se conservan los que ya usaba
+    const sv = o.source, cv = k => { if (k.includes('@')) return k; const p = CCTMarkets.splitQ(k); return CCTMarkets.mk(['okx', 'coinbase', 'bingx'].includes(sv) && p ? p[0] + '-' + p[1] : k, sv); };
+    o.symbols = o.symbols.map(cv); if (typeof o.symbol === 'string') o.symbol = cv(o.symbol); o.source = 'binance';
+  }
   o.layout = ['1', '2v', '2h'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.stdHide = o.stdHide && typeof o.stdHide === 'object' && !Array.isArray(o.stdHide) ? Object.fromEntries(Object.keys(o.stdHide).filter(k => o.stdHide[k] === true && Object.prototype.hasOwnProperty.call(o.indicators, k) && !k.startsWith('nn') && o.indicators[k]).map(k => [k, true])) : {}; // «oculto» (ojito) ≠ «apagado»: sigue activo en Indicadores, solo no se dibuja
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
@@ -131,8 +135,9 @@ const save = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state
 
 /* ───────── Utilidades ───────── */
 const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','⚛'],UNI:['Uniswap','🦄'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
-const QUOTES = ['USDT', 'USDC', 'FDUSD', 'BTC', 'ETH', 'BNB', 'EUR', 'TRY', 'BRL']; // monedas de cotización admitidas (ETHBTC = ETH/BTC)
-const splitSym = s => { for (const q of QUOTES) if (s.length > q.length + 1 && s.endsWith(q)) return [s.slice(0, -q.length), q]; return [s, 'USDT']; };
+const QUOTES = ['USDT', 'USDC', 'FDUSD', 'USD', 'BTC', 'ETH', 'BNB', 'EUR', 'TRY', 'BRL']; // monedas de cotización admitidas (ETHBTC = ETH/BTC)
+const splitSym = s0 => { const s = window.CCTMarkets ? CCTMarkets.norm(CCTMarkets.symOf(s0)) : s0; for (const q of QUOTES) if (s.length > q.length + 1 && s.endsWith(q)) return [s.slice(0, -q.length), q]; return [s, 'USDT']; };
+const srcOf = k => window.CCTMarkets ? CCTMarkets.srcOf(k) : 'binance', symOf = k => window.CCTMarkets ? CCTMarkets.symOf(k) : k, exName = k => (window.CCTMarkets ? CCTMarkets.EXCH[srcOf(k)] : 'Binance') || 'Binance';
 const baseOnly = s => splitSym(s)[0], quoteOf = s => splitSym(s)[1], pairLbl = s => `${baseOnly(s)}/${quoteOf(s)}`;
 const base = s => { const [b, q] = splitSym(s); return q === 'USDT' ? b : b + '/' + q; };
 const meta = s => catalog[baseOnly(s)] || [base(s), baseOnly(s).slice(0, 1)];
@@ -208,7 +213,7 @@ async function loadSparks() {
   try {
     for (let i = 0; i < todo.length; i += 8) { // en lotes de 8 para no saturar la API
       await Promise.all(todo.slice(i, i + 8).map(async s => {
-        try { const k = await getJSON(`${API}/klines?symbol=${s}&interval=30m&limit=48`), v = [+k[0][1], ...k.map(x => +x[4])].filter(x => Number.isFinite(x) && x > 0); spark[s] = {ts: Date.now(), v: v.length >= 8 ? v : null}; }
+        try { const sr = srcOf(s), f = SRC_FETCH[sr], k = sr === 'binance' ? (await getJSON(`${API}/klines?symbol=${s}&interval=30m&limit=48`)).map(bnRow) : await (f && f.ok('30m') ? f.get(symOf(s), '30m', 48) : f.get(symOf(s), '1h', 24)).then(a => a.slice(-48)), v = [k[0].o, ...k.map(x => x.c)].filter(x => Number.isFinite(x) && x > 0); spark[s] = {ts: Date.now(), v: v.length >= 8 ? v : null}; }
         catch { spark[s] = {ts: Date.now(), v: null}; }
       }));
       renderWatch();
@@ -231,7 +236,7 @@ function renderWatch() {
     let flash = '';
     if (Number.isFinite(price) && lastShown[s] != null && price !== lastShown[s]) flash = price > lastShown[s] ? ' flash-up' : ' flash-down';
     if (Number.isFinite(price)) lastShown[s] = price;
-    const main = `${coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small>${esc(meta(s)[0])}</small></span>`;
+    const main = `${coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small>${esc(meta(s)[0])} · ${esc(exName(s))}</small></span>`;
     if (editMode) return `<div class="watch-row editing" data-symbol="${s}">${main}<span class="row-edit"><button data-move="${s}" aria-label="Subir ${esc(base(s))}">▲</button><button data-remove="${s}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
     return `<button class="watch-row" data-symbol="${s}">${main}${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
   }).join('') || '<p class="small-note">No hay activos con ese nombre.</p>';
@@ -250,9 +255,13 @@ $('#editWatch').onclick = () => { editMode = !editMode; renderWatch(); };
 
 async function fetchTicker() {
   try {
-    let data;
-    try { data = await getJSON(`${API}/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(state.symbols))}`); }
-    catch { data = await getJSON(`${API}/ticker/24hr`); } // por si algún símbolo añadido a mano no existe
+    const plain = state.symbols.filter(k => srcOf(k) === 'binance'), other = state.symbols.filter(k => srcOf(k) !== 'binance');
+    if (other.length && window.CCTMarkets) CCTMarkets.tickers(other).then(m => { Object.assign(tickers, m); renderWatch(); updateChartHeader(); }).catch(() => {});
+    let data = [];
+    if (plain.length) {
+      try { data = await getJSON(`${API}/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(plain))}`); }
+      catch { data = await getJSON(`${API}/ticker/24hr`); } // por si algún símbolo añadido a mano no existe
+    }
     for (const t of data) tickers[t.symbol] = t;
     updateStatus(true, 'Binance en línea');
     renderWatch(); updateChartHeader(); checkAlertsPoll(); loadSparks();
@@ -352,7 +361,7 @@ function checkAlerts(sym, price) {
   if (hit) { save(); renderAlerts(); }
 }
 async function checkAlertsPoll() {
-  const syms = [...new Set(state.alerts.filter(a => a.kind !== 'ind' && a.on).map(a => a.symbol))]; if (!syms.length) return;
+  const allS = [...new Set(state.alerts.filter(a => a.kind !== 'ind' && a.on).map(a => a.symbol))], syms = allS.filter(k => srcOf(k) === 'binance'); for (const k of allS) if (srcOf(k) !== 'binance') { const p = Number(tickers[k]?.lastPrice); if (Number.isFinite(p)) checkAlerts(k, p); } if (!syms.length) return;
   try {
     const data = await getJSON(`${API}/ticker/price?symbols=${encodeURIComponent(JSON.stringify(syms))}`);
     for (const t of data) checkAlerts(t.symbol, +t.price);
@@ -601,8 +610,8 @@ function updateChartHeader() {
   const last = candles.length ? candles[candles.length - 1].c : Number(t?.lastPrice);
   const ch = Number(t?.priceChangePercent);
   $('#coinIcon').textContent = meta(state.symbol)[1];
-  $('#coinTitle').textContent = `${baseOnly(state.symbol)} / ${quoteOf(state.symbol)}`; { const sl = $('#srcLabel'); if (sl) sl.textContent = (SOURCES[dataSrc || state.source] || 'Binance Spot').toUpperCase() + ' ▾'; }
-  $('#chartLabel').textContent = state.symbol;
+  $('#coinTitle').textContent = `${baseOnly(state.symbol)} / ${quoteOf(state.symbol)}`; { const sl = $('#srcLabel'); if (sl) sl.textContent = (SOURCES[dataSrc || srcOf(state.symbol)] || 'Binance Spot').toUpperCase() + ' ▾'; }
+  $('#chartLabel').textContent = symOf(state.symbol);
   $('#intervalLabel').textContent = state.interval;
   $('#lastPrice').textContent = fmt(last);
   $('#dayChange').textContent = pct(ch);
@@ -642,19 +651,20 @@ const SRC_FETCH = {
   binancef: {ok: () => true, get: (sym, tf, limit, sig) => getJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=${Math.min(1500, limit)}`, sig).then(d => d.map(bnRow))},
   bybit: {ok: tf => !!BY_IV[tf], get: (sym, tf, limit, sig) => fetchKlinesBybit(sym, tf, limit, null, sig)},
   okx: {ok: tf => !!OKX_BAR[tf], get: fetchOkx},
-  coinbase: {ok: tf => !!CB_GRAN[tf], get: fetchCoinbase}
+  coinbase: {ok: tf => !!CB_GRAN[tf], get: fetchCoinbase},
+  bingx: {ok: tf => !!(window.CCTMarkets && CCTMarkets.BX_IV[tf]), get: (sym, tf, limit) => CCTMarkets.klinesBingx(dashPair(sym), tf, limit)}
 };
-async function fetchKlinesAny(sym, tf, signal, limit = 1000) { // si la fuente elegida no tiene el par o la temporalidad, se usa Binance Spot
-  const f = SRC_FETCH[state.source];
-  if (f && f.ok(tf)) { try { return {cs: await f.get(sym, tf, limit, signal), src: state.source}; } catch (e) { if (e.name === 'AbortError') throw e; } }
-  const data = await getJSON(`${API}/klines?symbol=${sym}&interval=${tf}&limit=${Math.min(1000, limit)}`, signal);
+async function fetchKlinesAny(key, tf, signal, limit = 1000) { // el exchange va en la clave del activo; si no tiene el par o la temporalidad, se usa Binance Spot
+  const sym = symOf(key), src = srcOf(key), f = SRC_FETCH[src];
+  if (f && f.ok(tf)) { try { return {cs: await f.get(sym, tf, limit, signal), src}; } catch (e) { if (e.name === 'AbortError') throw e; } }
+  const data = await getJSON(`${API}/klines?symbol=${CCTMarkets.norm(sym)}&interval=${tf}&limit=${Math.min(1000, limit)}`, signal);
   return {cs: data.map(bnRow), src: 'binance'};
 }
 async function loadCandles(silent = false) {
   if (fetchCtl) fetchCtl.abort();
   fetchCtl = new AbortController();
   const sym = state.symbol, tf = state.interval;
-  if (!silent) { candles = []; ind = {}; setFeedback(`Cargando velas reales de ${SOURCES[state.source] || 'Binance'}…`); render(); }
+  if (!silent) { candles = []; ind = {}; setFeedback(`Cargando velas reales de ${SOURCES[srcOf(sym)] || 'Binance'}…`); render(); }
   try {
     const r = await fetchKlinesAny(sym, tf, fetchCtl.signal);
     if (sym !== state.symbol || tf !== state.interval) return;
@@ -664,7 +674,7 @@ async function loadCandles(silent = false) {
     setFeedback(''); updateChartHeader(); render(); connectWS();
   } catch (e) {
     if (e.name === 'AbortError') return;
-    if (!silent) { setFeedback(`No se pudieron cargar las velas de ${SOURCES[state.source] || 'Binance'}${state.source !== 'binance' ? ' ni de Binance Spot' : ''}. No se muestran datos simulados.`); render(); }
+    if (!silent) { setFeedback(`No se pudieron cargar las velas de ${SOURCES[srcOf(sym)] || 'Binance'}${srcOf(sym) !== 'binance' ? ' ni de Binance Spot' : ''}. No se muestran datos simulados.`); render(); }
   }
 }
 function setLive(on) { $('#liveDot').classList.toggle('on', !!on); }
@@ -672,9 +682,9 @@ function closeWS() { wsGen++; wsOpen = false; clearInterval(wsPing); if (ws) { w
 function connectWS() {
   closeWS();
   if (typeof WebSocket === 'undefined') return;
-  const gen = wsGen, sym = state.symbol, tf = state.interval, src = dataSrc || 'binance';
-  if (src === 'coinbase') { // Coinbase no ofrece velas por WebSocket público: se consulta cada 8 s
-    setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await fetchCoinbase(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 8000); return;
+  const gen = wsGen, sym = symOf(state.symbol), tf = state.interval, src = dataSrc || 'binance';
+  if (src === 'coinbase' || src === 'bingx') { // Coinbase y BingX no ofrecen velas por WebSocket público sencillo: se consulta cada 8 s
+    setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH[src].get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 8000); return;
   }
   const by = src === 'bybit' && BY_IV[tf], ok = src === 'okx' && OKX_BAR[tf];
   const url = by ? 'wss://stream.bybit.com/v5/public/spot' : ok ? 'wss://ws.okx.com:8443/ws/v5/business' : src === 'binancef' ? `wss://fstream.binance.com/ws/${sym.toLowerCase()}@kline_${tf}` : `wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_${tf}`;
@@ -901,7 +911,7 @@ function openSheet(mode = 'select') {
   $('#sheetSearch').style.display = ['tools', 'indicators', 'script', 'paste', 'pine', 'pineSet', 'novaSet'].includes(mode) ? 'none' : 'block';
   $('#sheetSearch').value = '';
   $('#sheetBackdrop').classList.add('open'); $('#sheet').classList.add('open');
-  renderSheet();
+  renderSheet(); if (['add', 'select'].includes(mode)) loadSheetUniverse();
 }
 function closeSheet() { $('#sheetBackdrop').classList.remove('open'); $('#sheet').classList.remove('open'); }
 /* ───────── Catálogo de herramientas de dibujo (estilo TradingView) ─────────
@@ -1045,21 +1055,28 @@ function renderSheet() {
     });
     return;
   }
-  const search = $('#sheetSearch').value.trim().toUpperCase();
-  const pool = sheetMode === 'add' ? Object.keys(catalog).map(s => s + 'USDT') : state.symbols;
-  const syms = pool.filter(s => s.includes(search) || meta(s)[0].toUpperCase().includes(search));
-  { const q2 = search.replace(/[^A-Z0-9]/g, ''); if (sheetMode === 'add' && q2 && /^[A-Z0-9]{2,15}$/.test(q2)) { const full = QUOTES.some(q => q2.length > q.length + 1 && q2.endsWith(q)) ? q2 : q2 + 'USDT'; if (!syms.includes(full)) syms.unshift(full); } } // escribe ETHBTC, ETH/BTC o solo ETH
-  list.innerHTML = syms.map(s => `<button class="sheet-item" data-pick="${s}"><span>${esc(base(s))} <small>${esc(meta(s)[0])}</small></span><span>${state.symbols.includes(s) ? (sheetMode === 'add' ? '✓' : '→') : '＋'}</span></button>`).join('') || '<p class="small-note">No se encontraron monedas.</p>';
-  $$('[data-pick]').forEach(b => b.onclick = async () => {
+  /* Buscador de activos estilo TradingView: escribe «btc» y salen Bitcoin de Binance, Bybit, BingX, OKX… cada uno con su exchange; al elegir uno se guarda ese par de ese exchange. */
+  const search = $('#sheetSearch').value.trim().toUpperCase(), M = window.CCTMarkets, q2 = search.replace(/[^A-Z0-9.]/g, '');
+  let rows;
+  if (!q2) { const pool = sheetMode === 'add' ? Object.keys(catalog).map(x => x + 'USDT') : state.symbols; rows = pool.map(k => ({key: k, base: baseOnly(k), quote: quoteOf(k), src: srcOf(k)})); }
+  else {
+    if (M && !M.loaded().length) list.innerHTML = '<p class="small-note">Buscando en los exchanges…</p>';
+    rows = M ? M.search(q2, {names: b => (catalog[b] || [''])[0], limit: 80}) : [];
+    if (!rows.length && !(M && M.ORDER.every(x => sheetLoad[x] === 'done'))) list.innerHTML = '<p class="small-note">Buscando en los exchanges…</p>';
+    if (sheetMode === 'add' && q2 && /^[A-Z0-9]{2,15}$/.test(q2) && !rows.length && M && M.ORDER.every(x => sheetLoad[x] === 'done')) { const full = QUOTES.some(q => q2.length > q.length + 1 && q2.endsWith(q)) ? q2 : q2 + 'USDT'; rows = [{key: full, base: baseOnly(full), quote: quoteOf(full), src: 'binance'}]; }
+  }
+  if (!rows.length && q2 && M && !M.ORDER.every(x => sheetLoad[x] === 'done')) return;
+  const tag = r => `<span class="ex-tag ex-${r.src}">${esc((M && M.SHORT[r.src]) || 'BINANCE')}</span>`;
+  list.innerHTML = rows.map(r => `<button class="sheet-item pick-row" data-pick="${esc(r.key)}"><span class="pk-main"><strong>${esc(r.base + '/' + r.quote)}</strong> <small>${esc(meta(r.key)[0])}</small></span>${tag(r)}<span class="pk-go">${state.symbols.includes(r.key) ? (sheetMode === 'add' ? '✓' : '→') : '＋'}</span></button>`).join('') || '<p class="small-note">No se encontraron monedas.</p>';
+  $$('[data-pick]').forEach(b => b.onclick = () => {
     const s = b.dataset.pick;
-    if (sheetMode !== 'add') { selectSymbol(s); return; }
+    if (sheetMode !== 'add') { if (!state.symbols.includes(s)) { state.symbols.push(s); save(); renderWatch(); fetchTicker(); } selectSymbol(s); return; }
     if (state.symbols.includes(s)) { closeSheet(); return; }
-    if (!catalog[baseOnly(s)] || quoteOf(s) !== 'USDT') { // símbolo escrito a mano o par que no es USDT: comprobar que existe en Binance
-      try { await getJSON(`${API}/ticker/price?symbol=${s}`); } catch { try { await getJSON(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${s}`); toast(`${s} solo existe en Binance Futuros: cambia la fuente de velas a Futuros para verlo`); } catch { toast(`${s} no existe en Binance`); return; } }
-    }
-    state.symbols.push(s); save(); renderWatch(); fetchTicker(); toast(`${base(s)} añadido`); closeSheet();
+    state.symbols.push(s); save(); renderWatch(); fetchTicker(); toast(`${base(s)} añadido (${exName(s)})`); closeSheet();
   });
 }
+const sheetLoad = {};
+function loadSheetUniverse() { if (!window.CCTMarkets) return; CCTMarkets.ORDER.forEach(x => { if (sheetLoad[x]) return; sheetLoad[x] = 'busy'; CCTMarkets.universe(x).then(() => { sheetLoad[x] = 'done'; if ($('#sheet').classList.contains('open') && ['add', 'select'].includes(sheetMode)) renderSheet(); }); }); }
 $('#closeSheet').onclick = closeSheet; $('#sheetBackdrop').onclick = closeSheet; $('#sheetSearch').oninput = renderSheet;
 $('#symbolButton').onclick = () => openSheet(); $('#addAsset').onclick = () => openSheet('add'); $('#searchCoins').oninput = renderWatch;
 $$('[data-panel]').forEach(b => b.onclick = () => openSheet(b.dataset.panel === 'tools' ? 'tools' : 'indicators'));
@@ -2528,7 +2545,7 @@ window.addEventListener('resize', scheduleRender);
 window.addEventListener('cct-theme', () => { try { if (typeof render === 'function' && candles) render(); } catch {} });
 function theme() { if (typeof pushPaneTheme === 'function') pushPaneTheme(); document.body.classList.toggle('light', !!state.light); document.documentElement.style.colorScheme = state.light ? 'light' : 'dark'; render(); }
 const srcBtn = $('#sourceSetting');
-function paintSource() { if (srcBtn) srcBtn.textContent = SOURCES[state.source] || 'Binance Spot'; const sl = $('#srcLabel'); if (sl) sl.textContent = (SOURCES[dataSrc || state.source] || 'Binance Spot').toUpperCase() + ' ▾'; }
+function paintSource() { if (srcBtn) srcBtn.textContent = SOURCES[state.source] || 'Binance Spot'; const sl = $('#srcLabel'); if (sl) sl.textContent = (SOURCES[dataSrc || srcOf(state.symbol)] || 'Binance Spot').toUpperCase() + ' ▾'; }
 function setSource(k) { if (!SOURCES[k]) return; state.source = k; save(); paintSource(); closeWS(); candles = []; ind = {}; loadCandles(); }
 function pickSource(anchor) { // menú para elegir la fuente de velas (Binance Spot/Futuros, Bybit, OKX, Coinbase)
   const old = document.querySelector('.src-menu'); if (old) { old.remove(); return; }
@@ -2540,8 +2557,7 @@ function pickSource(anchor) { // menú para elegir la fuente de velas (Binance S
   m.onclick = e => { const b2 = e.target.closest('[data-src]'); if (b2) { close(); setSource(b2.dataset.src); } };
 }
 paintSource(); window.__paintSource = paintSource;
-if (srcBtn) srcBtn.onclick = () => pickSource(srcBtn);
-{ const sl = $('#srcLabel'); if (sl) sl.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); pickSource(sl); }); }
+{ const sl = $('#srcLabel'); if (sl) sl.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); openSheet(); }); } // el exchange se elige al buscar el activo
 $('#themeBtn').onclick = $('#themeSetting').onclick = () => { state.light = !state.light; save(); theme(); };
 $('#exportData').onclick = () => {
   const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'}), url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -2724,7 +2740,7 @@ async function pineRunOne(p) {
   if (pineBusy[p.sid]) { pineDirty[p.sid] = true; return; }
   const code = (scripts.find(x => x.id === p.sid) || {}).code; if (!code || !candles.length) return;
   const key = `${state.symbol}|${state.interval}|${candles[0].t}`; pineBusy[p.sid] = true;
-  const res = await pineRunFull(code, {inputs: p.inputs, interval: state.interval, symbol: state.symbol, name: pineName(p.sid), timeLimitMs: 12000});
+  const res = await pineRunFull(code, {inputs: p.inputs, interval: state.interval, symbol: symOf(state.symbol), name: pineName(p.sid), timeLimitMs: 12000});
   pineBusy[p.sid] = false; res._key = key; pineRes[p.sid] = res;
   if (!res.ok && /tard/.test((res.error && res.error.msg) || '') && !pineRetried.has(p.sid)) { pineRetried.add(p.sid); setTimeout(() => { pineKey = ''; schedulePine(); }, 3000); } else if (res.ok) pineRetried.delete(p.sid); if (res.stats) pineLastMs = Math.max(pineLastMs * .5, res.stats.ms); // los scripts pesados se recalculan con menos frecuencia
   if (pineDirty[p.sid]) { pineDirty[p.sid] = false; pineKey = ''; schedulePine(); }
@@ -2805,7 +2821,7 @@ document.addEventListener('click', async e => {
   if (activePine().length >= PINE_MAX) { toast(`Máximo ${PINE_MAX} scripts activos`); return; }
   const sid = 'cat:' + c.id;
   const inputs = {};
-  if (c.id === 'nova-scr') { const r = await pineRunRaw(c.code, {interval: state.interval, symbol: state.symbol, timeLimitMs: 12000}); if (r && r.ok) r.inputs.filter(i => i.type === 'symbol').forEach((i, k) => { inputs[i.key] = CAT_SYMS[k] || ''; }); }
+  if (c.id === 'nova-scr') { const r = await pineRunRaw(c.code, {interval: state.interval, symbol: symOf(state.symbol), timeLimitMs: 12000}); if (r && r.ok) r.inputs.filter(i => i.type === 'symbol').forEach((i, k) => { inputs[i.key] = CAT_SYMS[k] || ''; }); }
   if (!state.pine.some(p => p.sid === sid)) state.pine.push({sid, on: true, inputs});
   save(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); toast(c.id === 'nova-scr' ? 'Añadido: calcula 40 símbolos, puede tardar unos segundos' : 'Añadido al gráfico');
   if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows();
@@ -2937,7 +2953,7 @@ function renderPineEditor(list) {
     if (activePine().length >= PINE_MAX) { msg.innerHTML = `<div class="pine-box err">Máximo ${PINE_MAX} scripts activos a la vez. Apaga o quita alguno.</div>`; return; }
     btn.disabled = true; btn.textContent = 'Interpretando…';
     const key = `${state.symbol}|${state.interval}|${candles[0].t}`;
-    const res = await pineRunFull(code, {interval: state.interval, symbol: state.symbol, name: pineDraft.name || 'Script', timeLimitMs: 12000});
+    const res = await pineRunFull(code, {interval: state.interval, symbol: symOf(state.symbol), name: pineDraft.name || 'Script', timeLimitMs: 12000});
     btn.disabled = false; btn.textContent = 'Añadir al gráfico';
     msg.innerHTML = pineMsgHtml(res, code);
     if (!res.ok) return;
@@ -3219,7 +3235,7 @@ window.CCT_getAIContext = function () {
     return {name: String((sc && sc.name) || (r.meta && r.meta.title) || 'Script').slice(0, 40), plots, table};
   }).filter(Boolean).slice(0, 6);
   const tk = tickers[state.symbol];
-  return {symbol: state.symbol, interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine};
+  return {symbol: symOf(state.symbol), exchange: exName(state.symbol), interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine};
 };
 /* ───────── Divisiones: 1 o 2 gráficos ───────── */
 const LAYOUTS = [['1', 'Un gráfico', '▢'], ['2v', 'Dos · lado a lado', '◫'], ['2h', 'Dos · arriba y abajo', '⬒']];
