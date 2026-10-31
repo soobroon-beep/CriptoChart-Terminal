@@ -159,3 +159,6 @@ Icono de lupa en la barra derecha: abre **Nexus Lens** (repo `soobroon-beep/Nexu
 
 ## Buscador con exchange (estilo TradingView)
 Al buscar un activo (＋ Añadir, o tocar el par del gráfico) salen todos los pares que coinciden con su exchange: Binance, Bybit, BingX, OKX, Coinbase y Binance Futuros. Al elegir uno se guarda **ese par de ese exchange** en el seguimiento y en el gráfico; ya no hay «Fuente de velas» en Ajustes. Internamente la clave es `BTCUSDT` (Binance Spot, como siempre) o `BTCUSDT@bybit`, `BTC-USDT@okx`, `BTC-USDT@bingx`, `BTC-USD@coinbase`, `BTCUSDT@binancef` (`markets.js`). Si antes tenías otra fuente elegida, tus activos se conservan en ese exchange. Si un exchange no tiene el par o la temporalidad, el gráfico cae a Binance Spot. BingX y Coinbase se actualizan cada ~8 s (sin WebSocket). Screener y Nova Screener siguen usando Binance.
+
+## Clic derecho en el gráfico
+Menú con «Restablecer gráfico» (vuelve zoom, desplazamiento, escala de precio y alturas de los paneles al tamaño original) y «Escala de precio automática».

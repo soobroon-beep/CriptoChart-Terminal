@@ -471,3 +471,7 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .pick-row{display:flex;align-items:center;gap:10px}.pick-row .pk-main{flex:1;min-width:0}.pick-row .pk-go{opacity:.7}
 .ex-tag{font-size:10px;font-weight:700;letter-spacing:.6px;padding:3px 7px;border-radius:6px;border:1px solid var(--line);color:var(--muted);background:var(--raised);white-space:nowrap}
 .ex-bybit{color:#f7a600}.ex-binance,.ex-binancef{color:#f0b90b}.ex-okx{color:#e8eef9}.ex-coinbase{color:#3b82f6}.ex-bingx{color:#2f7bff}
+
+.chart-ctx button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 12px;border:0;background:transparent;color:var(--text);border-radius:10px;font-size:13px;white-space:nowrap}.chart-ctx button:hover{background:var(--raised)}
+.watch-row .row-main{min-width:0;overflow:hidden}.watch-row .row-main small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.watch-row .row-main small{display:flex;align-items:center;gap:5px}.watch-row .row-main small .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.watch-row .row-main small em.ex-tag{font-style:normal;font-size:8.5px;padding:1px 4px;flex:none}

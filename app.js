@@ -236,7 +236,7 @@ function renderWatch() {
     let flash = '';
     if (Number.isFinite(price) && lastShown[s] != null && price !== lastShown[s]) flash = price > lastShown[s] ? ' flash-up' : ' flash-down';
     if (Number.isFinite(price)) lastShown[s] = price;
-    const main = `${coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small>${esc(meta(s)[0])} · ${esc(exName(s))}</small></span>`;
+    const main = `${coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small><span class="nm">${esc(meta(s)[0])}</span>${srcOf(s) !== 'binance' ? `<em class="ex-tag ex-${srcOf(s)}">${esc(CCTMarkets.SHORT[srcOf(s)])}</em>` : ''}</small></span>`;
     if (editMode) return `<div class="watch-row editing" data-symbol="${s}">${main}<span class="row-edit"><button data-move="${s}" aria-label="Subir ${esc(base(s))}">▲</button><button data-remove="${s}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
     return `<button class="watch-row" data-symbol="${s}">${main}${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
   }).join('') || '<p class="small-note">No hay activos con ese nombre.</p>';
@@ -2534,6 +2534,21 @@ $('#autoScale').onclick = () => { priceMan = null; updateAutoBtn(); render(); };
 $('#zoomIn').onclick = () => glide({visible: clamp((glideT && glideT.visible != null ? glideT.visible : visible) / 1.3, 15, 400)});
 $('#zoomOut').onclick = () => glide({visible: clamp((glideT && glideT.visible != null ? glideT.visible : visible) * 1.3, 15, 400)});
 $('#fitChart').onclick = fit;
+/* Clic derecho sobre el gráfico (como en TradingView): Restablecer gráfico = vuelve el zoom, el desplazamiento, la escala de precio y las alturas de los paneles a su tamaño original */
+function resetChart() {
+  priceMan = null; paneMan = {_k: state.symbol + '|' + state.interval}; if (typeof paneH === 'object') { for (const k of Object.keys(paneH)) delete paneH[k]; savePaneH(); }
+  updateAutoBtn(); legSig = ''; glide({visible: defaultVisible(), pan: 0}); scheduleRender(); toast('Gráfico restablecido');
+}
+area.addEventListener('contextmenu', e => {
+  if (e.target.closest('.chart-label, .leg-row, button, .pop-menu')) return;
+  e.preventDefault(); document.querySelectorAll('.chart-ctx').forEach(x => x.remove());
+  const m = document.createElement('div'); m.className = 'pop-menu chart-ctx';
+  m.innerHTML = '<button data-a="reset">↺ Restablecer gráfico</button><button data-a="auto">⇕ Escala de precio automática</button>';
+  document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
+  const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
+  setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
+  m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'reset') resetChart(); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
+});
 function syncFullscreenLabel() { $('#fullscreen').textContent = document.body.classList.contains('expanded') ? '⤓ Reducir' : '⛶ Expandir'; }
 const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} syncUi(); scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
 $('#paneBig').onclick = () => setPaneScale(paneScale * 1.2); $('#paneSmall').onclick = () => setPaneScale(paneScale / 1.2);
