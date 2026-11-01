@@ -1151,8 +1151,8 @@ const TT={
 };
 
 // ── STATE ──
-// Si ya tienes tu Worker, pon aquí su URL (https://…workers.dev): Lens deja de pedirla y la usa en todos los dispositivos. La APK nativa no usa proxy.
-const DEFAULT_PROXY='';
+// Worker proxy de BingX (Cloudflare) de esta cuenta: Lens ya no pide la URL y la usa en todos los dispositivos. La APK nativa no usa proxy. Para cambiarlo, edita esta línea.
+const DEFAULT_PROXY='https://long-brook-0697.soobroon.workers.dev';
 let API_KEY='',SECRET_KEY='',PROXY_URL=DEFAULT_PROXY;
 let allTrades=[],openPositions=[],dailyPnL={},accountEquity=null;
 let calYear,calMonth,equityChart=null,weeklyEquityChart=null,consistencyChart=null;
