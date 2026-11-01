@@ -23,7 +23,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  groups: [], symGroup: {}, light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
+  groups: [], symGroup: {}, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -99,6 +99,17 @@ function sanUi(u) {
   if (typeof q.icon === 'string' && /^[a-z]{3,12}$/.test(q.icon)) o.icon = q.icon;
   return o;
 }
+function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estilo de línea, texto, bloqueo y visibilidad
+  const o = {...d}, hex = v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+  if (o.col != null && !hex(o.col)) delete o.col;
+  if (o.tc != null && !hex(o.tc)) delete o.tc;
+  if (o.lw != null) { const v = +o.lw; if (Number.isFinite(v) && v > 0) o.lw = Math.min(24, Math.max(.5, v)); else delete o.lw; }
+  if (o.ds != null && o.ds !== 'dash' && o.ds !== 'dot') delete o.ds;
+  if (o.ts != null) { const v = Math.round(+o.ts); if (Number.isFinite(v)) o.ts = Math.max(8, Math.min(36, v)); else delete o.ts; }
+  if (o.label != null) { o.label = String(o.label).slice(0, 80); if (!o.label) delete o.label; }
+  if (o.lock !== true) delete o.lock; if (o.hide !== true) delete o.hide;
+  return o;
+}
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
@@ -108,11 +119,12 @@ function merge(s) {
     for (const k of Object.keys(o.drawings)) {
       const arr = Array.isArray(o.drawings[k]) ? o.drawings[k] : [];
       const clean = arr.filter(d => d && typeof d === 'object' && (d.type === 'brush' ? (Array.isArray(d.pts) && d.pts.length >= 2 && d.pts.length <= 400 && d.pts.every(okPt)) : (d.pts == null || (Array.isArray(d.pts) && d.pts.length >= 2 && d.pts.length <= 12 && d.pts.every(q => q && Number.isFinite(q.t) && Number.isFinite(q.p)))))).slice(-300)
-        .map(d => d.type === 'brush' ? {id: String(d.id || '').slice(0, 16), type: 'brush', pts: d.pts, a: {t: d.pts[0][0], p: d.pts[0][1]}, col: /^#[0-9a-f]{6}$/i.test(d.col) ? d.col : '#e9c36e', w: Math.max(1, Math.min(24, +d.w || 3)), ...(d.hl === true ? {hl: true} : {})} : (d.col != null && !/^#[0-9a-f]{6}$/i.test(d.col) ? (({col, ...r}) => r)(d) : d));
+        .map(d => d.type === 'brush' ? {id: String(d.id || '').slice(0, 16), type: 'brush', pts: d.pts, a: {t: d.pts[0][0], p: d.pts[0][1]}, col: /^#[0-9a-f]{6}$/i.test(d.col) ? d.col : '#e9c36e', w: Math.max(1, Math.min(24, +d.w || 3)), ...(d.hl === true ? {hl: true} : {}), ...(d.lock === true ? {lock: true} : {}), ...(d.hide === true ? {hide: true} : {})} : sanDrawExtra(d));
       if (clean.length) o.drawings[k] = clean; else delete o.drawings[k];
     }
     const bq = o.brush && typeof o.brush === 'object' ? o.brush : {};
-    o.brush = {c: /^#[0-9a-f]{6}$/i.test(bq.c) ? bq.c : '#e9c36e', w: [2, 4, 7].includes(+bq.w) ? +bq.w : 3};
+    o.brush = {c: /^#[0-9a-f]{6}$/i.test(bq.c) ? bq.c : '#e9c36e', w: Math.max(1, Math.min(24, Math.round(+bq.w) || 3))};
+    o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 12).map(t => ({n: t.n.slice(0, 24), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})})) : [];
   }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
   o.ui = sanUi(o.ui);
@@ -1320,7 +1332,7 @@ function updateDrawUI() {
   if (drawTool) $('#drawHintText').textContent = (HINTS[drawTool] || HINTS.trend)(pending, pending2);
   $('#deleteDraw').hidden = !selectedId;
   $('#undoDraw').disabled = !drawHist.u.length && !getDrawings().length;
-  renderSelBar();
+  renderSelBar(); syncHiddenChip();
   $('#chartArea').classList.toggle('drawing', !!drawTool); $('#chartArea').dataset.tool = drawTool;
   syncRail();
 }
@@ -1332,21 +1344,216 @@ function redoDrawing() { if (!drawHist.r.length) { toast('No hay nada que rehace
 function deleteSelected() { if (!selectedId) return; snapDraw(); setDrawings(getDrawings().filter(x => x.id !== selectedId)); selectedId = null; updateDrawUI(); render(); toast('Dibujo eliminado · Ctrl+Z para recuperarlo'); }
 $('#undoDraw').onclick = undoDrawing;
 $('#deleteDraw').onclick = deleteSelected;
-/* Barra flotante sobre el gráfico: aparece al tocar un dibujo (color · borrar · deshacer · rehacer) y al usar el pincel */
+/* ───────── Barra flotante de propiedades de un dibujo (estilo TradingView) ─────────
+   Aparece al crear o tocar un dibujo: plantillas · color · texto · grosor · estilo · ajustes · alerta · bloquear · eliminar · más (clonar, copiar, ocultar…).
+   Con el pincel activo (sin trazo seleccionado) muestra color y grosor del pincel. */
 const SEL_COLORS = ['#e9c36e', '#f23645', '#089981', '#548fff', '#ffffff', '#b07cff'];
-function renderSelBar() {
-  let bar = $('#selBar'); const d = selectedId && getDrawings().find(x => x.id === selectedId), show = !!d || isBrushTool(drawTool);
-  if (!show) { if (bar) bar.remove(); return; }
-  if (!bar) { bar = document.createElement('div'); bar.id = 'selBar'; bar.className = 'sel-bar'; $('#chartArea').appendChild(bar); }
-  const cur = d ? (d.col || cstyle().draw || '#e9c36e') : state.brush.c;
-  bar.innerHTML = `${d ? SEL_COLORS.map(c => `<button class="bsw${c.toLowerCase() === String(cur).toLowerCase() ? ' on' : ''}" data-sc="${c}" style="background:${c}" aria-label="Color ${c}"></button>`).join('') : ''}<button data-sa="undo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer">↶</button><button data-sa="redo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer">↷</button>${d ? '<button data-sa="del" class="danger" title="Eliminar dibujo (Supr)" aria-label="Eliminar dibujo">🗑 Eliminar</button>' : '<button data-sa="clear" class="danger" title="Borrar todos los dibujos" aria-label="Borrar todo">🗑 Borrar todo</button>'}`;
+const SB_PAL = [
+  ['#ffffff', '#d1d4dc', '#b2b5be', '#868993', '#5d606b', '#434651', '#2a2e39', '#000000'],
+  ['#f23645', '#ff9800', '#ffeb3b', '#4caf50', '#089981', '#00bcd4', '#2962ff', '#9c27b0'],
+  ['#fccbcd', '#ffe0b2', '#fff9c4', '#c8e6c9', '#b2dfdb', '#b2ebf2', '#bbd9fb', '#e1bee7'],
+  ['#faa1a4', '#ffcc80', '#fff59d', '#a5d6a7', '#80cbc4', '#80deea', '#90bff9', '#ce93d8'],
+  ['#b22833', '#e65100', '#f9a825', '#2e7d32', '#056656', '#00838f', '#1848cc', '#6a1b9a'],
+  ['#e9c36e', '#e91e63', '#ff5252', '#69f0ae', '#40c4ff', '#7c4dff', '#ffd54f', '#ff6e40']
+];
+const SB_NOSTYLE = new Set(['marker', 'arrowup', 'arrowdown', 'flag', 'check', 'xmark', 'star', 'arrowleft', 'arrowright', 'label']); // solo color
+const SB_TEXT = new Set(['text', 'note', 'callout']);       // el texto ES el dibujo
+const SB_ALERT = new Set(['horizontal', 'hray', 'trend', 'ray', 'extended']); // líneas con un precio al que se puede poner alerta
+const SB_LW = [1, 2, 3, 4, 5, 6, 8], SB_BW = [1, 2, 3, 4, 6, 8, 12, 16], SB_TS = [[11, 'S'], [13, 'M'], [16, 'L'], [20, 'XL']];
+const SBI = {
+  tpl: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13.5v7M13 17h7"/>',
+  pen: '<path d="m4 20 1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/><path d="m14.5 6.5 3 3"/>',
+  txt: '<path d="M5 6V4.5h14V6M12 4.5V20M9 20h6"/>',
+  dots: '<circle cx="5.5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18.5" cy="12" r="1.3" fill="currentColor"/>',
+  set: '<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z"/><circle cx="12" cy="12" r="2.6"/>',
+  alert: '<circle cx="11" cy="13" r="7"/><path d="M11 9.5V13l2.5 1.5M4 5.5 7 3M18 3l3 2.5M18 17v5M15.5 19.5h5"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  unlock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-1.8"/>',
+  trash: '<path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13M10.5 11v6M13.5 11v6"/>'
+};
+let selPop = '', selPos = null, drawClip = '', pasteN = 0;
+const curDraw = () => selectedId ? getDrawings().find(x => x.id === selectedId) || null : null;
+const newDrawId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+const sbDefCol = () => cstyle().draw || '#e9c36e';
+function patchD(props, snap = true) {
+  const d = curDraw(); if (!d) return;
+  if (snap) snapDraw();
+  setDrawings(getDrawings().map(x => { if (x.id !== d.id) return x; const n = {...x, ...props}; for (const k of Object.keys(props)) if (props[k] == null || props[k] === false) delete n[k]; return n; }));
+  renderSelBar(); render();
 }
-document.addEventListener('click', e => {
-  const sc = e.target.closest('[data-sc]'), sa = e.target.closest('#selBar [data-sa]'); if (!sc && !sa) return;
-  if (sc) { const arr = getDrawings().map(d => d.id === selectedId ? Object.assign({}, d, {col: sc.dataset.sc}) : d); snapDraw(); setDrawings(arr); render(); renderSelBar(); return; }
-  const k = sa.dataset.sa; if (k === 'undo') undoDrawing(); else if (k === 'redo') redoDrawing(); else if (k === 'del') deleteSelected();
-  else if (k === 'clear') { if (!getDrawings().length) return toast('No hay dibujos'); if (confirm('¿Borrar todos los dibujos de este gráfico? (Ctrl+Z los recupera)')) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); } }
+const sbBrushMode = d => (d && d.type === 'brush') || (!d && isBrushTool(drawTool));
+function sbSetColor(c) { const d = curDraw(); if (d) patchD({col: c}); if (sbBrushMode(d)) { state.brush.c = c; save(); } if (!d) updateDrawUI(); }
+function sbSetWidth(w) {
+  const d = curDraw();
+  if (d) patchD(d.type === 'brush' ? {w: d.hl ? w * 3 : w} : {lw: w});
+  if (sbBrushMode(d)) { state.brush.w = w; save(); }
+  if (!d) updateDrawUI();
+}
+function sbPrice(d) { // precio de la línea ahora (nivel de la línea en la última vela)
+  if (d.type === 'horizontal' || d.type === 'hray') return d.a.p;
+  const ia = idxOfTime(d.a.t), ib = idxOfTime(d.b.t); if (ia === ib || !candles.length) return NaN;
+  return d.a.p + (d.b.p - d.a.p) * (candles.length - 1 - ia) / (ib - ia);
+}
+function sbAlert() {
+  const d = curDraw(); if (!d) return;
+  if (!SB_ALERT.has(d.type)) { toast('Las alertas se ponen en líneas de precio (horizontal, tendencia, rayo…)'); return; }
+  const price = +sbPrice(d).toPrecision(8), last = candles.length ? candles[candles.length - 1].c : NaN, sym = state.symbol;
+  if (!(price > 0) || !Number.isFinite(last)) { toast('No se pudo calcular el precio de la línea'); return; }
+  if (!/^[A-Z0-9]{3,20}$/.test(sym)) { toast('Las alertas por precio solo funcionan con pares de Binance Spot'); return; }
+  if (state.alerts.length >= 50) { toast('Máximo 50 alertas'); return; }
+  if (price === last) { toast('El precio ya está en ese nivel'); return; }
+  state.alerts.unshift({id: 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), symbol: sym, price, dir: price > last ? 'up' : 'down', on: true, note: ('Línea ' + (d.label || d.text || '')).trim().slice(0, 80), created: Date.now(), firedAt: 0, firedPrice: null});
+  alertPrice[sym] = last; save(); renderAlerts(); toast(`🔔 Alerta creada en ${fmt(price)}`);
+  try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
+}
+function shiftPoint(q, dx, dy) { const x = X(idxOfTime(q.t)) + dx, y = Y(q.p) + dy; return {...q, t: Math.round(timeOfIdx(IDX(x))), p: +PRICE(y).toPrecision(8)}; }
+function dupDrawing(d, dx, dy) {
+  const n = JSON.parse(JSON.stringify(d)); n.id = newDrawId(); delete n.lock; delete n.hide;
+  if (n.type === 'horizontal') n.a = {t: n.a.t, p: shiftPoint(n.a, 0, dy).p};
+  else if (n.type === 'vertical') n.a = {t: shiftPoint(n.a, dx, 0).t, p: n.a.p};
+  else if (n.type === 'brush') { n.pts = n.pts.map(([t, p]) => { const m = shiftPoint({t, p}, dx, dy); return [m.t, m.p]; }); n.a = {t: n.pts[0][0], p: n.pts[0][1]}; }
+  else { for (const k of ['a', 'b', 'c']) if (n[k]) n[k] = shiftPoint(n[k], dx, dy); if (n.pts) { n.pts = n.pts.map(q => shiftPoint(q, dx, dy)); n.a = n.pts[0]; } }
+  return n;
+}
+function sbAdd(n, msg) { snapDraw(); setDrawings([...getDrawings(), n]); selectedId = n.id; updateDrawUI(); render(); if (msg) toast(msg); }
+function sbClone() { const d = curDraw(); if (d && geo) sbAdd(dupDrawing(d, 18, 18), 'Dibujo clonado'); }
+function sbCopy() { const d = curDraw(); if (!d) return; drawClip = JSON.stringify(d); pasteN = 0; toast('Dibujo copiado · Ctrl+V o «Pegar» para duplicarlo'); renderSelBar(); }
+function sbPaste() { if (!drawClip || !geo) { toast('No hay nada copiado'); return; } pasteN++; sbAdd(dupDrawing(JSON.parse(drawClip), 18 * pasteN, 18 * pasteN), 'Dibujo pegado'); }
+function sbOrder(front) { const d = curDraw(); if (!d) return; snapDraw(); const rest = getDrawings().filter(x => x.id !== d.id); setDrawings(front ? [...rest, d] : [d, ...rest]); render(); toast(front ? 'Traído al frente' : 'Enviado al fondo'); }
+function sbHide() { const d = curDraw(); if (!d) return; patchD({hide: true}); selectedId = null; updateDrawUI(); render(); toast('Dibujo oculto · toca «ocultos» abajo a la izquierda para mostrarlo'); }
+function sbLock() { const d = curDraw(); if (!d) return; patchD({lock: !d.lock}); toast(d.lock ? 'Dibujo desbloqueado' : 'Dibujo bloqueado: no se puede mover'); }
+function sbEditText(val) {
+  const d = curDraw(); if (!d) return; const v = String(val || '').trim().slice(0, 80);
+  if (SB_TEXT.has(d.type)) { if (!v) { toast('El texto no puede quedar vacío'); return; } patchD({text: v}); } else patchD({label: v || null});
+}
+const tplOf = d => { const o = {}; if (d.col) o.col = d.col; const w = d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw; if (w) o.lw = w; if (d.ds) o.ds = d.ds; if (d.tc) o.tc = d.tc; if (d.ts) o.ts = d.ts; return o; };
+function sbSaveTpl() {
+  const d = curDraw(); if (!d) return; if ((state.drawTpl || []).length >= 12) { toast('Máximo 12 plantillas: borra alguna'); return; }
+  const n = (prompt('Nombre de la plantilla:', 'Plantilla ' + ((state.drawTpl || []).length + 1)) || '').trim().slice(0, 24); if (!n) return;
+  state.drawTpl = [...(state.drawTpl || []), {n, ...tplOf(d)}]; save(); renderSelBar(); toast('Plantilla guardada');
+}
+function sbApplyTpl(i) {
+  const d = curDraw(), t = (state.drawTpl || [])[i]; if (!d || !t) return;
+  patchD(d.type === 'brush' ? {col: t.col, w: Math.round((t.lw || (d.hl ? d.w / 3 : d.w)) * (d.hl ? 3 : 1))} : {col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts});
+  if (d.type === 'brush' && t.col) { state.brush.c = t.col; save(); }
+}
+function sbResetStyle() { const d = curDraw(); if (!d) return; patchD(d.type === 'brush' ? {col: '#e9c36e', w: d.hl ? 9 : 3} : {col: null, lw: null, ds: null, tc: null, ts: null, label: null}); }
+const sbSw = (attr, c, cur) => `<button class="pp-sw${String(cur || '').toLowerCase() === c ? ' on' : ''}" ${attr}="${c}" style="background:${c}" aria-label="${c}"></button>`;
+const sbPal = (attr, cur) => `<div class="pp-grid">${SB_PAL.flat().map(c => sbSw(attr, c, cur)).join('')}</div><label class="pp-custom">Otro color <input type="color" ${attr}-in value="${/^#[0-9a-f]{6}$/i.test(cur || '') ? cur : '#e9c36e'}"></label>`;
+const sbLwRow = (list, cur) => `<div class="pp-row">${list.map(w => `<button class="pp-lw${Math.round(cur) === w ? ' on' : ''}" data-pw="${w}"><i style="height:${Math.min(w, 8)}px"></i><span>${w}px</span></button>`).join('')}</div>`;
+const sbDsRow = cur => `<div class="pp-col">${[['', 'Línea', ''], ['dash', 'Línea discontinua', '7 5'], ['dot', 'Línea de puntos', '1.5 4']].map(([k, n, da]) => `<button class="pp-item${(cur || '') === k ? ' on' : ''}" data-pd="${k}"><svg width="46" height="8" viewBox="0 0 46 8"><path d="M1 4h44" stroke="currentColor" stroke-width="2" ${da ? `stroke-dasharray="${da}" stroke-linecap="${k === 'dot' ? 'round' : 'butt'}"` : ''}/></svg><span>${n}</span></button>`).join('')}</div>`;
+const sbSizeRow = cur => `<div class="pp-row">${SB_TS.map(([s, n]) => `<button class="pp-lw${(cur || 13) === s ? ' on' : ''}" data-pts="${s}"><span>${n}</span></button>`).join('')}</div>`;
+function sbTextBlock(d) {
+  const isT = SB_TEXT.has(d.type);
+  return `<label class="pp-lbl">${isT ? 'Texto' : 'Etiqueta de texto'}</label><div class="pp-row"><input class="pp-input" id="sbTxt" maxlength="80" value="${esc(isT ? d.text || '' : d.label || '')}" placeholder="${isT ? 'Escribe el texto' : 'Añadir texto a este dibujo'}"><button class="pp-ok" data-sb="txtok">OK</button></div>`
+    + `<label class="pp-lbl">Color del texto</label>${sbPal('data-ptc', d.tc || (isT && d.type === 'text' ? d.col : ''))}<label class="pp-lbl">Tamaño</label>${sbSizeRow(d.ts)}`;
+}
+function popHtml(kind, d) {
+  const brush = sbBrushMode(d), col = d ? d.col || sbDefCol() : state.brush.c, lw = d ? (d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw || 2) : state.brush.w;
+  if (kind === 'col') return `<div class="pp-title">Color</div>${sbPal('data-pc', col)}`;
+  if (kind === 'lw') return `<div class="pp-title">Grosor</div>${sbLwRow(brush ? SB_BW : SB_LW, lw)}`;
+  if (!d) return '';
+  if (kind === 'ds') return `<div class="pp-title">Estilo de línea</div>${sbDsRow(d.ds)}`;
+  if (kind === 'txt') return `<div class="pp-title">Texto</div>${sbTextBlock(d)}`;
+  if (kind === 'tpl') {
+    const list = (state.drawTpl || []).map((t, i) => `<div class="pp-tpl"><button class="pp-item" data-ptpl="${i}"><i class="pp-dot" style="background:${t.col || sbDefCol()}"></i><span>${esc(t.n)}</span><small>${t.lw || ''}${t.lw ? 'px' : ''}${t.ds ? ' · ' + (t.ds === 'dash' ? 'discont.' : 'puntos') : ''}</small></button><button class="pp-x" data-ptpl-del="${i}" aria-label="Borrar plantilla">×</button></div>`).join('');
+    return `<div class="pp-title">Plantillas de estilo</div><button class="pp-item" data-sb="tplsave">＋ Guardar el estilo actual como plantilla…</button><button class="pp-item" data-sb="tplreset">↺ Restablecer estilo</button>${list ? '<div class="pp-sep"></div>' + list : '<p class="pp-note">Aún no tienes plantillas. Guarda el estilo de este dibujo para aplicarlo en otros.</p>'}`;
+  }
+  if (kind === 'set') {
+    const noStyle = SB_NOSTYLE.has(d.type) || brush, hasPrice = d.type === 'horizontal' || d.type === 'hray';
+    return `<div class="pp-title">Ajustes</div><label class="pp-lbl">Color</label>${sbPal('data-pc', col)}`
+      + (brush ? `<label class="pp-lbl">Grosor</label>${sbLwRow(SB_BW, lw)}` : noStyle ? '' : `<label class="pp-lbl">Grosor</label>${sbLwRow(SB_LW, lw)}<label class="pp-lbl">Estilo</label>${sbDsRow(d.ds)}`)
+      + (hasPrice ? `<label class="pp-lbl">Precio</label><div class="pp-row"><input class="pp-input" id="sbPrice" inputmode="decimal" value="${d.a.p}"><button class="pp-ok" data-sb="priceok">OK</button></div>` : '')
+      + (brush || SB_NOSTYLE.has(d.type) ? '' : sbTextBlock(d));
+  }
+  if (kind === 'more') {
+    const it = (a, ic, n, k) => `<button class="pp-item" data-sb="${a}"><span class="pp-ic">${ic}</span><span>${n}</span>${k ? `<small>${k}</small>` : ''}</button>`;
+    return it('clone', '⧉', 'Clonar', 'Ctrl+D') + it('copy', '⎘', 'Copiar', 'Ctrl+C') + (drawClip ? it('paste', '📋', 'Pegar', 'Ctrl+V') : '') + '<div class="pp-sep"></div>'
+      + it('front', '⤒', 'Traer al frente') + it('back', '⤓', 'Enviar al fondo') + '<div class="pp-sep"></div>'
+      + it('hide', '🙈', 'Ocultar') + it('lock', d.lock ? '🔓' : '🔒', d.lock ? 'Desbloquear' : 'Bloquear') + '<div class="pp-sep"></div>'
+      + it('undo', '↶', 'Deshacer', 'Ctrl+Z') + it('redo', '↷', 'Rehacer', 'Ctrl+Y') + it('clear', '🗑', 'Borrar todos los dibujos');
+  }
+  return '';
+}
+function sbMoreNoSel() { return `<button class="pp-item" data-sb="undo"><span class="pp-ic">↶</span><span>Deshacer</span></button><button class="pp-item" data-sb="redo"><span class="pp-ic">↷</span><span>Rehacer</span></button><button class="pp-item" data-sb="clear"><span class="pp-ic">🗑</span><span>Borrar todos los dibujos</span></button>`; }
+function closePop() { selPop = ''; const p = $('#selPop'); if (p) p.remove(); document.querySelectorAll('#selBar [data-sb].open').forEach(b => b.classList.remove('open')); }
+function renderPop() {
+  const old = $('#selPop'), bar = $('#selBar'); if (old) old.remove();
+  if (!selPop || !bar) return;
+  const d = curDraw(); let html = selPop === 'more' && !d ? sbMoreNoSel() : popHtml(selPop, d); if (!html) { selPop = ''; return; }
+  const pop = document.createElement('div'); pop.id = 'selPop'; pop.className = 'pbar-pop'; pop.innerHTML = html; $('#chartArea').appendChild(pop);
+  const btn = bar.querySelector(`[data-sb="${selPop}"]`); if (btn) btn.classList.add('open');
+  const ar = $('#chartArea').getBoundingClientRect(), br = (btn || bar).getBoundingClientRect(), below = br.top - ar.top < ar.height / 2;
+  pop.style.left = clamp(br.left - ar.left - 4, 6, Math.max(6, ar.width - pop.offsetWidth - 6)) + 'px';
+  pop.style.top = clamp(below ? br.bottom - ar.top + 6 : br.top - ar.top - pop.offsetHeight - 6, 6, Math.max(6, ar.height - pop.offsetHeight - 6)) + 'px';
+}
+const sbIc = (k, s = 20) => SV(SBI[k], s);
+function applyBarPos(bar) { if (selPos) { bar.style.left = selPos.x + 'px'; bar.style.top = selPos.y + 'px'; bar.style.bottom = 'auto'; bar.style.transform = 'none'; } }
+function renderSelBar() {
+  let bar = $('#selBar'); const d = curDraw(), show = !!d || isBrushTool(drawTool);
+  if (!show) { if (bar) bar.remove(); closePop(); return; }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'selBar'; bar.className = 'pbar'; $('#chartArea').appendChild(bar); }
+  const brush = sbBrushMode(d), col = d ? d.col || sbDefCol() : state.brush.c, lw = d ? (d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw || 2) : state.brush.w;
+  const line = d && !brush && !SB_NOSTYLE.has(d.type) && !SB_TEXT.has(d.type), canText = d && !brush && !SB_NOSTYLE.has(d.type);
+  const b = (k, ic, tip, extra = '') => `<button data-sb="${k}" title="${tip}" aria-label="${tip}" class="${selPop === k ? 'open' : ''}">${extra || ic}</button>`;
+  const ul = c => `<i class="sb-ul" style="background:${c}"></i>`;
+  bar.innerHTML = '<span class="sb-grip" title="Arrastra para mover la barra" aria-label="Mover barra">⋮⋮</span>'
+    + (d ? b('tpl', '', 'Plantillas de estilo', sbIc('tpl')) + '<i class="sb-sep"></i>' : '')
+    + b('col', '', 'Color', `<span class="sb-st">${sbIc('pen')}${ul(col)}</span>`)
+    + (canText ? b('txt', '', SB_TEXT.has(d.type) ? 'Editar texto y su color' : 'Añadir texto y cambiar su color', `<span class="sb-st">${sbIc('txt')}${ul(d.tc || (d.type === 'text' && d.col) || '#2962ff')}</span>`) : '')
+    + ((line || brush) ? b('lw', '', 'Grosor', `<i class="sb-ln" style="height:${Math.min(8, Math.max(1, lw))}px"></i><b>${lw}px</b>`) : '')
+    + (line ? b('ds', '', 'Estilo de línea', `<svg width="30" height="8" viewBox="0 0 30 8"><path d="M1 4h28" stroke="currentColor" stroke-width="2" ${d.ds === 'dash' ? 'stroke-dasharray="6 4"' : d.ds === 'dot' ? 'stroke-dasharray="1.5 4" stroke-linecap="round"' : 'stroke-dasharray="1.5 4" stroke-linecap="round"'}/></svg>`) : '')
+    + (d ? '<i class="sb-sep"></i>' + b('set', '', 'Ajustes', sbIc('set')) : '')
+    + (d && SB_ALERT.has(d.type) ? b('alert', '', 'Añadir alerta a esta línea', sbIc('alert')) : '')
+    + (d ? b('lock', '', d.lock ? 'Desbloquear' : 'Bloquear', sbIc(d.lock ? 'lock' : 'unlock')) + b('del', '', 'Eliminar (Supr)', sbIc('trash')) : '')
+    + b('more', '', 'Más opciones', sbIc('dots'));
+  bar.classList.toggle('locked', !!(d && d.lock));
+  applyBarPos(bar); renderPop();
+}
+/* Mover la barra arrastrando el asa */
+document.addEventListener('pointerdown', e => {
+  const gr = e.target.closest('.sb-grip'); if (!gr) return; const bar = $('#selBar'); if (!bar) return; e.preventDefault(); closePop();
+  const ar = $('#chartArea').getBoundingClientRect(), br = bar.getBoundingClientRect(), ox = e.clientX - br.left, oy = e.clientY - br.top;
+  const mv = ev => { selPos = {x: clamp(ev.clientX - ar.left - ox, 0, Math.max(0, ar.width - br.width)), y: clamp(ev.clientY - ar.top - oy, 0, Math.max(0, ar.height - br.height))}; applyBarPos(bar); };
+  const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); };
+  addEventListener('pointermove', mv); addEventListener('pointerup', up); addEventListener('pointercancel', up);
 });
+document.addEventListener('pointerdown', e => { if (selPop && !e.target.closest('.pbar, .pbar-pop')) closePop(); }, true);
+document.addEventListener('click', e => {
+  const t = e.target.closest('#selBar [data-sb], #selPop [data-sb], #selPop [data-pc], #selPop [data-ptc], #selPop [data-pw], #selPop [data-pd], #selPop [data-pts], #selPop [data-ptpl], #selPop [data-ptpl-del]'); if (!t) return;
+  const D = t.dataset, keep = selPop === 'set' || selPop === 'txt', done = () => { if (!keep) closePop(); }; // color, grosor, estilo y plantilla se cierran al elegir; Texto y Ajustes siguen abiertos
+  if (D.pc) { sbSetColor(D.pc); done(); return; }
+  if (D.ptc) { patchD({tc: D.ptc}); return; }
+  if (D.pw) { sbSetWidth(+D.pw); done(); return; }
+  if (D.pd !== undefined) { patchD({ds: D.pd || null}); done(); return; }
+  if (D.pts) { patchD({ts: +D.pts}); return; }
+  if (D.ptpl !== undefined) { sbApplyTpl(+D.ptpl); done(); return; }
+  if (D.ptplDel !== undefined) { state.drawTpl = (state.drawTpl || []).filter((_, i) => i !== +D.ptplDel); save(); renderSelBar(); return; }
+  const k = D.sb;
+  if (['tpl', 'col', 'txt', 'lw', 'ds', 'set', 'more'].includes(k)) { selPop = selPop === k ? '' : k; if (!selPop) closePop(); else renderPop(); return; }
+  if (k === 'txtok') { sbEditText($('#sbTxt').value); return; }
+  if (k === 'priceok') { const v = parseFloat(String($('#sbPrice').value).replace(',', '.')), d = curDraw(); if (d && v > 0) patchD({a: {...d.a, p: v}}); else toast('Escribe un precio válido'); return; }
+  if (k === 'tplsave') { sbSaveTpl(); return; } if (k === 'tplreset') { sbResetStyle(); return; }
+  if (k === 'alert') { sbAlert(); return; } if (k === 'lock') { sbLock(); return; } if (k === 'del') { closePop(); deleteSelected(); return; }
+  if (k === 'clone') { sbClone(); closePop(); return; } if (k === 'copy') { sbCopy(); closePop(); return; } if (k === 'paste') { sbPaste(); closePop(); return; }
+  if (k === 'front') { sbOrder(true); closePop(); return; } if (k === 'back') { sbOrder(false); closePop(); return; } if (k === 'hide') { closePop(); sbHide(); return; }
+  if (k === 'undo') undoDrawing(); else if (k === 'redo') redoDrawing();
+  else if (k === 'clear') { closePop(); if (!getDrawings().length) return toast('No hay dibujos'); if (confirm('¿Borrar todos los dibujos de este gráfico? (Ctrl+Z los recupera)')) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); } }
+});
+document.addEventListener('change', e => { const i = e.target.closest('#selPop input[type=color]'); if (!i) return; if (i.hasAttribute('data-pc-in')) sbSetColor(i.value); else if (i.hasAttribute('data-ptc-in')) patchD({tc: i.value}); });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'sbTxt') { e.preventDefault(); sbEditText(e.target.value); } else if (e.key === 'Enter' && e.target.id === 'sbPrice') { e.preventDefault(); document.querySelector('#selPop [data-sb="priceok"]').click(); } });
+document.addEventListener('keydown', e => { // atajos de escritorio: copiar / pegar / clonar
+  if (!(e.ctrlKey || e.metaKey) || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || currentView !== 'chartView') return;
+  const k = e.key.toLowerCase();
+  if (k === 'c' && curDraw()) { e.preventDefault(); sbCopy(); } else if (k === 'v' && drawClip) { e.preventDefault(); sbPaste(); } else if (k === 'd' && curDraw()) { e.preventDefault(); sbClone(); }
+});
+/* Chip «N ocultos» para volver a mostrar los dibujos ocultos uno a uno desde la barra */
+function syncHiddenChip() {
+  const n = getDrawings().filter(x => x.hide).length; let c = $('#showHidden');
+  if (!n) { if (c) c.remove(); return; }
+  if (!c) { c = document.createElement('button'); c.id = 'showHidden'; c.className = 'pbar-hidden'; c.onclick = () => { snapDraw(); setDrawings(getDrawings().map(({hide, ...r}) => r)); updateDrawUI(); render(); toast('Dibujos visibles otra vez'); }; $('#chartArea').appendChild(c); }
+  c.textContent = `👁 ${n} oculto${n > 1 ? 's' : ''} · mostrar`;
+}
 
 /* ───────── Barra izquierda de herramientas de dibujo (escritorio, estilo TradingView) ───────── */
 const RAIL_KEY = 'cct_railLast_v1';
@@ -1464,7 +1671,7 @@ function fibCircle(d) { const A = px(d.a), B = px(d.b); return {m: {x: (A.x + B.
 const inTri = (p, a, b, c) => { const s = (p1, p2, p3) => (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y), d1 = s(p, a, b), d2 = s(p, b, c), d3 = s(p, c, a); return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0)); };
 const readableOn = hex => { const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || ''); if (!m) return '#10151f'; const l = (.299 * parseInt(m[1], 16) + .587 * parseInt(m[2], 16) + .114 * parseInt(m[3], 16)) / 255; return l > .55 ? '#10151f' : '#ffffff'; };
 function handlesOf(d) {
-  if (d.type === 'brush') return [];
+  if (d.type === 'brush' || d.lock) return [];
   if (d.pts && MULTI[d.type]) return d.pts.map((q, i) => ({key: 'p' + i, ...px(q)}));
   if (d.type === 'horizontal') return [{key: 'a', x: geo.left + geo.plotW / 2, y: Y(d.a.p)}];
   if (d.type === 'vertical') return [{key: 'a', x: X(idxOfTime(d.a.t)), y: geo.plotTop + geo.plotH / 2}];
@@ -1513,7 +1720,7 @@ function distToDrawing(d, pt) {
   if (d.type === 'hray') { const A = px(d.a); return pt.x < A.x - 4 ? 1e9 : Math.abs(pt.y - A.y); }
   if (d.type === 'crossline') { const A = px(d.a); return Math.min(Math.abs(pt.y - A.y), Math.abs(pt.x - A.x)); }
   if (d.type === 'arrowup' || d.type === 'arrowdown') { const A = px(d.a), s = d.type === 'arrowup' ? 1 : -1; return Math.abs(pt.x - A.x) <= 10 && (pt.y - A.y) * s >= -4 && (pt.y - A.y) * s <= 30 ? 0 : Math.hypot(pt.x - A.x, pt.y - A.y); }
-  if (d.type === 'note') { const A = px(d.a), w = (d.text || '').length * 7 + 16; return pt.x >= A.x - 6 && pt.x <= A.x + w && pt.y >= A.y - 34 && pt.y <= A.y + 2 ? 0 : Math.hypot(pt.x - A.x, pt.y - A.y); }
+  if (d.type === 'note') { const A = px(d.a), w = (d.text || '').length * 7 * (d.ts || 12) / 12 + 16; return pt.x >= A.x - 6 && pt.x <= A.x + w && pt.y >= A.y - 34 && pt.y <= A.y + 2 ? 0 : Math.hypot(pt.x - A.x, pt.y - A.y); }
   if (d.type === 'label') { const A = px(d.a); return pt.x >= A.x - 4 && pt.x <= A.x + 70 && Math.abs(pt.y - A.y) <= 10 ? 0 : Math.hypot(pt.x - A.x, pt.y - A.y); }
   if (['flag', 'check', 'xmark', 'star', 'arrowleft', 'arrowright'].includes(d.type)) {
     const A = px(d.a);
@@ -1523,7 +1730,7 @@ function distToDrawing(d, pt) {
   }
   if (d.type === 'text' || d.type === 'marker') {
     const A = px(d.a);
-    if (d.type === 'text' && pt.x >= A.x - 4 && pt.x <= A.x + (d.text || '').length * 7 + 10 && pt.y >= A.y - 16 && pt.y <= A.y + 4) return 0;
+    if (d.type === 'text' && pt.x >= A.x - 4 && pt.x <= A.x + (d.text || '').length * 7 * (d.ts || 12) / 12 + 10 && pt.y >= A.y - (d.ts || 12) - 4 && pt.y <= A.y + 4) return 0;
     return Math.hypot(pt.x - A.x, pt.y - A.y);
   }
   const a = px(d.a), b = px(d.b);
@@ -1534,7 +1741,7 @@ function distToDrawing(d, pt) {
   if (d.type === 'sinewave') { const P = sinePts(d, geo.w - geo.right); let m = 1e9; for (let i = 1; i < P.length; i++) m = Math.min(m, segDist(pt, P[i - 1], P[i])); return P.length ? m : segDist(pt, a, b); }
   if (d.type === 'gannfan') return Math.min(...gannRays(d).map(([p, q]) => segDist(pt, p, q)));
   if (d.type === 'circle') { const r = Math.hypot(pt.x - a.x, pt.y - a.y), R = Math.hypot(b.x - a.x, b.y - a.y); return r <= R ? 0 : r - R; }
-  if (d.type === 'callout') { const w = (d.text || '').length * 7 + 16; return pt.x >= b.x - w / 2 && pt.x <= b.x + w / 2 && pt.y >= b.y - 12 && pt.y <= b.y + 12 ? 0 : segDist(pt, a, b); }
+  if (d.type === 'callout') { const w = (d.text || '').length * 7 * (d.ts || 12) / 12 + 16; return pt.x >= b.x - w / 2 && pt.x <= b.x + w / 2 && pt.y >= b.y - 12 && pt.y <= b.y + 12 ? 0 : segDist(pt, a, b); }
   if (d.type === 'parallelogram') { if (!d.c) return segDist(pt, a, b); const c = px(d.c), e = {x: a.x + c.x - b.x, y: a.y + c.y - b.y}; return inTri(pt, a, b, c) || inTri(pt, a, c, e) ? 0 : Math.min(segDist(pt, a, b), segDist(pt, b, c), segDist(pt, c, e), segDist(pt, e, a)); }
   if (d.type === 'ellipse') { const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2, rx = Math.max(1, Math.abs(b.x - a.x) / 2), ry = Math.max(1, Math.abs(b.y - a.y) / 2), r = Math.hypot((pt.x - cx) / rx, (pt.y - cy) / ry); return r <= 1 ? 0 : (r - 1) * Math.min(rx, ry); }
   if (d.type === 'triangle') { if (!d.c) return segDist(pt, a, b); const c = px(d.c); return inTri(pt, a, b, c) ? 0 : Math.min(segDist(pt, a, b), segDist(pt, b, c), segDist(pt, c, a)); }
@@ -1565,7 +1772,7 @@ function distToDrawing(d, pt) {
   return Math.min(...FIB.map(lv => Math.abs(pt.y - Y(b_price(d, lv)))));
 }
 const b_price = (d, lv) => d.b.p - (d.b.p - d.a.p) * lv;
-function hitTest(pt) { if (DOPT.lock || DOPT.hide) return null; const arr = getDrawings(); for (let i = arr.length - 1; i >= 0; i--) if (distToDrawing(arr[i], pt) < 13) return arr[i]; return null; }
+function hitTest(pt) { if (DOPT.lock || DOPT.hide) return null; const arr = getDrawings(); for (let i = arr.length - 1; i >= 0; i--) if (!arr[i].hide && distToDrawing(arr[i], pt) < 13) return arr[i]; return null; }
 function commitDrawing(a, b, c) {
   const one = ONEPT.includes(drawTool), three = THREEPT.includes(drawTool);
   if (!one) {
@@ -1602,7 +1809,7 @@ function commitBrush(live) {
   if (out.length < 2) return;
   const pts = out.map(o => [Math.round(o.q[0]), +(+o.q[1].toPrecision(8))]);
   const d = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: 'brush', pts, a: {t: pts[0][0], p: pts[0][1]}, col: state.brush.c, w: drawTool === 'highlighter' ? state.brush.w * 3 : state.brush.w, ...(drawTool === 'highlighter' ? {hl: true} : {})};
-  snapDraw(); setDrawings([...getDrawings(), d]); updateDrawUI();
+  snapDraw(); setDrawings([...getDrawings(), d]); selectedId = d.id; updateDrawUI();
 }
 
 /* ───────── Render del gráfico ───────── */
@@ -2493,7 +2700,7 @@ function drawShapeExtra(d, a, b, rightX, col) {
   if (t === 'vertical') { g.beginPath(); g.moveTo(a.x, geo.plotTop); g.lineTo(a.x, geo.h - geo.axisH); g.stroke(); }
   else if (t === 'ray') { const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(a.x + dx / L * 5000, a.y + dy / L * 5000); g.stroke(); }
   else if (t === 'arrow') { g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); g.fillStyle = col; arrowHead(a, b, 11); }
-  else if (t === 'text') { g.font = 'bold 12px system-ui'; g.fillStyle = col; g.fillText(d.text || '', a.x, a.y); }
+  else if (t === 'text') { g.font = `bold ${d.ts || 12}px system-ui`; g.fillStyle = col; g.fillText(d.text || '', a.x, a.y); }
   else if (t === 'marker') {
     const hi = markerKind(d) === 'high'; g.font = 'bold 11px system-ui'; g.fillStyle = col; g.textAlign = 'center';
     g.fillText(hi ? '▼' : '▲', a.x, hi ? a.y - 3 : a.y + 12); g.font = 'bold 10px system-ui'; g.fillText(fmt(d.a.p), a.x, hi ? a.y - 15 : a.y + 24); g.textAlign = 'left';
@@ -2637,9 +2844,9 @@ function drawShapeNew(d, a, b, rightX, col, selected) {
   else if (t === 'diamond') { const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2; poly([{x: cx, y: Math.min(a.y, b.y)}, {x: Math.max(a.x, b.x), y: cy}, {x: cx, y: Math.max(a.y, b.y)}, {x: Math.min(a.x, b.x), y: cy}], true); fillA(.12, () => g.fill()); g.stroke(); }
   else if (t === 'parallelogram') { if (!d.c) seg(a, b); else { const c = px(d.c); poly([a, b, c, {x: a.x + c.x - b.x, y: a.y + c.y - b.y}], true); fillA(.12, () => g.fill()); g.stroke(); } }
   else if (t === 'callout') {
-    g.font = '12px system-ui'; const txt = d.text || '', w = g.measureText(txt).width + 16;
+    g.font = `${d.ts || 12}px system-ui`; const txt = d.text || '', w = g.measureText(txt).width + 16;
     seg(a, b); g.beginPath(); g.arc(a.x, a.y, 3, 0, 7); g.fill();
-    g.fillStyle = col; fillA(.95, () => { roundRect(b.x - w / 2, b.y - 12, w, 24, 5); g.fill(); }); g.fillStyle = readableOn(col); g.textAlign = 'center'; g.fillText(txt, b.x, b.y + 4); g.textAlign = 'left';
+    g.fillStyle = col; fillA(.95, () => { roundRect(b.x - w / 2, b.y - 12, w, 24, 5); g.fill(); }); g.fillStyle = d.tc || readableOn(col); g.textAlign = 'center'; g.fillText(txt, b.x, b.y + 4); g.textAlign = 'left';
   }
   else if (t === 'flag') { seg(a, {x: a.x, y: a.y - 26}); poly([{x: a.x, y: a.y - 26}, {x: a.x + 17, y: a.y - 20}, {x: a.x, y: a.y - 13}], true); g.fill(); g.beginPath(); g.arc(a.x, a.y, 2.5, 0, 7); g.fill(); }
   else if (t === 'check') { g.lineWidth = 3.2; g.lineCap = 'round'; g.lineJoin = 'round'; poly([{x: a.x - 8, y: a.y}, {x: a.x - 2.5, y: a.y + 6}, {x: a.x + 8, y: a.y - 7}]); g.stroke(); g.lineCap = 'butt'; g.lineJoin = 'miter'; g.lineWidth = lw; }
@@ -2647,10 +2854,10 @@ function drawShapeNew(d, a, b, rightX, col, selected) {
   else if (t === 'star') { const P = []; for (let i = 0; i < 10; i++) { const r = i % 2 ? 4.8 : 11, an = -Math.PI / 2 + i * Math.PI / 5; P.push({x: a.x + Math.cos(an) * r, y: a.y + Math.sin(an) * r}); } poly(P, true); g.fill(); g.lineJoin = 'round'; g.stroke(); g.lineJoin = 'miter'; }
   else if (t === 'arrowleft' || t === 'arrowright') { const sx = t === 'arrowleft' ? 1 : -1; poly([a, {x: a.x + 13 * sx, y: a.y - 9}, {x: a.x + 13 * sx, y: a.y - 3.5}, {x: a.x + 36 * sx, y: a.y - 3.5}, {x: a.x + 36 * sx, y: a.y + 3.5}, {x: a.x + 13 * sx, y: a.y + 3.5}, {x: a.x + 13 * sx, y: a.y + 9}], true); g.fill(); }
   else if (t === 'note') {
-    g.font = '12px system-ui'; const txt = d.text || '', w = g.measureText(txt).width + 14, h = 24, bx = a.x - 6, by = a.y - h - 9;
+    g.font = `${d.ts || 12}px system-ui`; const txt = d.text || '', w = g.measureText(txt).width + 14, h = 24, bx = a.x - 6, by = a.y - h - 9;
     g.fillStyle = col; fillA(.95, () => { roundRect(bx, by, w, h, 5); g.fill(); });
     g.beginPath(); g.moveTo(a.x - 2, by + h - 1); g.lineTo(a.x + 7, by + h - 1); g.lineTo(a.x, a.y); g.closePath(); g.fill();
-    g.fillStyle = readableOn(col); g.fillText(txt, bx + 7, by + 16);
+    g.fillStyle = d.tc || readableOn(col); g.fillText(txt, bx + 7, by + 16);
   }
   else if (t === 'label') {
     g.font = 'bold 11px system-ui'; const txt = fmt(d.a.p), w = g.measureText(txt).width + 12, bx = a.x + 10;
@@ -2668,9 +2875,33 @@ function drawBrush(d, selected, col) {
   if (selected) { g.strokeStyle = '#fff'; g.globalAlpha = .35; g.lineWidth = d.w + 6; trace(); g.stroke(); g.globalAlpha = 1; }
   g.strokeStyle = d.col || col; g.lineWidth = d.w || 3; if (d.hl) g.globalAlpha = .35; trace(); g.stroke(); g.restore();
 }
+/* Estilo propio del dibujo (grosor y estilo de línea): se aplica a cada trazo que hace el dibujo sin tocar cada herramienta */
+function styleWrap(d) {
+  const f = d.lw ? d.lw / 1.5 : 1, ds = d.ds; if (f === 1 && !ds) return () => {};
+  const proto = CanvasRenderingContext2D.prototype, S = proto.stroke, R = proto.strokeRect;
+  const wrap = fn => function (...a) {
+    const w = g.lineWidth, ld = g.getLineDash(), cap = g.lineCap; g.lineWidth = w * f;
+    if (ds && !ld.length) { const u = Math.max(1, g.lineWidth); g.setLineDash(ds === 'dash' ? [u * 4.5, u * 3] : [u * .1, u * 2.8]); if (ds === 'dot') g.lineCap = 'round'; }
+    fn.apply(g, a); g.lineWidth = w; g.setLineDash(ld); g.lineCap = cap;
+  };
+  g.stroke = wrap(S); g.strokeRect = wrap(R);
+  return () => { delete g.stroke; delete g.strokeRect; };
+}
+function drawLabel(d, a, b, col) { // texto que el usuario añade a un dibujo
+  if (!d.label || SB_TEXT.has(d.type)) return;
+  const sz = d.ts || 12, c = d.tc || col; let x, y, al = 'left';
+  if (d.type === 'horizontal') { x = geo.left + 8; y = a.y - 6; }
+  else if (d.type === 'vertical') { x = a.x + 6; y = geo.plotTop + 16; }
+  else if (b) { x = (a.x + b.x) / 2; y = (a.y + b.y) / 2 - 8; al = 'center'; }
+  else { x = a.x + 10; y = a.y - 10; }
+  g.save(); g.font = `bold ${sz}px system-ui`; g.textAlign = al; g.lineJoin = 'round'; g.lineWidth = 3; g.strokeStyle = 'rgba(9,14,25,.85)'; g.strokeText(d.label, x, y); g.fillStyle = c; g.fillText(d.label, x, y); g.restore();
+}
 function drawShape(d, selected, col, textCol) {
+  if (d.hide) return;
   if (d.type === 'brush') { drawBrush(d, selected, col); return; }
   if (d.col) col = d.col;
+  if (d.type === 'text' && d.tc) col = d.tc;
+  const unwrap = styleWrap(d);
   const a = d.type === 'horizontal' ? {x: 0, y: Y(d.a.p)} : px(d.a), b = d.b ? px(d.b) : null;
   g.strokeStyle = col; g.fillStyle = col; g.lineWidth = selected ? 2.2 : 1.5; g.setLineDash([]);
   const rightX = geo.w - geo.right;
@@ -2695,6 +2926,7 @@ function drawShape(d, selected, col, textCol) {
   }
   drawShapeExtra(d, a, b, rightX, col);
   drawShapeNew(d, a, b, rightX, col, selected);
+  unwrap(); drawLabel(d, a, b, col);
   if (selected) for (const hnd of handlesOf(d)) { g.fillStyle = '#fff'; g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(hnd.x, hnd.y, 7, 0, 7); g.fill(); g.stroke(); }
 }
 
@@ -2703,7 +2935,7 @@ const area = $('#chartArea'), ptrs = new Map();
 let gest = null, pinch = null, lastTap = null, brushLive = null;
 const local = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
 area.addEventListener('pointerdown', e => { stopMotion();
-  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.sel-bar,.leg-toggle')) return;
+  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.pbar,.pbar-pop,.pbar-hidden,.leg-toggle')) return;
   try { area.setPointerCapture(e.pointerId); } catch {} ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   if (!geo) return;
   if (ptrs.size === 2) { startPinch(); return; }

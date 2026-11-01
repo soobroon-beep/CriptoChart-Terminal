@@ -34,12 +34,12 @@ const ok = (c, m) => { console.log((c ? 'OK    · ' : 'FALLA · ') + m); if (!c)
   const nDraw = () => page.evaluate(() => { const s = JSON.parse(localStorage.getItem('cct_mobile_v1')); return Object.values(s.drawings || {}).flat().length; });
   ok(await nDraw() === 1, 'se creó 1 dibujo');
   // seleccionar tocándolo
-  for (let dy = -40; dy <= 40 && !(await page.$('#selBar [data-sc]')); dy += 4) { await page.mouse.click(box.x + box.w * .4, box.y + box.h * .3 + dy); await page.waitForTimeout(380); }
-  ok(!!(await page.$('#selBar [data-sc]')), 'al seleccionar aparece la barra con colores');
-  await page.click('#selBar [data-sc="#f06b79"]'); await page.waitForTimeout(200);
-  ok(await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('cct_mobile_v1')).drawings).flat()[0].col) === '#f06b79', 'cambiar color del dibujo');
+  for (let dy = -40; dy <= 40 && !(await page.$('#selBar [data-sb="col"]')); dy += 4) { await page.mouse.click(box.x + box.w * .4, box.y + box.h * .3 + dy); await page.waitForTimeout(380); }
+  ok(!!(await page.$('#selBar [data-sb="col"]')), 'al seleccionar aparece la barra con colores');
+  await page.click('#selBar [data-sb="col"]'); await page.click('#selPop [data-pc="#f23645"]'); await page.waitForTimeout(200);
+  ok(await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('cct_mobile_v1')).drawings).flat()[0].col) === '#f23645', 'cambiar color del dibujo');
   await page.screenshot({path: out + 'selbar.png'});
-  await page.click('#selBar [data-sa="del"]'); await page.waitForTimeout(200); ok(await nDraw() === 0, 'eliminar desde la barra');
+  await page.click('#selBar [data-sb="del"]'); await page.waitForTimeout(200); ok(await nDraw() === 0, 'eliminar desde la barra');
   await page.keyboard.press('Control+z'); await page.waitForTimeout(200); ok(await nDraw() === 1, 'Ctrl+Z recupera el dibujo eliminado');
   await page.keyboard.press('Control+z'); await page.waitForTimeout(200); ok(await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('cct_mobile_v1')).drawings).flat()[0].col) === undefined, 'Ctrl+Z deshace el cambio de color');
   await page.keyboard.press('Control+z'); await page.waitForTimeout(200); ok(await nDraw() === 0, 'Ctrl+Z deshace la creación del dibujo');
