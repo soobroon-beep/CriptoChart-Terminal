@@ -830,10 +830,10 @@ header::after{
         <label>Secret Key</label>
         <input type="password" id="inp-sec" placeholder="Tu Secret Key" autocomplete="off">
       </div>
-      <div class="field">
+      <div class="field" id="fld-proxy">
         <label>Proxy URL <span style="color:var(--acc2);font-size:.52rem">(Cloudflare Worker)</span></label>
         <input type="url" id="inp-proxy" placeholder="https://tu-worker.workers.dev" autocomplete="off" spellcheck="false">
-        <div class="hint">Gratis en <a href="https://workers.cloudflare.com" target="_blank">workers.cloudflare.com</a> — sin hibernación</div>
+        <div class="hint">Solo hace falta en la web (BingX no deja conectar directo desde el navegador); la APK no lo pide. Se crea gratis una sola vez en <a href="https://dash.cloudflare.com" target="_blank">Cloudflare</a> con el archivo <b>worker/bingx-proxy.js</b> del repositorio. Tu Secret Key nunca pasa por él.</div>
       </div>
       <button class="btn-connect" id="btn-connect" onclick="connect()">Conectar</button>
       <div class="err-msg" id="err-msg"></div>
@@ -1151,7 +1151,9 @@ const TT={
 };
 
 // ── STATE ──
-let API_KEY='',SECRET_KEY='',PROXY_URL='';
+// Si ya tienes tu Worker, pon aquí su URL (https://…workers.dev): Lens deja de pedirla y la usa en todos los dispositivos. La APK nativa no usa proxy.
+const DEFAULT_PROXY='';
+let API_KEY='',SECRET_KEY='',PROXY_URL=DEFAULT_PROXY;
 let allTrades=[],openPositions=[],dailyPnL={},accountEquity=null;
 let calYear,calMonth,equityChart=null,weeklyEquityChart=null,consistencyChart=null;
 let rdistChart=null,underwaterChart=null,rollingChart=null;
@@ -1207,9 +1209,9 @@ async function connect(){
   API_KEY=document.getElementById('inp-key').value.trim();
   SECRET_KEY=document.getElementById('inp-sec').value.trim();
   const proxyEl=document.getElementById('inp-proxy');
-  PROXY_URL=proxyEl?proxyEl.value.trim():'';
+  PROXY_URL=DEFAULT_PROXY||(proxyEl?proxyEl.value.trim():'');
   if(!API_KEY||!SECRET_KEY)return showErr('Ingresa tu API Key y Secret Key.');
-  if(!PROXY_URL)return showErr('Ingresa la URL de tu Cloudflare Worker.');
+  if(!PROXY_URL&&!(window.Capacitor&&window.Capacitor.isNativePlatform()))return showErr('Falta la URL de tu Cloudflare Worker (proxy). Mira worker/bingx-proxy.js: se crea gratis una sola vez.');
   const btn=document.getElementById('btn-connect');
   btn.disabled=true;btn.textContent='Conectando…';
   document.getElementById('err-msg').style.display='none';
@@ -2231,15 +2233,16 @@ function loadSavedTheme(){
 window.addEventListener('load',async()=>{
   loadSavedTheme();
   try{
+    if(DEFAULT_PROXY||(window.Capacitor&&window.Capacitor.isNativePlatform())){const f=document.getElementById('fld-proxy');if(f)f.style.display='none';} // con proxy fijo o en la APK no se pide
     const k=await dbGet('bx_k'),s=await dbGet('bx_s'),px=await dbGet('bx_proxy');
     if(k&&s){
-      API_KEY=k;SECRET_KEY=s;PROXY_URL=px||'';
+      API_KEY=k;SECRET_KEY=s;PROXY_URL=DEFAULT_PROXY||px||'';
       document.getElementById('inp-key').value=k;
       document.getElementById('inp-sec').value=s;
       const pel=document.getElementById('inp-proxy');if(pel&&px)pel.value=px;
       const ss=await dbGet('session_start');window._sessionStart=ss||Date.now();
       if(!ss)await dbSet('session_start',window._sessionStart);
-      if(PROXY_URL){loadDashboard().catch(()=>disconnect());}
+      if(PROXY_URL||(window.Capacitor&&window.Capacitor.isNativePlatform())){loadDashboard().catch(()=>disconnect());}
       else{document.getElementById('login-screen').style.display='flex';}
     }
   }catch(e){console.warn('autologin',e);}
