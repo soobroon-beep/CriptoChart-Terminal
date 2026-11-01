@@ -1878,6 +1878,7 @@ function renderCore() {
   if (priceMan) { min = priceMan.min; max = priceMan.max; }
   { const lb = document.querySelector('.chart-label'); if (lb) lb.style.top = (topH + 8) + 'px'; } // la leyenda del precio baja si hay paneles arriba
   geo = {w, h, left, right, gutter, vpOn, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
+  { const bf = document.querySelector('.brand-fab'); if (bf && volH > 0) { bf.style.bottom = 'auto'; bf.style.top = Math.max(plotTop, plotTop + plotH + volH - 40) + 'px'; } else if (bf) { bf.style.bottom = 'auto'; bf.style.top = (plotTop + plotH - 42) + 'px'; } } // logo abajo a la izquierda, a la altura del panel de volumen
 
   // VPVR: perfil de volumen de las velas que se ven ahora mismo (índices cuyo centro cae dentro del área de precios); se recalcula en cada dibujo, así sigue al desplazar y al hacer zoom
   const vpvr = stdOn('vpvr') && window.CCTIndicators ? CCTIndicators.visibleRangeProfile(candles, Math.ceil(start - .5), Math.floor(end - .5 + (vpOn ? 0 : gutter) / step), {rows: sp('vpvr', 'rows'), valueArea: sp('vpvr', 'va')}) : null;
