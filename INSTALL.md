@@ -16,7 +16,7 @@ Antes de quitar una instalación, exporta la configuración en Ajustes → Datos
 ## Funcionamiento y mantenimiento
 
 - Publicación estática en GitHub Pages; no necesita compilación ni dependencias nuevas.
-- `pwa-icons.js` selecciona un manifiesto estático antes de la instalación. Las once variantes tienen el mismo `id` y `scope` para identificar una sola app.
+- `pwa-icons.js` selecciona un manifiesto estático antes de la instalación. Las 21 variantes tienen el mismo `id` y `scope` para identificar una sola app.
 - Cada variante incluye PNG de 180 (Apple), 192 y 512 píxeles, y una versión maskable de 512 con margen de seguridad.
 - `pwa.js` integra los ajustes, la ayuda de instalación, el aviso sin conexión y el botón de actualización.
 - `sw.js` usa red primero y conserva únicamente archivos locales de interfaz. No guarda respuestas de Binance, noticias/calendario JSON, Firebase, IA, cuentas ni operaciones. Sin internet no hay precios en vivo, noticias nuevas ni sincronización.

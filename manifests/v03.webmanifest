@@ -1,0 +1,32 @@
+{
+  "id": "../",
+  "name": "VORTEX · Powered by Nova Nexus",
+  "short_name": "VORTEX",
+  "lang": "es",
+  "description": "Gráficos, seguimiento e indicadores de criptomonedas.",
+  "start_url": "../?appIcon=v03",
+  "scope": "../",
+  "display": "standalone",
+  "background_color": "#090e19",
+  "theme_color": "#090e19",
+  "icons": [
+    {
+      "src": "../icons/v03-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/v03-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/v03-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

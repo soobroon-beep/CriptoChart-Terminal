@@ -12,13 +12,13 @@ function load(query='',saved=null,installed=false,blocked=false){
 (async()=>{
  const d=load(), w=d.window, q=s=>w.document.querySelector(s);
  assert.equal(q('#appManifest').href,'https://example.com/CriptoChart-Terminal/manifests/principal.webmanifest');
- assert.equal(w.document.querySelectorAll('.pwa-icon-option').length,11);
+ assert.equal(w.document.querySelectorAll('.pwa-icon-option').length,21);
  let prompted=false; const event=new w.Event('beforeinstallprompt',{cancelable:true});event.prompt=async()=>{prompted=true};event.userChoice=Promise.resolve({outcome:'accepted'});w.dispatchEvent(event);
  assert.ok(event.defaultPrevented);assert.equal(q('#installApp').textContent,'Instalar aplicación');q('#installApp').click();await new Promise(r=>setImmediate(r));assert.ok(prompted);
- q('[data-icon="fucsia"]').click();assert.equal(w.localStorage.getItem('cct_app_icon_v1'),'fucsia');assert.ok(q('#appManifest').href.endsWith('/fucsia.webmanifest'));assert.ok(q('#appTouchIcon').href.endsWith('/fucsia-180.png'));assert.equal(q('[data-icon="fucsia"]').getAttribute('aria-pressed'),'true');assert.equal(q('#installApp').textContent,'Preparar instalación');
- const next=load('?appIcon=fucsia&install=1');assert.equal(next.window.CCTAppIcons.selected,'fucsia');assert.equal(new URL(next.window.location).searchParams.has('install'),false);next.window.document.querySelector('#installApp').click();assert.equal(next.window.document.querySelector('#installHelp').open,true);
+ q('[data-icon="v05"]').click();assert.equal(w.localStorage.getItem('cct_app_icon_v1'),'v05');assert.ok(q('#appManifest').href.endsWith('/v05.webmanifest'));assert.ok(q('#appTouchIcon').href.endsWith('/v05-180.png'));assert.equal(q('[data-icon="v05"]').getAttribute('aria-pressed'),'true');assert.equal(q('#installApp').textContent,'Preparar instalación');
+ const next=load('?appIcon=v05&install=1');assert.equal(next.window.CCTAppIcons.selected,'v05');assert.equal(new URL(next.window.location).searchParams.has('install'),false);next.window.document.querySelector('#installApp').click();assert.equal(next.window.document.querySelector('#installHelp').open,true);
  Object.defineProperty(w.navigator,'onLine',{value:false,configurable:true});w.dispatchEvent(new w.Event('offline'));assert.equal(q('#pwaOffline').hidden,false);
  Object.defineProperty(w.navigator,'onLine',{value:true,configurable:true});w.dispatchEvent(new w.Event('online'));assert.equal(q('#pwaOffline').hidden,true);
- for(const [query,saved,installed,blocked,expected] of [['?appIcon=../../bad',null,false,false,'principal'],['','arena',false,false,'arena'],['?appIcon=principal','menta',true,false,'menta'],['?appIcon=bosque',null,false,true,'bosque']]){const tmp=load(query,saved,installed,blocked);assert.equal(tmp.window.CCTAppIcons.selected,expected);tmp.window.close();}
- d.window.close();next.window.close();console.log('PASS: 11 choices, persistence, manifest/Apple icon, install prompt flow, help, offline banner, invalid input, standalone preference and disabled storage.');
+ for(const [query,saved,installed,blocked,expected] of [['?appIcon=../../bad',null,false,false,'principal'],['','v10',false,false,'v10'],['?appIcon=principal','v09',true,false,'v09'],['?appIcon=bosque',null,false,true,'v07']]){const tmp=load(query,saved,installed,blocked);assert.equal(tmp.window.CCTAppIcons.selected,expected);tmp.window.close();}
+ d.window.close();next.window.close();console.log('PASS: 21 choices, persistence, manifest/Apple icon, install prompt flow, help, offline banner, invalid input, standalone preference and disabled storage.');
 })().catch(e=>{console.error(e);process.exit(1)});
