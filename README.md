@@ -171,3 +171,6 @@ EMA única con periodo editable (⚙), y nuevos: ADX/DMI, CCI, Williams %R, MFI,
 
 ## Dibujo: favoritos y más herramientas
 Cada herramienta tiene una estrella (menú de la barra izquierda y hoja del celular): las marcadas salen en «Favoritos», arriba de todo (el pincel viene de inicio). Nuevas: canal de regresión, líneas cíclicas, línea sinusoidal, abanico y caja de Gann, círculo, rombo, paralelogramo, llamada, bandera, ✓, ✕, estrella y flechas izquierda/derecha.
+
+## Logo y miniaturas
+El logo VORTEX (más grande) queda dentro del gráfico, abajo a la izquierda. Cada indicador de «Comunes» muestra una miniatura básica que lo representa.

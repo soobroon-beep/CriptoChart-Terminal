@@ -811,6 +811,37 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ───────── Indicadores ───────── */
+/* Miniaturas muy básicas de cada indicador común (viewBox 40×24; la línea toma el color del indicador) */
+const W = 'M2 18C8 17 11 11 17 12S27 7 38 4', Wb = 'M2 20C8 19 11 14 17 15S27 10 38 7';
+const IND_ART = {
+  ema20: `<path d="${W}"/>`, ema50: `<path d="${W}"/>`, sma200: `<path d="M2 16C12 15 22 12 38 8"/>`, wma20: `<path d="${W}"/>`,
+  bollinger: '<path d="M2 8C12 4 24 9 38 5M2 20C12 16 24 21 38 17" opacity=".7"/><path d="M2 14C12 10 24 15 38 11"/>',
+  rsi: '<path d="M2 17l6-6 5 4 6-9 6 8 5-4 8 3"/><path d="M2 6h36M2 19h36" opacity=".25" stroke-dasharray="2 2"/>',
+  vwap: '<path d="M2 18C10 16 16 12 38 9" stroke-dasharray="0"/><path d="M4 21l8-6 6 2 8-8 8 2" opacity=".35"/>',
+  supertrend: '<path d="M2 18h12l3-3h8l3-8h10" />',
+  cross: '<path d="M2 18 38 6M2 8l36 10"/><circle cx="20" cy="12" r="2.4" fill="currentColor"/>',
+  ichimoku: '<path d="M2 14C12 12 22 12 38 10"/><path d="M12 6l26 4v8l-26-4z" fill="currentColor" fill-opacity=".22" stroke="none"/><path d="M12 6l26 4M12 14l26 4" opacity=".6"/>',
+  psar: '<circle cx="6" cy="19" r="1.6"/><circle cx="13" cy="16" r="1.6"/><circle cx="20" cy="12" r="1.6"/><circle cx="27" cy="5" r="1.6"/><circle cx="34" cy="3" r="1.6"/>',
+  donchian: '<path d="M2 6h10v4h12V5h14M2 18h8v-3h14v4h14" opacity=".8"/><path d="M2 12h36" opacity=".4"/>',
+  keltner: '<path d="M2 8C12 5 24 9 38 5M2 20C12 17 24 21 38 17" opacity=".7"/><path d="M2 14C12 11 24 15 38 11"/>',
+  adx: '<path d="M2 18C10 16 16 8 24 7s10 4 14 3"/><path d="M2 10l10 5 10-4 16 6" opacity=".55"/>',
+  cci: '<path d="M2 12 8 4l6 14 6-12 6 12 6-10 6 6"/><path d="M2 12h36" opacity=".25" stroke-dasharray="2 2"/>',
+  willr: '<path d="M2 5l6 12 6-9 6 11 6-14 6 12 6-8"/>',
+  mfi: '<path d="M2 18l7-10 6 7 7-11 6 12 10-6"/>',
+  roc: '<path d="M2 12c4-8 8-8 12 0s8 8 12 0 8-8 12 0"/><path d="M2 12h36" opacity=".25"/>',
+  stochrsi: '<path d="M2 18l8-12 8 10 8-11 12 10"/><path d="M2 16l9-8 8 8 8-8 11 8" opacity=".55"/>',
+  ao: '<path d="M4 12v5M9 12v7M14 12v4M19 12v-3M24 12v-6M29 12v-8M34 12v-5" stroke-width="3.2"/>',
+  cmf: '<path d="M4 12v-4M9 12v-6M14 12v-3M19 12v4M24 12v6M29 12v3M34 12v-3" stroke-width="3.2"/>',
+  macd: '<path d="M2 16C10 16 16 8 24 9s10 6 14 4"/><path d="M2 14C10 15 16 11 24 12s10 4 14 3" opacity=".55"/><path d="M6 20v-2M12 20v-4M18 20v-1M24 20v1M30 20v2" opacity=".5"/>',
+  stoch: '<path d="M2 17l8-10 7 8 8-9 13 10"/><path d="M2 14l9-6 8 8 8-6 11 8" opacity=".55"/>',
+  atr: '<path d="M2 18l5-4 4 2 5-9 5 7 5-2 5-8 7 6"/>',
+  obv: '<path d="M2 18l7-3 5-6 6 4 6-8 6 3 6-3"/>',
+  volume: '<path d="M5 20v-6M11 20v-10M17 20v-5M23 20v-12M29 20v-7M35 20v-9" stroke-width="3.6"/>',
+  liqmap: '<path d="M2 5h36M2 11h36M2 17h36" stroke-width="4" opacity=".28"/><path d="M12 11h20" stroke-width="4" opacity=".75"/>',
+  vpvr: '<path d="M38 3h-16M38 7h-26M38 11h-30M38 15h-20M38 19h-10" stroke-width="2.6"/>',
+  patterns: '<path d="M3 20 11 6l6 9 7-12 6 10 7-5"/><circle cx="11" cy="6" r="1.6" fill="currentColor"/><circle cx="24" cy="3" r="1.6" fill="currentColor"/>'
+};
+const indArt = (k, col) => IND_ART[k] ? `<span class="ind-art" style="color:${col}"><svg viewBox="0 0 40 24" width="40" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IND_ART[k]}</svg></span>` : '';
 const indicatorMeta = [
   ['ema20','EMA','Media móvil exponencial: cambia el período en el engrane ⚙ (20 por defecto)','#f5c568'],
   ['ema50','EMA 50','Media móvil exponencial de 50 períodos','#6ca5f9'],
@@ -1001,8 +1032,8 @@ let indTab = 'std';
 const indTabs = () => `<div class="ind-tabs"><button data-indtab="std" class="${indTab === 'std' ? 'active' : ''}">Comunes</button><button data-indtab="mine" class="${indTab === 'mine' ? 'active' : ''}">Mis indicadores</button></div>`;
 const LEGACY_IND = ['ema50', 'sma200', 'wma20', 'cross']; // la lista muestra una sola EMA (con período editable); estos solo aparecen si ya los tenías encendidos
 const indicatorRows = () => { document.body.dataset.indtab = indTab; return indTabs() + (indTab === 'std'
-  ? indicatorMeta.filter(m => !m[0].startsWith('nn') && !(LEGACY_IND.includes(m[0]) && !state.indicators[m[0]])).map(([key, title, desc]) =>
-    `<div class="setting-row"><div><b>${title}</b><small>${desc}</small></div><div class="script-btns">${STD_SCHEMA[key] ? `<button class="small-button" data-std-set="${key}" aria-label="Ajustes de ${title}">⚙</button>` : ''}<button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div></div>`).join('')
+  ? indicatorMeta.filter(m => !m[0].startsWith('nn') && !(LEGACY_IND.includes(m[0]) && !state.indicators[m[0]])).map(([key, title, desc, col]) =>
+    `<div class="setting-row ind-row">${indArt(key, col)}<div><b>${title}</b><small>${desc}</small></div><div class="script-btns">${STD_SCHEMA[key] ? `<button class="small-button" data-std-set="${key}" aria-label="Ajustes de ${title}">⚙</button>` : ''}<button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div></div>`).join('')
   : catalogCards() + pineSection()); };
 document.addEventListener('change', e => { const s = e.target.closest('[data-pine-pane]'); if (!s) return; const p = state.pine.find(x => x.sid === s.dataset.pinePane); if (!p) return; if (s.value) p.pane = s.value; else delete p.pane; save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); scheduleRender(); });
 document.addEventListener('click', e => { const t = e.target.closest('[data-indtab]'); if (!t) return; indTab = t.dataset.indtab; renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); });

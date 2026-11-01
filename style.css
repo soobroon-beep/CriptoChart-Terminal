@@ -493,9 +493,9 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .brand-fab{display:none}
 @media(min-width:1024px){
   .topbar,.chart-mode .topbar,.expanded .topbar{display:none!important}
-  .brand-fab{display:flex;align-items:center;position:absolute;left:6px;bottom:2px;z-index:6;height:22px;opacity:.75;transition:opacity .15s}
-  .brand-fab:hover{opacity:1}.brand-fab img{width:20px;height:20px;border-radius:6px;display:block}
-  .brand-fab .bf-tip{position:absolute;left:26px;bottom:0;display:none;flex-direction:column;white-space:nowrap;background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:6px 10px;box-shadow:0 6px 18px #0008}
+  .brand-fab{display:flex;align-items:center;position:absolute;left:10px;bottom:36px;z-index:6;height:36px;opacity:.85;transition:opacity .15s}
+  .brand-fab:hover{opacity:1}.brand-fab img{width:34px;height:34px;border-radius:9px;display:block;box-shadow:0 2px 10px #0006}
+  .brand-fab .bf-tip{position:absolute;left:42px;bottom:0;display:none;flex-direction:column;white-space:nowrap;background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:6px 10px;box-shadow:0 6px 18px #0008}
   .brand-fab:hover .bf-tip{display:flex}.bf-tip b{font-size:12px;letter-spacing:1.5px;color:#edf3fc}.bf-tip small{font-size:10px;color:#8796ab}
   .right-rail{top:0}
 }
@@ -510,3 +510,6 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .star{display:inline-grid;place-items:center;margin-left:auto;padding:2px;color:var(--muted);opacity:.45;cursor:pointer;border-radius:6px}
 .rail-fly button:hover .star,.sheet-item .star{opacity:.8}.star.on{color:#f5c542;opacity:1}.star.on svg{fill:currentColor}.star:hover{color:#f5c542;opacity:1}
 .sheet-item .tool-line{width:100%}.rail-btn.fav.on{background:var(--raised);color:var(--accent)}
+
+.ind-row{display:flex;align-items:center;gap:12px}.ind-row>div:not(.script-btns){flex:1;min-width:0}.ind-row .script-btns{flex:none}
+.ind-art{flex:none;display:grid;place-items:center;width:48px;height:32px;border-radius:8px;background:rgba(127,140,160,.1)}
