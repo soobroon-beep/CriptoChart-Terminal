@@ -529,7 +529,7 @@ header::after{
 .fab-scrim{position:absolute;inset:0;background:rgba(0,0,0,.5);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .25s}
 #bnav.open .fab-scrim{opacity:1;pointer-events:auto}
 .fab{
-  position:absolute;right:16px;bottom:calc(16px + var(--safe-bottom));width:56px;height:56px;border-radius:50%;border:0;padding:0;
+  position:absolute;right:16px;bottom:calc(34px + var(--safe-bottom));width:56px;height:56px;border-radius:50%;border:0;padding:0;
   display:grid;place-items:center;color:#fff;cursor:pointer;pointer-events:auto;
   background:linear-gradient(135deg,var(--acc),var(--acc2));
   box-shadow:0 10px 26px var(--acc-b),0 3px 10px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.28);
@@ -541,9 +541,9 @@ header::after{
 #bnav.open .fab{transform:rotate(90deg)}
 #bnav.open .fab .fi-grid{opacity:0;transform:scale(.6)}
 #bnav.open .fab .fi-x{opacity:1;transform:rotate(-90deg) scale(1)}
-.fab-cur{position:absolute;right:16px;bottom:calc(78px + var(--safe-bottom));font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--acc2);background:var(--s2);border:1px solid var(--b2);border-radius:20px;padding:4px 10px;pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.fab-cur{position:absolute;right:16px;bottom:calc(96px + var(--safe-bottom));font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--acc2);background:var(--s2);border:1px solid var(--b2);border-radius:20px;padding:4px 10px;pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s;box-shadow:0 4px 14px rgba(0,0,0,.3)}
 #bnav.open .fab-cur{display:none}
-.fab-menu{position:absolute;right:16px;bottom:calc(84px + var(--safe-bottom));display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.fab-menu{position:absolute;right:16px;bottom:calc(102px + var(--safe-bottom));display:flex;flex-direction:column;align-items:flex-end;gap:8px}
 .ni{
   display:flex;align-items:center;justify-content:flex-end;gap:12px;height:46px;padding:0 8px 0 18px;border-radius:23px;cursor:pointer;
   background:var(--s2);border:1px solid var(--b2);color:var(--txt);font-family:var(--mono);font-size:.8rem;font-weight:600;letter-spacing:.01em;
