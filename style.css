@@ -462,8 +462,8 @@ body.pane #chartView{display:flex!important;height:100dvh}
 }
 .right-rail .rr-btn.on{color:#ffd83a;background:rgba(255,216,58,.12)}
 
-#lensView{position:relative;padding:0!important;overflow:hidden;background:#07060f}
-#lensView iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#07060f}
+#lensView{position:relative;padding:0!important;overflow:hidden;background:var(--bg)}
+#lensView iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
 
 .bottom-nav .nl-mark{font:800 13px/1 system-ui,sans-serif;letter-spacing:-.5px}
 @media(max-width:1023px){#lensView.active{position:relative;min-height:calc(100dvh - 120px);padding:0}#lensView.active iframe{position:absolute;inset:0;width:100%;height:100%}}
