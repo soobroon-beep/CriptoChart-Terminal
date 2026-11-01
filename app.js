@@ -3339,7 +3339,14 @@ $('#scriptFile').onchange = async e => {
 /* ───────── Aplicar estado completo (importar / nube) ───────── */
 function applyState(data, soft = false) {
   const sameChart = soft && data.symbol === state.symbol && data.interval === state.interval;
-  const prevSource = state.source; state = merge(data); applyUi(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource(); clearTransient(); if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader();
+  // Cambio remoto (nube) sobre el mismo gráfico: no se toca nada mientras el dedo está sobre el gráfico y, si no cambió nada, no se hace nada.
+  // Antes cada aviso de la nube borraba la escala de precio manual (y el trazo en curso) y el gráfico «saltaba» de vuelta a la escala automática.
+  if (sameChart && (gest || pinch)) { clearTimeout(applyState.t); applyState.t = setTimeout(() => applyState(data, soft), 350); return; }
+  const next = merge(data);
+  if (sameChart && JSON.stringify(next) === JSON.stringify(state)) return;
+  const prevSource = state.source; state = next; applyUi(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource();
+  if (sameChart) { drawHist.u.length = drawHist.r.length = 0; updateDrawUI(); } else clearTransient(); // mismo gráfico: se conserva la escala manual, la retícula y lo que se esté dibujando
+  if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader();
   if (!sameChart || prevSource !== state.source) { closeWS(); candles = []; ind = {}; loadCandles(); }
 }
 
