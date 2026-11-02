@@ -26,7 +26,7 @@
   const grid = root.querySelector('.pwa-icons'), button = root.querySelector('#installApp'), status = root.querySelector('#installStatus');
   for (const [id, name] of icons.variants) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'pwa-icon-option'; b.dataset.icon = id;
-    b.setAttribute('aria-label', name); b.innerHTML = `<img src="icons/${id}-192.png" width="56" height="56" alt=""><span>${name}</span>`;
+    b.setAttribute('aria-label', name); b.title = name; b.innerHTML = `<img src="icons/${id}-192.png" width="56" height="56" alt=""><span>${name}</span>`;
     b.addEventListener('click', () => {
       if (id === icons.selected) return;
       promptEvent = null; icons.apply(id);
