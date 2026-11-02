@@ -2,7 +2,10 @@
    Es solo interfaz: recibe los datos (inputs, plots…) y devuelve los valores elegidos con onApply. */
 (function (root) {
   'use strict';
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  const GROUP_ICONS = [[/COLORES|OPACIDAD/i, 'palette'], [/FONDO|CUADR/i, 'image'], [/VELAS/i, 'c_candles'], [/CURSOR/i, 'cursor'], [/EMA CLOUD/i, 'cloud'], [/SMOOTH TRAIL|TRAIL/i, 'trail'], [/PIVOT/i, 'pin'], [/Support|Resistance|SOPORTE/i, 'layers'], [/IA Signals|SE.ALES|SIGNAL/i, 'bolt'], [/ESTRATEG/i, 'phone'], [/REGLAS|RULES/i, 'clipboard'], [/M[ÓO]DULOS/i, 'puzzle'], [/RESTABLECER/i, 'reset'], [/KEY|CLAVE/i, 'key'], [/ALERT/i, 'bell']];
+  const groupIc = n => { const g = GROUP_ICONS.find(x => x[0].test(n)); return g && window.CCTI ? CCTI.svg(g[1], 14) + ' ' : ''; };
+  const noEmo = s => window.CCTI ? CCTI.strip(s) : s; // sin emojis (también los que traen los scripts de Pine)
+  const esc = s => noEmo(String(s == null ? '' : s)).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const UNITS = [['m', 'Minutos', 1, 59], ['h', 'Horas', 1, 24], ['d', 'Días', 1, 366], ['w', 'Semanas', 1, 52], ['M', 'Meses', 1, 12]];
   const SRC_LABEL = {open: 'Apertura (open)', high: 'Máximo (high)', low: 'Mínimo (low)', close: 'Cierre (close)', hl2: 'hl2', hlc3: 'hlc3', ohlc4: 'ohlc4', hlcc4: 'hlcc4', volume: 'Volumen'};
   const hexOf = v => { const m = /^#?([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$/.exec(String(v || '')); return m ? {hex: '#' + m[1].toLowerCase(), op: m[2] ? Math.round(parseInt(m[2], 16) / 255 * 100) : 100} : {hex: '#2962ff', op: 100}; };
@@ -38,7 +41,7 @@
 
   function inputsTab(cfg, vals) {
     if (!cfg.inputs.length) return '<p class="cfg-empty">Este script no tiene parámetros configurables.</p>';
-    return groupItems(cfg.inputs).map(g => `<section class="cfg-sec">${g.name ? `<h4>${esc(g.name)}</h4>` : ''}${g.rows.map(r => `<div class="cfg-row ${r.length > 1 ? 'inline' : ''}">${r.map(i => cell(i, vals[i.key])).join('')}</div>`).join('')}</section>`).join('');
+    return groupItems(cfg.inputs).map(g => `<section class="cfg-sec">${g.name ? `<h4>${groupIc(g.name)}${esc(g.name)}</h4>` : ''}${g.rows.map(r => `<div class="cfg-row ${r.length > 1 ? 'inline' : ''}">${r.map(i => cell(i, vals[i.key])).join('')}</div>`).join('')}</section>`).join('');
   }
 
   const TYPES = [['line', 'Línea'], ['stepline', 'Escalón'], ['linebr', 'Línea con saltos'], ['histogram', 'Histograma'], ['columns', 'Columnas'], ['area', 'Área'], ['circles', 'Círculos'], ['cross', 'Cruces']];

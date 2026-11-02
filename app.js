@@ -3,12 +3,14 @@
 /* VORTEX · Powered by Nova Nexus — JS vanilla, sin dependencias.
    Pestañas: Seguimiento · Gráfico · Indicadores · Ajustes. Datos reales de Binance Spot (REST + WebSocket). */
 
+const I = (n, z) => CCTI.svg(n, z); // iconos SVG (icons.js)
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const API = 'https://api.binance.com/api/v3';
 const IV_MS = {'1m':6e4,'5m':3e5,'15m':9e5,'30m':18e5,'1h':36e5,'4h':144e5,'1d':864e5,'1w':6048e5,'1M':2592e6};
 const INTERVALS = Object.keys(IV_MS);
-const PANE = /[?&]pane=/.test(location.search); // segundo gráfico: la misma app dentro de un iframe, con su propio estado y sin sincronizar
-const STORE = PANE ? 'cct_pane2_v1' : 'cct_mobile_v1';
+const PANE = /[?&]pane=/.test(location.search); // gráficos extra (2.º a 5.º): la misma app dentro de un iframe, con su propio estado y sin sincronizar
+const PANE_N = Math.min(5, Math.max(2, +((/[?&]pane=(\d)/.exec(location.search) || [])[1]) || 2));
+const STORE = PANE ? 'cct_pane' + PANE_N + '_v1' : 'cct_mobile_v1';
 const FIB = [0, .236, .382, .5, .618, .786, 1];
 const FIBEXT = [0, .618, 1, 1.272, 1.618, 2.618];
 const ONEPT = ['horizontal', 'vertical', 'text', 'marker', 'hray', 'crossline', 'note', 'label', 'arrowup', 'arrowdown', 'flag', 'check', 'xmark', 'star', 'arrowleft', 'arrowright'], THREEPT = ['channel', 'fibext', 'pitchfork', 'triangle', 'parallelogram'];
@@ -23,7 +25,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  groups: [], symGroup: {}, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: []
+  groups: [], symGroup: {}, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -35,12 +37,20 @@ function sanAlert(a) {
   if (!Number.isFinite(a.price) || !(a.price > 0) || (a.dir !== 'up' && a.dir !== 'down')) return null;
   return Object.assign(base0, {price: a.price, dir: a.dir, firedPrice: Number.isFinite(a.firedPrice) ? a.firedPrice : null});
 }
-const CTYPES = [['candles', 'Velas', '🕯'], ['hollow', 'Velas huecas', '▯'], ['ha', 'Heikin Ashi', '◩'], ['bars', 'Barras OHLC', '╫'], ['hlc', 'Barras HLC', '┿'], ['line', 'Línea', '╱'], ['area', 'Área', '◢'], ['step', 'Línea escalonada', '⌐']];
+function sanAcct(a) { // saldo de la cuenta para la barra de progreso (USD)
+  const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {}, n = v => Number.isFinite(+v) && +v >= 0 && +v < 1e12 ? Math.round(+v * 100) / 100 : 0;
+  return {start: n(q.start), cur: n(q.cur), auto: q.auto !== false};
+}
+function sanMoveAlerts(a) { // avisos de movimientos bruscos del precio
+  const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {};
+  return {on: q.on !== false, pct: Math.max(0.5, Math.min(25, Math.round((+q.pct || 2) * 10) / 10)), sound: q.sound !== false};
+}
+const CTYPES = [['candles', 'Velas', 'c_candles'], ['hollow', 'Velas huecas', 'c_hollow'], ['ha', 'Heikin Ashi', 'c_ha'], ['bars', 'Barras OHLC', 'c_bars'], ['hlc', 'Barras HLC', 'c_hlc'], ['line', 'Línea', 'c_line'], ['area', 'Área', 'c_area'], ['step', 'Línea escalonada', 'c_step']];
 const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', okx: 'OKX Spot', coinbase: 'Coinbase', bingx: 'BingX'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
 const CHART_DEF = {bg: '#0d1019', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1};
 function sanChartStyle(c) {
   const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
-  for (const k of ['bg', 'grid', 'up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick', 'cross']) if (typeof c[k] === 'string' && /^#[0-9a-fA-F]{6}$/.test(c[k])) o[k] = c[k];
+  for (const k of ['bg', 'grid', 'up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick', 'cross']) if (typeof c[k] === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(c[k])) o[k] = c[k];
   for (const k of ['gridH', 'gridV', 'hollow']) if (typeof c[k] === 'boolean') o[k] = c[k];
   if (Number.isFinite(+c.crossA) && c.crossA !== '') o.crossA = Math.max(5, Math.min(100, Math.round(+c.crossA)));
   if (Number.isFinite(+c.crossW) && c.crossW !== '') o.crossW = Math.max(1, Math.min(4, Math.round(+c.crossW)));
@@ -127,7 +137,7 @@ function merge(s) {
     o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 12).map(t => ({n: t.n.slice(0, 24), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})})) : [];
   }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
-  o.ui = sanUi(o.ui);
+  o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.moveAlerts = sanMoveAlerts(o.moveAlerts);
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
   { // Nova Nexus: queda un solo indicador, el completo (Pine, en Mis indicadores). El módulo nativo antiguo se apaga y, si estaba encendido, se pasa al completo para no perderlo
@@ -145,7 +155,7 @@ function merge(s) {
     o.groups = gs; const sg = {}; if (o.symGroup && typeof o.symGroup === 'object' && !Array.isArray(o.symGroup)) for (const [k, v] of Object.entries(o.symGroup)) if (o.symbols.includes(k) && gs.some(y => y.id === v)) sg[k] = v;
     o.symGroup = sg;
   }
-  o.layout = ['1', '2v', '2h'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
+  o.layout = ['1', '2v', '2h', '3', '4', '5'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.stdHide = o.stdHide && typeof o.stdHide === 'object' && !Array.isArray(o.stdHide) ? Object.fromEntries(Object.keys(o.stdHide).filter(k => o.stdHide[k] === true && Object.prototype.hasOwnProperty.call(o.indicators, k) && !k.startsWith('nn') && o.indicators[k]).map(k => [k, true])) : {}; // «oculto» (ojito) ≠ «apagado»: sigue activo en Indicadores, solo no se dibuja
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
@@ -160,13 +170,13 @@ const lsGet = k => { try { return localStorage.getItem(k); } catch { return null
 let uid = cloudEnabled ? lsGet(LASTUID) : null, fbUser = null, auth = null, db = null, unsubCloud = null, unsubScripts = null, pushTimer = 0, lastRemote = '', syncStatus = '';
 const storeKey = () => uid ? `${STORE}_${uid}` : STORE;
 const readLocal = key => { try { return JSON.parse(lsGet(key) || '{}'); } catch { return {}; } };
-let state = merge(readLocal(storeKey()));
-if (PANE) { document.body.classList.add('pane'); const q = new URLSearchParams(location.search); if (!lsGet(STORE)) { state.symbol = /^[A-Z0-9]{5,15}$/.test(q.get('sym') || '') ? q.get('sym') : 'ETHUSDT'; } state.light = q.get('light') === '1'; }
+let state = merge(readLocal(storeKey())), stateUid = uid; // stateUid: de qué cuenta viene el estado en memoria
+if (PANE) { document.body.classList.add('pane'); const q = new URLSearchParams(location.search); if (!lsGet(STORE)) { state.symbol = /^[A-Z0-9]{5,15}$/.test(q.get('sym') || '') ? q.get('sym') : ['ETHUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'][PANE_N - 1]; } state.light = q.get('light') === '1'; }
 const dirtyKey = () => uid ? `${STORE}_dirty_${uid}` : null;
 const save = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
 
 /* ───────── Utilidades ───────── */
-const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','⚛'],UNI:['Uniswap','🦄'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
+const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','A'],UNI:['Uniswap','U'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
 const QUOTES = ['USDT', 'USDC', 'FDUSD', 'USD', 'BTC', 'ETH', 'BNB', 'EUR', 'TRY', 'BRL']; // monedas de cotización admitidas (ETHBTC = ETH/BTC)
 const splitSym = s0 => { const s = window.CCTMarkets ? CCTMarkets.norm(CCTMarkets.symOf(s0)) : s0; for (const q of QUOTES) if (s.length > q.length + 1 && s.endsWith(q)) return [s.slice(0, -q.length), q]; return [s, 'USDT']; };
 const srcOf = k => window.CCTMarkets ? CCTMarkets.srcOf(k) : 'binance', symOf = k => window.CCTMarkets ? CCTMarkets.symOf(k) : k, exName = k => (window.CCTMarkets ? CCTMarkets.EXCH[srcOf(k)] : 'Binance') || 'Binance';
@@ -387,7 +397,8 @@ let popTab = 'hoy', popAll = [], popTrend = [], popTrendTs = 0, popKl = {}, popK
 const popVol = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(0) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(0) + 'K' : String(Math.round(n));
 
 async function loadPopTickers() {
-  const data = await getJSON(`${API}/ticker/24hr`);
+  let data; // si api.binance.com falla o limita, se prueba el espejo público de datos de mercado
+  try { data = await getJSON(`${API}/ticker/24hr`); } catch (e1) { data = await getJSON('https://data-api.binance.vision/api/v3/ticker/24hr'); }
   popAll = data.filter(t => /^[A-Z0-9]{2,12}USDT$/.test(t.symbol) && !POP_STABLE.has(base(t.symbol)) && +t.quoteVolume > 2e6 && +t.lastPrice > 0)
     .sort((a, b) => +b.quoteVolume - +a.quoteVolume);
   for (const t of popAll) tickers[t.symbol] = t; // así el gráfico también muestra su cabecera
@@ -417,7 +428,7 @@ function popRowsFor(tab) {
     return {s, ch: (now / c[c.length - 1 - back] - 1) * 100, sub: tab === 'sem' ? '7 días' : '30 días'};
   }).filter(Boolean).sort((a, b) => b.ch - a.ch);
 }
-function renderPop() {
+function renderPopular() {
   const box = $('#popRows'); if (!box) return;
   $$('#popTabs [data-pop]').forEach(b => b.classList.toggle('active', b.dataset.pop === popTab));
   $('#popNote').textContent = popErr || (POP_NOTES[popTab] + ' No es una recomendación de inversión.');
@@ -425,23 +436,24 @@ function renderPop() {
   box.innerHTML = shown.map(r => {
     const tracked = state.symbols.includes(r.s), p = +tickers[r.s]?.lastPrice;
     return `<div class="watch-row pop-row" data-symbol="${r.s}" role="button" tabindex="0">${coinBadge(r.s)}<span class="row-main"><strong>${esc(base(r.s))}</strong><small>${esc(r.sub)}</small></span><span class="row-prices"><strong>${fmt(p)}</strong><small class="${r.ch >= 0 ? 'positive' : 'negative'}">${pct(r.ch)}</small></span>${tracked ? '<span class="pop-add done" title="Ya está en tu seguimiento">✓</span>' : `<button class="pop-add" data-padd="${r.s}" aria-label="Añadir ${esc(base(r.s))} a mi seguimiento" title="Añadir a mi seguimiento">＋</button>`}</div>`;
-  }).join('') || `<p class="small-note">${popBusy ? 'Cargando populares…' : 'No hay datos por ahora.'}</p>`;
+  }).join('') || `<p class="small-note">${popBusy ? 'Cargando populares…' : 'No hay datos por ahora.'}</p>${!popBusy ? '<button class="small-button pop-retry" type="button">Reintentar</button>' : ''}`;
   $('#popMore').hidden = rows.length <= 10; $('#popMore').textContent = popMore ? 'Ver menos' : 'Ver más';
 }
 async function refreshPop() {
-  if (popBusy) return; popBusy = true; popErr = ''; renderPop();
+  if (popBusy) return; popBusy = true; popErr = ''; renderPopular();
   try {
     await loadPopTickers();
     if (popTab === 'sem' || popTab === 'mes') await loadPopKl();
     if (popTab === 'tend') await loadPopTrend();
   } catch (e) { popErr = popTab === 'tend' ? 'No pude cargar las tendencias ahora. Prueba otra pestaña o reintenta en un momento.' : 'No pude cargar las populares. Revisa tu conexión.'; }
-  popBusy = false; renderPop();
+  popBusy = false; renderPopular();
 }
 $('#popTabs').addEventListener('click', e => { const b = e.target.closest('[data-pop]'); if (!b) return; popTab = b.dataset.pop; popMore = false; refreshPop(); });
-$('#popMore').onclick = () => { popMore = !popMore; renderPop(); };
+$('#popMore').onclick = () => { popMore = !popMore; renderPopular(); };
 $('#popRows').addEventListener('click', e => {
   const add = e.target.closest('[data-padd]'), row = e.target.closest('.pop-row');
-  if (add) { const s = add.dataset.padd; if (!state.symbols.includes(s)) { state.symbols.push(s); save(); renderWatch(); renderPop(); fetchTicker(); toast(`${base(s)} añadido a tu seguimiento`); } return; }
+  if (e.target.closest('.pop-retry')) { refreshPop(); return; }
+  if (add) { const s = add.dataset.padd; if (!state.symbols.includes(s)) { state.symbols.push(s); save(); renderWatch(); renderPopular(); fetchTicker(); toast(`${base(s)} añadido a tu seguimiento`); } return; }
   if (row) selectSymbol(row.dataset.symbol);
 });
 $('#popRows').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('pop-row')) { e.preventDefault(); selectSymbol(e.target.dataset.symbol); } });
@@ -453,7 +465,7 @@ function alertBeep() { try { const A = window.AudioContext || window.webkitAudio
 function fireAlert(a, price) {
   a.on = false; a.firedAt = Date.now(); a.firedPrice = price;
   const msg = `${base(a.symbol)} ${a.dir === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`;
-  toast('🔔 ' + msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
+  toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
   try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {}
 }
 function checkAlerts(sym, price) {
@@ -478,7 +490,7 @@ function renderAlerts() {
       return `<div class="setting-row alert-row ${a.on ? '' : 'dim'}"><div><b>${esc(a.label)}</b><small>${esc(base(a.symbol))} · ${a.interval} · ${a.repeat === 'every' ? 'cada vez' : 'una vez'}${missing ? ' · <span class="pine-err">el script ya no existe</span>' : ''}${a.firedAt ? ` · última: ${new Date(a.firedAt).toLocaleString()}${a.firedInfo ? ' (' + esc(a.firedInfo) + ')' : ''}` : ''}${a.note ? ' · ' + esc(a.note) : ''}</small></div><div class="alert-btns">${a.on ? '' : `<button class="small-button" data-al-re="${a.id}">Reactivar</button>`}<button class="small-button" data-al-del="${a.id}" aria-label="Eliminar">✕</button></div></div>`; }
     const p = curPrice(a.symbol), dist = Number.isFinite(p) ? ((a.price - p) / p * 100) : NaN;
     return `<div class="setting-row alert-row ${a.on ? '' : 'dim'}"><div><b>${esc(base(a.symbol))} ${a.dir === 'up' ? '≥' : '≤'} ${fmt(a.price)}</b><small>${a.on ? `Ahora ${fmt(p)}${Number.isFinite(dist) ? ` · a ${Math.abs(dist).toFixed(2)}%` : ''}` : `Se disparó ${new Date(a.firedAt).toLocaleString()} a ${fmt(a.firedPrice)}`}${a.note ? ' · ' + esc(a.note) : ''}</small></div><div class="alert-btns">${a.on ? '' : `<button class="small-button" data-al-re="${a.id}">Reactivar</button>`}<button class="small-button" data-al-del="${a.id}" aria-label="Eliminar">✕</button></div></div>`; };
-  el.innerHTML = (act.length ? `<div class="section-label">ACTIVAS (${act.length})</div>` + act.map(row).join('') : '<div class="soon"><div class="soon-ic">◔</div><b>Sin alertas activas</b><small>Crea una abajo y te avisaremos cuando el precio llegue.</small></div>') + (done.length ? `<div class="section-label">DISPARADAS</div>` + done.map(row).join('') : '');
+  el.innerHTML = (act.length ? `<div class="section-label">ACTIVAS (${act.length})</div>` + act.map(row).join('') : `<div class="soon"><div class="soon-ic">${I('bell', 28)}</div><b>Sin alertas activas</b><small>Crea una abajo y te avisaremos cuando el precio llegue.</small></div>`) + (done.length ? `<div class="section-label">DISPARADAS</div>` + done.map(row).join('') : '');
   const sel = $('#alSym'); if (sel && !sel.dataset.ready) { sel.dataset.ready = 1; sel.innerHTML = state.symbols.map(s => `<option value="${s}">${esc(pairLbl(s))}</option>`).join(''); }
   if (sel) { const s = state.symbols; if ([...sel.options].map(o => o.value).join() !== s.join()) { const v = sel.value; sel.innerHTML = s.map(x => `<option value="${x}">${esc(pairLbl(x))}</option>`).join(''); if (s.includes(v)) sel.value = v; } }
 }
@@ -500,6 +512,60 @@ $('#alertsView').addEventListener('click', e => {
   if (d) { state.alerts = state.alerts.filter(a => a.id !== d.dataset.alDel); save(); renderAlerts(); }
   if (r) { const a = state.alerts.find(x => x.id === r.dataset.alRe), p = curPrice(a?.symbol); if (a && a.kind === 'ind') { a.on = true; a.firedAt = 0; a.firedInfo = ''; lastClosedBar(a.symbol, a.interval).then(t => { if (t != null) a.lastBar = t; save(); renderAlerts(); }); } else if (a) { a.dir = Number.isFinite(p) ? (a.price > p ? 'up' : 'down') : a.dir; a.on = true; a.firedAt = 0; a.firedPrice = null; save(); renderAlerts(); checkAlertsPoll(); } }
 });
+
+/* ───────── Avisos de movimientos bruscos ─────────
+   Cada 15 s se lee el precio de tu seguimiento y se compara con los últimos 5 minutos y la última hora.
+   Si sube o cae más de ±X % en 5 min (o ±2.5·X % en 1 h) llega un aviso con sonido, vibración y notificación del sistema (si diste permiso). Máximo uno cada 15 min por moneda y sentido.
+   Solo avisa, no opera. Se calcula con precios reales de Binance Spot; sin datos no se inventa nada. */
+const MOVE_WIN = [[300000, '5 min', 1], [3600000, '1 h', 2.5]], MOVE_COOL = 900000, MOVE_LOG_KEY = 'cct_move_log_v1';
+const moveBuf = {}, moveLast = {}; let moveLog = (() => { try { const a = JSON.parse(lsGet(MOVE_LOG_KEY) || '[]'); return Array.isArray(a) ? a.slice(0, 30) : []; } catch { return []; } })();
+function moveCheck(sym, price, now) {
+  const b = moveBuf[sym] || (moveBuf[sym] = []); b.push([now, price]);
+  while (b.length && now - b[0][0] > 3720000) b.shift();
+  const M = state.moveAlerts || {}; if (!M.on) return;
+  for (const [W, lbl, mult] of MOVE_WIN) {
+    const start = b.find(x => x[0] >= now - W); if (!start || now - start[0] < W * 0.6) continue; // todavía no hay historia suficiente
+    const ch = (price / start[1] - 1) * 100, thr = M.pct * mult; if (!Number.isFinite(ch) || Math.abs(ch) < thr) continue;
+    const dir = ch > 0 ? 'up' : 'down', k = sym + '|' + dir; if (now - (moveLast[k] || 0) < MOVE_COOL) continue;
+    moveLast[k] = now; fireMove(sym, dir, ch, lbl, price); break;
+  }
+}
+function fireMove(sym, dir, ch, lbl, price) {
+  const msg = `${base(sym)} ${dir === 'up' ? 'sube' : 'cae'} ${Math.abs(ch).toFixed(1)}% en ${lbl} · ${fmt(price)}`;
+  moveLog.unshift({t: Date.now(), s: sym, d: dir, c: +ch.toFixed(2), w: lbl, p: price}); moveLog = moveLog.slice(0, 30); try { localStorage.setItem(MOVE_LOG_KEY, JSON.stringify(moveLog)); } catch {}
+  toast('Movimiento brusco: ' + msg); if ((state.moveAlerts || {}).sound !== false) { alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} }
+  try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Movimiento brusco', {body: msg}); } catch {}
+  renderMoveAlerts();
+}
+async function movePoll() {
+  if (PANE || !(state.moveAlerts || {}).on) return;
+  const syms = [...new Set([...state.symbols, state.symbol])].filter(k => srcOf(k) === 'binance' && /^[A-Z0-9]{5,20}$/.test(k)).slice(0, 60); if (!syms.length) return;
+  try {
+    const data = await getJSON(`${API}/ticker/price?symbols=${encodeURIComponent(JSON.stringify(syms))}`), now = Date.now();
+    for (const t of data) { const p = +t.price; if (Number.isFinite(p) && p > 0) moveCheck(t.symbol, p, now); }
+  } catch {}
+}
+const MOVE_LEVELS = [[1, 'Muy sensible · ±1 % en 5 min'], [2, 'Normal · ±2 % en 5 min'], [4, 'Solo grandes · ±4 % en 5 min'], [8, 'Solo extremos · ±8 % en 5 min']];
+function renderMoveAlerts() {
+  const box = $('#moveBox'); if (!box) return; const M = state.moveAlerts || {on: true, pct: 2, sound: true};
+  const near = MOVE_LEVELS.reduce((a, l) => Math.abs(l[0] - M.pct) < Math.abs(a[0] - M.pct) ? l : a);
+  const sv = p => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px">${p}</svg>`; // (SV aún no existe cuando esto corre por primera vez)
+  const ic = d => d === 'up' ? sv('<path d="M5 15l5-5 3 3 6-7"/><path d="M15 6h4v4"/>') : sv('<path d="M5 9l5 5 3-3 6 7"/><path d="M15 18h4v-4"/>');
+  box.innerHTML = `<div class="setting-row"><div><b>Avisar movimientos bruscos</b><small>Sube o cae fuerte en minutos: recibes aviso de tu seguimiento</small></div><button class="toggle ${M.on ? 'on' : ''}" id="moveOn" type="button" aria-label="Avisos de movimientos bruscos" aria-pressed="${!!M.on}"></button></div>`
+    + (M.on ? `<div class="setting-row"><div><b>Sensibilidad</b><small>También avisa si pasa ±${(M.pct * 2.5).toFixed(M.pct * 2.5 % 1 ? 1 : 0)} % en 1 hora</small></div><select id="moveLvl" class="pane-sel" aria-label="Sensibilidad">${MOVE_LEVELS.map(l => `<option value="${l[0]}" ${l[0] === near[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select></div>
+      <div class="setting-row"><div><b>Sonido y vibración</b><small>Además del mensaje en pantalla</small></div><button class="toggle ${M.sound !== false ? 'on' : ''}" id="moveSnd" type="button" aria-label="Sonido y vibración" aria-pressed="${M.sound !== false}"></button></div>` : '')
+    + (moveLog.length ? `<div class="section-label">ÚLTIMOS AVISOS</div>` + moveLog.slice(0, 8).map(x => `<div class="setting-row move-row ${x.d}"><div><b>${ic(x.d)} ${esc(base(x.s))} ${x.c > 0 ? '+' : ''}${x.c}% en ${esc(x.w)}</b><small>${new Date(x.t).toLocaleString()} · ${fmt(x.p)}</small></div></div>`).join('') : '');
+}
+{
+  const mb = $('#moveBox');
+  if (mb) mb.addEventListener('change', e => { if (e.target.id === 'moveLvl') { state.moveAlerts = sanMoveAlerts({...state.moveAlerts, pct: +e.target.value}); save(); renderMoveAlerts(); } });
+  if (mb) mb.addEventListener('click', e => {
+    const t = e.target.closest('#moveOn, #moveSnd'); if (!t) return; const M = {...(state.moveAlerts || {})};
+    if (t.id === 'moveOn') { M.on = !M.on; if (M.on) { try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {} } } else M.sound = M.sound === false;
+    state.moveAlerts = sanMoveAlerts(M); save(); renderMoveAlerts();
+  });
+  renderMoveAlerts();
+}
 
 /* ───────── Alertas con indicadores ─────────
    Se evalúan sobre la ÚLTIMA VELA CERRADA (sin repintado) del símbolo y temporalidad elegidos, aunque no estén en el gráfico.
@@ -556,7 +622,7 @@ function closedIdx(cs, lastClosedT) { for (let i = cs.length - 1; i >= 0; i--) i
 function fireInd(a, info) {
   a.firedAt = Date.now(); a.firedInfo = info; if (a.repeat === 'once') a.on = false;
   const msg = `${base(a.symbol)} ${a.interval} · ${a.label}${info ? ' · ' + info : ''}${a.note ? ' · ' + a.note : ''}`;
-  toast('🔔 ' + msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
+  toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
   try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {}
 }
 async function lastClosedBar(sym, itv) {
@@ -855,7 +921,7 @@ const IND_ART = {
 };
 const indArt = (k, col) => IND_ART[k] ? `<span class="ind-art" style="color:${col}"><svg viewBox="0 0 40 24" width="40" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IND_ART[k]}</svg></span>` : '';
 const indicatorMeta = [
-  ['ema20','EMA','Media móvil exponencial: cambia el período en el engrane ⚙ (20 por defecto)','#f5c568'],
+  ['ema20','EMA','Media móvil exponencial: cambia el período en el engrane (20 por defecto)','#f5c568'],
   ['ema50','EMA 50','Media móvil exponencial de 50 períodos','#6ca5f9'],
   ['sma200','SMA 200','Media móvil simple de 200 períodos','#b58dff'],
   ['bollinger','Bandas de Bollinger','20 períodos · 2 desviaciones','#a3b0c3'],
@@ -884,7 +950,7 @@ const indicatorMeta = [
   ['liqmap','Mapa de calor de liquidaciones','Zonas donde se estima que hay liquidaciones apalancadas (estilo CoinGlass): se calcula con el volumen de cada vela y varios apalancamientos; cuanto más claro, más liquidaciones esperadas','#f5d90a'],
   ['vpvr','Perfil de volumen de rango visible (VPVR)','Volumen por nivel de precio de las velas que ves en pantalla, con POC y área de valor; se recalcula al mover o hacer zoom','#2962ff'],
   ['patterns','Patrones (1-2-3, ABC, armónicos, chartistas, Elliott)','Detecta y dibuja sobre el gráfico el patrón que se está formando: 1-2-3, ABC, ABCD/Gartley/Bat/Butterfly/Crab/Cypher con zona de reversión, dobles techos y suelos, hombro-cabeza-hombro, triángulos, cuñas e impulsos de Elliott','#f5a623'],
-  ['nnIa','Nova Nexus · Señales IA','BUY/SELL con score ⭐, cooldown y divergencias (v2.7)','#11cf77'],
+  ['nnIa','Nova Nexus · Señales IA','BUY/SELL con score ★, cooldown y divergencias (v2.7)','#11cf77'],
   ['nnEma','Nova Nexus · EMA Cloud','Nube EMA 55 ± 0.6 ATR','#8a97b3'],
   ['nnTp','Nova Nexus · TP / SL','Niveles de la última señal (SL 1 · TP 1.5 / 2.5 / 4 ATR)','#ff9900'],
   ['nnSmc','Nova Nexus · Estructura SMC','BOS / CHoCH con barridos (swing, longitud 5)','#089981'],
@@ -964,15 +1030,15 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.vp = I.nnVP ? T.volumeProfile(candles, {rows: NP('vpRows'), lookback: NP('vpLookback'), hiThr: NP('vpHi'), loThr: NP('vpLo')}) : null;
 }
 // Parámetros de Nova Nexus editables (misma presentación que la ventana de TradingView: grupos, filas y ayudas)
-const NOVA_STRATS = {'Ninguna (usar módulos)': null, '📱 Mobile (IA + Smooth Trail + Reversal Bands)': ['nnIa', 'nnTrail', 'nnRev'], '☁️ Cloud (IA + EMA Cloud + Volume Profile + S/R)': ['nnIa', 'nnEma', 'nnVP', 'nnSR'], '🏛 SMC (IA + SMC + Pivots + Volume Profile)': ['nnIa', 'nnSmc', 'nnOb', 'nnPiv', 'nnVP']};
+const NOVA_STRATS = {'Ninguna (usar módulos)': null, 'Mobile (IA + Smooth Trail + Reversal Bands)': ['nnIa', 'nnTrail', 'nnRev'], 'Cloud (IA + EMA Cloud + Volume Profile + S/R)': ['nnIa', 'nnEma', 'nnVP', 'nnSR'], 'SMC (IA + SMC + Pivots + Volume Profile)': ['nnIa', 'nnSmc', 'nnOb', 'nnPiv', 'nnVP']};
 const NOVA_SCHEMA = [
-  {key: 'emaLen', title: 'EMA Periodos', type: 'int', def: 55, min: 2, max: 500, group: '☁️ EMA CLOUD'},
-  {key: 'emaMult', title: 'Multiplicador ATR', type: 'float', def: 0.6, min: 0.1, max: 10, step: 0.1, group: '☁️ EMA CLOUD'},
-  {key: 'trailLen', title: 'Longitud EMA Base', type: 'int', def: 30, min: 2, max: 500, group: '🧵 SMOOTH TRAIL'},
-  {key: 'trailAtr', title: 'ATR Length', type: 'int', def: 20, min: 1, max: 500, group: '🧵 SMOOTH TRAIL'},
-  {key: 'trailMult', title: 'Multiplicador ATR', type: 'float', def: 2, min: 0.1, max: 20, step: 0.1, group: '🧵 SMOOTH TRAIL'},
-  {key: 'trailSmooth', title: 'Suavizado', type: 'int', def: 2, min: 1, max: 50, group: '🧵 SMOOTH TRAIL'},
-  {key: 'pivLen', title: 'Pivot Length', type: 'int', def: 50, min: 2, max: 200, group: '📍 PIVOTS (High/Low & Missed)'},
+  {key: 'emaLen', title: 'EMA Periodos', type: 'int', def: 55, min: 2, max: 500, group: 'EMA CLOUD'},
+  {key: 'emaMult', title: 'Multiplicador ATR', type: 'float', def: 0.6, min: 0.1, max: 10, step: 0.1, group: 'EMA CLOUD'},
+  {key: 'trailLen', title: 'Longitud EMA Base', type: 'int', def: 30, min: 2, max: 500, group: 'SMOOTH TRAIL'},
+  {key: 'trailAtr', title: 'ATR Length', type: 'int', def: 20, min: 1, max: 500, group: 'SMOOTH TRAIL'},
+  {key: 'trailMult', title: 'Multiplicador ATR', type: 'float', def: 2, min: 0.1, max: 20, step: 0.1, group: 'SMOOTH TRAIL'},
+  {key: 'trailSmooth', title: 'Suavizado', type: 'int', def: 2, min: 1, max: 50, group: 'SMOOTH TRAIL'},
+  {key: 'pivLen', title: 'Pivot Length', type: 'int', def: 50, min: 2, max: 200, group: 'PIVOTS (High/Low & Missed)'},
   {key: 'revLen', title: 'Length', type: 'int', def: 70, min: 2, max: 500, group: 'REVERSAL BANDS'},
   {key: 'smcLen', title: 'Longitud del swing', type: 'int', def: 5, min: 2, max: 50, group: 'MARKET STRUCTURE'},
   {key: 'smcWindow', title: 'Window', type: 'int', def: 500, min: 50, max: 1000, group: 'MARKET STRUCTURE', tooltip: 'Cantidad de velas recientes donde se busca la estructura.'},
@@ -985,41 +1051,41 @@ const NOVA_SCHEMA = [
   {key: 'vpHi', title: 'High Traded Nodes Threshold %', type: 'float', def: 53, min: 0, max: 100, group: 'Volume Profile'},
   {key: 'vpLo', title: 'Low Traded Nodes Threshold %', type: 'float', def: 37, min: 0, max: 100, group: 'Volume Profile'},
   {key: 'liqLookback', title: 'Lookback Period', type: 'int', def: 40, min: 5, max: 500, group: 'LIQUIDATIONS'},
-  {key: 'srLookback', title: 'Lookback Range', type: 'int', def: 20, min: 2, max: 200, group: '🧱 Support and Resistance'},
-  {key: 'srSince', title: 'Bars Since Breakout', type: 'int', def: 2, min: 1, max: 50, group: '🧱 Support and Resistance'},
-  {key: 'srLimit', title: 'Retest Detection Limiter', type: 'int', def: 2, min: 1, max: 50, group: '🧱 Support and Resistance'},
-  {key: 'slMult', title: 'SL x ATR', type: 'float', def: 1, min: 0.1, max: 20, step: 0.1, group: '⚡ IA Signals — TP / SL'},
-  {key: 'tp1', title: 'TP1 x ATR', type: 'float', def: 1.5, min: 0.1, max: 50, step: 0.1, group: '⚡ IA Signals — TP / SL'},
-  {key: 'tp2', title: 'TP2 x ATR', type: 'float', def: 2.5, min: 0.1, max: 50, step: 0.1, group: '⚡ IA Signals — TP / SL'},
-  {key: 'tp3', title: 'TP3 x ATR', type: 'float', def: 4, min: 0.1, max: 50, step: 0.1, group: '⚡ IA Signals — TP / SL'},
-  {key: 'tpBars', title: 'Velas de vigencia TP / SL', type: 'int', def: 40, min: 5, max: 500, group: '⚡ IA Signals — TP / SL'},
-  {key: 'minScore', title: 'Score mínimo para mostrar señal', type: 'int', def: 1, min: 1, max: 5, group: '⚡ IA Signals — Score'},
-  {key: 'cooldown', title: 'Velas mínimas entre señales', type: 'int', def: 10, min: 0, max: 200, group: '⚡ IA Signals — Cooldown'},
-  {key: 'cdBoth', title: 'Cooldown compartido (BUY y SELL)', type: 'bool', def: false, group: '⚡ IA Signals — Cooldown'},
-  {key: 'cloudBull', title: 'EMA Cloud alcista', type: 'color', def: '#8c9bb933', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'cloudBear', title: 'EMA Cloud bajista', type: 'color', def: '#78828c33', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'cloudEdge', title: 'EMA Cloud bordes', type: 'color', def: '#c8d2e64d', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'trailBull', title: 'Smooth Trail alcista', type: 'color', def: '#119c7e', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'trailBear', title: 'Smooth Trail bajista', type: 'color', def: '#7c3cf3', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'revUp', title: 'Reversal Bands superior', type: 'color', def: '#f23645', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'revDn', title: 'Reversal Bands inferior', type: 'color', def: '#089981', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'revOp', title: 'Reversal Bands · opacidad %', type: 'int', def: 100, min: 0, max: 200, group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'srSup', title: 'Soporte', type: 'color', def: '#ff5252', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'srRes', title: 'Resistencia', type: 'color', def: '#089981', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'srOp', title: 'Soporte/Resistencia · opacidad %', type: 'int', def: 100, min: 0, max: 300, group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'vpHvc', title: 'Volume Profile · nodo de alto volumen', type: 'color', def: '#ffeb3b80', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'vpAvc', title: 'Volume Profile · nodo promedio', type: 'color', def: '#2962ff80', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'vpLvc', title: 'Volume Profile · nodo de bajo volumen', type: 'color', def: '#f2364580', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'vpBlc', title: 'Volume Profile · compras', type: 'color', def: '#26a69aff', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'vpBrc', title: 'Volume Profile · ventas', type: 'color', def: '#ef5350ff', group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'vpOp', title: 'Volume Profile · opacidad %', type: 'int', def: 100, min: 0, max: 100, group: '🎨 COLORES Y OPACIDAD'},
-  {key: 'strat', title: 'Estrategia', type: 'string', def: 'Ninguna (usar módulos)', options: Object.keys(NOVA_STRATS), group: '📱 ESTRATEGIAS', tooltip: 'Como en el Pine original: Mobile / Cloud / SMC activan un conjunto fijo de módulos y desactivan el resto. «Ninguna» devuelve tus módulos.'},
-  {key: 'rulesText', title: 'Texto de Reglas', type: 'string', def: '', group: '📋 REGLAS', tooltip: 'Una regla por línea separada con «|». Vacío = reglas por defecto.'}
+  {key: 'srLookback', title: 'Lookback Range', type: 'int', def: 20, min: 2, max: 200, group: 'Support and Resistance'},
+  {key: 'srSince', title: 'Bars Since Breakout', type: 'int', def: 2, min: 1, max: 50, group: 'Support and Resistance'},
+  {key: 'srLimit', title: 'Retest Detection Limiter', type: 'int', def: 2, min: 1, max: 50, group: 'Support and Resistance'},
+  {key: 'slMult', title: 'SL x ATR', type: 'float', def: 1, min: 0.1, max: 20, step: 0.1, group: 'IA Signals — TP / SL'},
+  {key: 'tp1', title: 'TP1 x ATR', type: 'float', def: 1.5, min: 0.1, max: 50, step: 0.1, group: 'IA Signals — TP / SL'},
+  {key: 'tp2', title: 'TP2 x ATR', type: 'float', def: 2.5, min: 0.1, max: 50, step: 0.1, group: 'IA Signals — TP / SL'},
+  {key: 'tp3', title: 'TP3 x ATR', type: 'float', def: 4, min: 0.1, max: 50, step: 0.1, group: 'IA Signals — TP / SL'},
+  {key: 'tpBars', title: 'Velas de vigencia TP / SL', type: 'int', def: 40, min: 5, max: 500, group: 'IA Signals — TP / SL'},
+  {key: 'minScore', title: 'Score mínimo para mostrar señal', type: 'int', def: 1, min: 1, max: 5, group: 'IA Signals — Score'},
+  {key: 'cooldown', title: 'Velas mínimas entre señales', type: 'int', def: 10, min: 0, max: 200, group: 'IA Signals — Cooldown'},
+  {key: 'cdBoth', title: 'Cooldown compartido (BUY y SELL)', type: 'bool', def: false, group: 'IA Signals — Cooldown'},
+  {key: 'cloudBull', title: 'EMA Cloud alcista', type: 'color', def: '#8c9bb933', group: 'COLORES Y OPACIDAD'},
+  {key: 'cloudBear', title: 'EMA Cloud bajista', type: 'color', def: '#78828c33', group: 'COLORES Y OPACIDAD'},
+  {key: 'cloudEdge', title: 'EMA Cloud bordes', type: 'color', def: '#c8d2e64d', group: 'COLORES Y OPACIDAD'},
+  {key: 'trailBull', title: 'Smooth Trail alcista', type: 'color', def: '#119c7e', group: 'COLORES Y OPACIDAD'},
+  {key: 'trailBear', title: 'Smooth Trail bajista', type: 'color', def: '#7c3cf3', group: 'COLORES Y OPACIDAD'},
+  {key: 'revUp', title: 'Reversal Bands superior', type: 'color', def: '#f23645', group: 'COLORES Y OPACIDAD'},
+  {key: 'revDn', title: 'Reversal Bands inferior', type: 'color', def: '#089981', group: 'COLORES Y OPACIDAD'},
+  {key: 'revOp', title: 'Reversal Bands · opacidad %', type: 'int', def: 100, min: 0, max: 200, group: 'COLORES Y OPACIDAD'},
+  {key: 'srSup', title: 'Soporte', type: 'color', def: '#ff5252', group: 'COLORES Y OPACIDAD'},
+  {key: 'srRes', title: 'Resistencia', type: 'color', def: '#089981', group: 'COLORES Y OPACIDAD'},
+  {key: 'srOp', title: 'Soporte/Resistencia · opacidad %', type: 'int', def: 100, min: 0, max: 300, group: 'COLORES Y OPACIDAD'},
+  {key: 'vpHvc', title: 'Volume Profile · nodo de alto volumen', type: 'color', def: '#ffeb3b80', group: 'COLORES Y OPACIDAD'},
+  {key: 'vpAvc', title: 'Volume Profile · nodo promedio', type: 'color', def: '#2962ff80', group: 'COLORES Y OPACIDAD'},
+  {key: 'vpLvc', title: 'Volume Profile · nodo de bajo volumen', type: 'color', def: '#f2364580', group: 'COLORES Y OPACIDAD'},
+  {key: 'vpBlc', title: 'Volume Profile · compras', type: 'color', def: '#26a69aff', group: 'COLORES Y OPACIDAD'},
+  {key: 'vpBrc', title: 'Volume Profile · ventas', type: 'color', def: '#ef5350ff', group: 'COLORES Y OPACIDAD'},
+  {key: 'vpOp', title: 'Volume Profile · opacidad %', type: 'int', def: 100, min: 0, max: 100, group: 'COLORES Y OPACIDAD'},
+  {key: 'strat', title: 'Estrategia', type: 'string', def: 'Ninguna (usar módulos)', options: Object.keys(NOVA_STRATS), group: 'ESTRATEGIAS', tooltip: 'Como en el Pine original: Mobile / Cloud / SMC activan un conjunto fijo de módulos y desactivan el resto. «Ninguna» devuelve tus módulos.'},
+  {key: 'rulesText', title: 'Texto de Reglas', type: 'string', def: '', group: 'REGLAS', tooltip: 'Una regla por línea separada con «|». Vacío = reglas por defecto.'}
 ];
 const novaDef = k => { const e = NOVA_SCHEMA.find(x => x.key === k); return e ? e.def : undefined; };
 function novaP(k) { const v = state.novaParams && state.novaParams[k]; const d = novaDef(k); if (k === 'rulesText') return v ? String(v).split('|').map(x => '• ' + x.trim().replace(/^•\s*/, '')).join('\n') : undefined; return v === undefined ? d : v; }
 function openNovaDialog() {
-  const mods = NOVA_GROUPS.flatMap(([t, ks]) => ks.map(k => ({key: 'mod:' + k, title: novaTitle(k), type: 'bool', def: NOVA_DEFAULT.includes(k), value: !!state.indicators[k], group: '🧩 MÓDULOS (ON/OFF)', tooltip: novaDesc(k)})));
+  const mods = NOVA_GROUPS.flatMap(([t, ks]) => ks.map(k => ({key: 'mod:' + k, title: novaTitle(k), type: 'bool', def: NOVA_DEFAULT.includes(k), value: !!state.indicators[k], group: 'MÓDULOS (ON/OFF)', tooltip: novaDesc(k)})));
   const params = NOVA_SCHEMA.map(e => Object.assign({}, e, {value: state.novaParams[e.key] !== undefined ? state.novaParams[e.key] : e.def}));
   const values = {}; for (const i of mods.concat(params)) values[i.key] = i.value;
   CCTSettings.open({title: 'Nova Nexus', tabs: ['in'], note: 'Estos son los parámetros que el indicador ya permite cambiar. Para tener TODOS los parámetros del Pine original, pega su código en «Scripts de Pine».', inputs: mods.concat(params), values, plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
@@ -1045,7 +1111,7 @@ const indTabs = () => `<div class="ind-tabs"><button data-indtab="std" class="${
 const LEGACY_IND = ['ema50', 'sma200', 'wma20', 'cross']; // la lista muestra una sola EMA (con período editable); estos solo aparecen si ya los tenías encendidos
 const indicatorRows = () => { document.body.dataset.indtab = indTab; return indTabs() + (indTab === 'std'
   ? indicatorMeta.filter(m => !m[0].startsWith('nn') && !(LEGACY_IND.includes(m[0]) && !state.indicators[m[0]])).map(([key, title, desc, col]) =>
-    `<div class="setting-row ind-row">${indArt(key, col)}<div><b>${title}</b><small>${desc}</small></div><div class="script-btns">${STD_SCHEMA[key] ? `<button class="small-button" data-std-set="${key}" aria-label="Ajustes de ${title}">⚙</button>` : ''}<button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div></div>`).join('')
+    `<div class="setting-row ind-row">${indArt(key, col)}<div><b>${title}</b><small>${desc}</small></div><div class="script-btns">${STD_SCHEMA[key] ? `<button class="small-button" data-std-set="${key}" aria-label="Ajustes de ${title}">${I('gear', 16)}</button>` : ''}<button class="toggle ${state.indicators[key] ? 'on' : ''}" data-ind="${key}" aria-label="${title}" aria-pressed="${!!state.indicators[key]}"></button></div></div>`).join('')
   : catalogCards() + pineSection()); };
 document.addEventListener('change', e => { const s = e.target.closest('[data-pine-pane]'); if (!s) return; const p = state.pine.find(x => x.sid === s.dataset.pinePane); if (!p) return; if (s.value) p.pane = s.value; else delete p.pane; save(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); scheduleRender(); });
 document.addEventListener('click', e => { const t = e.target.closest('[data-indtab]'); if (!t) return; indTab = t.dataset.indtab; renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); });
@@ -1403,7 +1469,7 @@ function sbAlert() {
   if (state.alerts.length >= 50) { toast('Máximo 50 alertas'); return; }
   if (price === last) { toast('El precio ya está en ese nivel'); return; }
   state.alerts.unshift({id: 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), symbol: sym, price, dir: price > last ? 'up' : 'down', on: true, note: ('Línea ' + (d.label || d.text || '')).trim().slice(0, 80), created: Date.now(), firedAt: 0, firedPrice: null});
-  alertPrice[sym] = last; save(); renderAlerts(); toast(`🔔 Alerta creada en ${fmt(price)}`);
+  alertPrice[sym] = last; save(); renderAlerts(); toast(`Alerta creada en ${fmt(price)}`);
   try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
 }
 function shiftPoint(q, dx, dy) { const x = X(idxOfTime(q.t)) + dx, y = Y(q.p) + dy; return {...q, t: Math.round(timeOfIdx(IDX(x))), p: +PRICE(y).toPrecision(8)}; }
@@ -1468,14 +1534,14 @@ function popHtml(kind, d) {
   }
   if (kind === 'more') {
     const it = (a, ic, n, k) => `<button class="pp-item" data-sb="${a}"><span class="pp-ic">${ic}</span><span>${n}</span>${k ? `<small>${k}</small>` : ''}</button>`;
-    return it('clone', '⧉', 'Clonar', 'Ctrl+D') + it('copy', '⎘', 'Copiar', 'Ctrl+C') + (drawClip ? it('paste', '📋', 'Pegar', 'Ctrl+V') : '') + '<div class="pp-sep"></div>'
-      + it('front', '⤒', 'Traer al frente') + it('back', '⤓', 'Enviar al fondo') + '<div class="pp-sep"></div>'
-      + it('hide', '🙈', 'Ocultar') + it('lock', d.lock ? '🔓' : '🔒', d.lock ? 'Desbloquear' : 'Bloquear') + '<div class="pp-sep"></div>'
-      + it('undo', '↶', 'Deshacer', 'Ctrl+Z') + it('redo', '↷', 'Rehacer', 'Ctrl+Y') + it('clear', '🗑', 'Borrar todos los dibujos');
+    return it('clone', I('layers', 16), 'Clonar', 'Ctrl+D') + it('copy', I('copy', 16), 'Copiar', 'Ctrl+C') + (drawClip ? it('paste', I('clipboard', 16), 'Pegar', 'Ctrl+V') : '') + '<div class="pp-sep"></div>'
+      + it('front', I('toTop', 16), 'Traer al frente') + it('back', I('toBottom', 16), 'Enviar al fondo') + '<div class="pp-sep"></div>'
+      + it('hide', I('eyeoff', 16), 'Ocultar') + it('lock', I(d.lock ? 'unlock' : 'lock', 16), d.lock ? 'Desbloquear' : 'Bloquear') + '<div class="pp-sep"></div>'
+      + it('undo', I('undo', 16), 'Deshacer', 'Ctrl+Z') + it('redo', I('redo', 16), 'Rehacer', 'Ctrl+Y') + it('clear', I('trash', 16), 'Borrar todos los dibujos');
   }
   return '';
 }
-function sbMoreNoSel() { return `<button class="pp-item" data-sb="undo"><span class="pp-ic">↶</span><span>Deshacer</span></button><button class="pp-item" data-sb="redo"><span class="pp-ic">↷</span><span>Rehacer</span></button><button class="pp-item" data-sb="clear"><span class="pp-ic">🗑</span><span>Borrar todos los dibujos</span></button>`; }
+function sbMoreNoSel() { return `<button class="pp-item" data-sb="undo"><span class="pp-ic">${I('undo', 16)}</span><span>Deshacer</span></button><button class="pp-item" data-sb="redo"><span class="pp-ic">${I('redo', 16)}</span><span>Rehacer</span></button><button class="pp-item" data-sb="clear"><span class="pp-ic">${I('trash', 16)}</span><span>Borrar todos los dibujos</span></button>`; }
 function closePop() { selPop = ''; const p = $('#selPop'); if (p) p.remove(); document.querySelectorAll('#selBar [data-sb].open').forEach(b => b.classList.remove('open')); }
 function renderPop() {
   const old = $('#selPop'), bar = $('#selBar'); if (old) old.remove();
@@ -1552,7 +1618,7 @@ function syncHiddenChip() {
   const n = getDrawings().filter(x => x.hide).length; let c = $('#showHidden');
   if (!n) { if (c) c.remove(); return; }
   if (!c) { c = document.createElement('button'); c.id = 'showHidden'; c.className = 'pbar-hidden'; c.onclick = () => { snapDraw(); setDrawings(getDrawings().map(({hide, ...r}) => r)); updateDrawUI(); render(); toast('Dibujos visibles otra vez'); }; $('#chartArea').appendChild(c); }
-  c.textContent = `👁 ${n} oculto${n > 1 ? 's' : ''} · mostrar`;
+  c.innerHTML = `${I('eye', 14)} ${n} oculto${n > 1 ? 's' : ''} · mostrar`;
 }
 
 /* ───────── Barra izquierda de herramientas de dibujo (escritorio, estilo TradingView) ───────── */
@@ -1962,25 +2028,25 @@ function openChartStyle() {
   const cs = cstyle(); let bgDef = '#101725'; try { if (!document.body.classList.contains('light')) throw 0; let n = $('#chartArea'); while (n) { const c = getComputedStyle(n).backgroundColor, m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(c); if (m && (m[4] === undefined || +m[4] > 0)) { bgDef = '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join(''); break; } n = n.parentElement; } } catch { if (!document.body.classList.contains('light')) bgDef = CHART_DEF.bg; }
   const lineDef = '#263244', P = (key, title, type, def, group, extra) => Object.assign({key, title, type, def, value: state.chartStyle && state.chartStyle[key] !== undefined ? state.chartStyle[key] : def, group}, extra || {});
   const inputs = [
-    P('bg', 'Color de fondo', 'color', bgDef, '🖼 FONDO Y CUADRÍCULA'), P('gridH', 'Líneas horizontales', 'bool', true, '🖼 FONDO Y CUADRÍCULA'), P('gridV', 'Líneas verticales', 'bool', true, '🖼 FONDO Y CUADRÍCULA'), P('grid', 'Color de la cuadrícula', 'color', lineDef, '🖼 FONDO Y CUADRÍCULA'),
-    P('up', 'Vela alcista · cuerpo', 'color', CHART_DEF.up, '🕯 VELAS'), P('down', 'Vela bajista · cuerpo', 'color', CHART_DEF.down, '🕯 VELAS'),
-    P('upBorder', 'Alcista · borde', 'color', cs.upBorder || cs.up, '🕯 VELAS'), P('downBorder', 'Bajista · borde', 'color', cs.downBorder || cs.down, '🕯 VELAS'),
-    P('upWick', 'Alcista · mecha', 'color', cs.upWick || cs.up, '🕯 VELAS'), P('downWick', 'Bajista · mecha', 'color', cs.downWick || cs.down, '🕯 VELAS'),
-    P('hollow', 'Velas alcistas huecas', 'bool', false, '🕯 VELAS'),
-    P('cross', 'Color del cursor (cruz)', 'color', document.body.classList.contains('light') ? '#0b1220' : '#edf3fc', '✛ CURSOR'), P('crossA', 'Opacidad del cursor (%)', 'int', 55, '✛ CURSOR', {min: 5, max: 100}), P('crossS', 'Estilo de línea', 'string', 'Guiones', '✛ CURSOR', {options: ['Guiones', 'Sólida', 'Puntos']}), P('crossW', 'Grosor (px)', 'int', 1, '✛ CURSOR', {min: 1, max: 4}), {key: 'reset', title: 'Restablecer todo a los valores por defecto', type: 'bool', def: false, value: false, group: '↺ RESTABLECER'}];
+    P('bg', 'Color de fondo', 'color', bgDef, 'FONDO Y CUADRÍCULA'), P('gridH', 'Líneas horizontales', 'bool', true, 'FONDO Y CUADRÍCULA'), P('gridV', 'Líneas verticales', 'bool', true, 'FONDO Y CUADRÍCULA'), P('grid', 'Color de la cuadrícula', 'color', lineDef, 'FONDO Y CUADRÍCULA'),
+    P('up', 'Vela alcista · cuerpo', 'color', CHART_DEF.up, 'VELAS'), P('down', 'Vela bajista · cuerpo', 'color', CHART_DEF.down, 'VELAS'),
+    P('upBorder', 'Alcista · borde', 'color', cs.upBorder || cs.up, 'VELAS'), P('downBorder', 'Bajista · borde', 'color', cs.downBorder || cs.down, 'VELAS'),
+    P('upWick', 'Alcista · mecha', 'color', cs.upWick || cs.up, 'VELAS'), P('downWick', 'Bajista · mecha', 'color', cs.downWick || cs.down, 'VELAS'),
+    P('hollow', 'Velas alcistas huecas', 'bool', false, 'VELAS'),
+    P('cross', 'Color del cursor (cruz)', 'color', document.body.classList.contains('light') ? '#0b1220' : '#edf3fc', 'CURSOR'), P('crossA', 'Opacidad del cursor (%)', 'int', 55, 'CURSOR', {min: 5, max: 100}), P('crossS', 'Estilo de línea', 'string', 'Guiones', 'CURSOR', {options: ['Guiones', 'Sólida', 'Puntos']}), P('crossW', 'Grosor (px)', 'int', 1, 'CURSOR', {min: 1, max: 4}), {key: 'reset', title: 'Restablecer todo a los valores por defecto', type: 'bool', def: false, value: false, group: 'RESTABLECER'}];
   CCTSettings.open({title: 'Aspecto del gráfico', tabs: ['in'], note: 'Colores y cuadrícula del gráfico. Se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
     const v = res.inputs, o = {};
     if (!v.reset) for (const i of inputs) { if (i.key === 'reset') continue; const x = v[i.key]; if (x === undefined) continue; const dflt = i.key === 'bg' ? bgDef : i.key === 'grid' ? lineDef : (i.key === 'upBorder' ? (v.up || CHART_DEF.up) : i.key === 'downBorder' ? (v.down || CHART_DEF.down) : i.key === 'upWick' ? (v.up || CHART_DEF.up) : i.key === 'downWick' ? (v.down || CHART_DEF.down) : i.def); if (x !== dflt) o[i.key] = x; }
     state.chartStyle = sanChartStyle(o); save(); scheduleRender(); toast(v.reset ? 'Aspecto restablecido' : 'Aspecto aplicado');
   }});
 }
-$('#chartStyleBtn').onclick = openChartStyle;
-function ctypeLabel() { const c = CTYPES.find(x => x[0] === state.ctype) || CTYPES[0]; return c[2] + ' ' + c[1]; }
-function syncCtypeBtn() { const b = $('#ctypeBtn'); if (b) b.textContent = ctypeLabel(); }
+{ const b = $('#chartStyleSetting'); if (b) b.onclick = openChartStyle; }
+function ctypeLabel() { const c = CTYPES.find(x => x[0] === state.ctype) || CTYPES[0]; return I(c[2], 16) + ' ' + c[1]; }
+function syncCtypeBtn() { const b = $('#ctypeBtn'); if (b) b.innerHTML = ctypeLabel(); }
 $('#ctypeBtn').onclick = e => {
   e.stopPropagation(); const old = $('#ctypeMenu'); if (old) { old.remove(); return; }
   const m = document.createElement('div'); m.id = 'ctypeMenu'; m.className = 'pop-menu';
-  m.innerHTML = CTYPES.map(c => `<button data-ct="${c[0]}" class="${state.ctype === c[0] ? 'on' : ''}"><span>${c[2]}</span>${c[1]}</button>`).join('');
+  m.innerHTML = CTYPES.map(c => `<button data-ct="${c[0]}" class="${state.ctype === c[0] ? 'on' : ''}"><span>${I(c[2], 16)}</span>${c[1]}</button>`).join('');
   const b = e.currentTarget.getBoundingClientRect(); document.body.appendChild(m);
   m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, b.left)) + 'px'; m.style.top = Math.min(innerHeight - m.offsetHeight - 8, b.bottom + 6) + 'px';
   m.onclick = ev => { const k = ev.target.closest('[data-ct]'); if (!k) return; state.ctype = k.dataset.ct; save(); syncCtypeBtn(); render(); m.remove(); };
@@ -3069,17 +3135,69 @@ area.addEventListener('contextmenu', e => {
   if (e.target.closest('.chart-label, .leg-row, button, .pop-menu')) return;
   e.preventDefault(); document.querySelectorAll('.chart-ctx').forEach(x => x.remove());
   const m = document.createElement('div'); m.className = 'pop-menu chart-ctx';
-  m.innerHTML = '<button data-a="reset">↺ Restablecer gráfico</button><button data-a="auto">⇕ Escala de precio automática</button>';
+  m.innerHTML = `<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>`;
   document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
   const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
-  m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'reset') resetChart(); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
+  m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'reset') resetChart(); else if (b.dataset.a === 'style') openChartStyle(); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
 });
-function syncFullscreenLabel() { $('#fullscreen').textContent = document.body.classList.contains('expanded') ? '⤓ Reducir' : '⛶ Expandir'; }
+function syncFullscreenLabel() { $('#fullscreen').innerHTML = document.body.classList.contains('expanded') ? I('shrink', 16) + ' Reducir' : I('expand', 16) + ' Expandir'; }
 const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} syncUi(); scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
 $('#fullscreen').onclick = () => { document.body.classList.toggle('expanded'); syncFullscreenLabel(); requestAnimationFrame(render); };
 if (window.ResizeObserver) new ResizeObserver(() => scheduleRender()).observe(area);
 window.addEventListener('resize', scheduleRender);
+
+/* ───────── Barra de progreso de la cuenta ─────────
+   Una barra sencilla: la mitad es tu capital inicial; si ganas sube y se queda verde, si pierdes se vacía y pasa de verde a amarillo, naranja y rojo.
+   El saldo lo escribes tú o llega solo desde Nexus Lens (equity de BingX) mientras «Actualizar automático» esté activo. */
+function acctInfo() {
+  const A = state.acct || {}, ok = A.start > 0 && Number.isFinite(A.cur) && (A.cur > 0 || A.start > 0);
+  if (!ok) return {ok: false, pct: 0, color: '', ratio: null, text: '—', tip: 'Saldo de la cuenta · toca para configurarlo'};
+  const r = A.cur / A.start, hue = Math.round(clamp(r, 0, 1) * 120), fill = r <= 0.03 ? 6 : clamp(r / 2 * 100, 3, 100), ch = (r - 1) * 100;
+  const usd = n => '$' + n.toLocaleString('en-US', {maximumFractionDigits: 2});
+  return {ok: true, pct: fill, color: `hsl(${hue},${r >= 1 ? 62 : 78}%,${r >= 1 ? 46 : 50}%)`, ratio: r, text: (ch >= 0 ? '+' : '') + Math.round(ch) + '%', tip: `${usd(A.cur)} de ${usd(A.start)} · ${(ch >= 0 ? '+' : '') + ch.toFixed(1)}%`};
+}
+function renderAcct() {
+  const i = acctInfo();
+  for (const root of document.querySelectorAll('[data-acct-bar]')) {
+    const f = root.querySelector('.ab-fill'), v = root.querySelector('.ab-val');
+    root.classList.toggle('empty', !i.ok); root.classList.toggle('broke', i.ok && i.ratio <= 0.03);
+    if (f) { f.style.setProperty('--ab-p', i.pct + '%'); f.style.background = i.color || 'transparent'; }
+    if (v) { v.textContent = i.text; v.style.color = i.color || ''; }
+    if (root.classList.contains('rr-btn')) root.dataset.tip = i.tip;
+  }
+  const sub = $('#acctSub'); if (sub) sub.textContent = i.ok ? i.tip : 'Sin configurar. Pon tu capital inicial y tu saldo actual';
+}
+function openAcctDialog() {
+  document.querySelectorAll('.acct-pop').forEach(x => x.remove());
+  const A = state.acct || {}, m = document.createElement('div'); m.className = 'acct-pop';
+  m.innerHTML = `<b>Saldo de la cuenta</b><small>La mitad de la barra es tu capital inicial. Si ganas sube y se pone verde; si pierdes se vacía y pasa a amarillo, naranja y rojo. Úsala para cuidar tu stop loss.</small>
+    <label>Capital inicial (USD)<input id="acStart" inputmode="decimal" value="${A.start || ''}" placeholder="1000"></label>
+    <label>Saldo actual (USD)<input id="acCur" inputmode="decimal" value="${A.start ? A.cur : ''}" placeholder="1000"></label>
+    <label class="ac-chk"><input id="acAuto" type="checkbox" ${A.auto !== false ? 'checked' : ''}><span>Actualizar automático desde Nexus Lens (equity de BingX)</span></label>
+    <div class="ac-btns"><button class="small-button" data-ac="clear" type="button">Quitar</button><button class="small-button" data-ac="close" type="button">Cancelar</button><button class="primary" data-ac="ok" type="button">Guardar</button></div>`;
+  document.body.appendChild(m);
+  const num = v => { const n = parseFloat(String(v).replace(/[^0-9.,-]/g, '').replace(',', '.')); return Number.isFinite(n) && n >= 0 ? n : NaN; };
+  const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = e => { if (!m.contains(e.target) && !e.target.closest('[data-acct-open]')) close(); }, esc = e => { if (e.key === 'Escape') close(); };
+  setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); const f = $('#acStart'); if (f) f.focus(); });
+  m.onclick = e => {
+    const b = e.target.closest('[data-ac]'); if (!b) return;
+    if (b.dataset.ac === 'close') return close();
+    if (b.dataset.ac === 'clear') { state.acct = {start: 0, cur: 0, auto: true}; save(); renderAcct(); return close(); }
+    const st = num($('#acStart').value); let cu = num($('#acCur').value);
+    if (!(st > 0)) { toast('Escribe tu capital inicial en dólares'); return; }
+    if (!Number.isFinite(cu)) cu = st;
+    state.acct = sanAcct({start: st, cur: cu, auto: $('#acAuto').checked}); save(); renderAcct(); close(); toast('Barra de la cuenta actualizada');
+  };
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-acct-open]')) { e.preventDefault(); openAcctDialog(); } });
+window.addEventListener('message', e => { // Nexus Lens (iframe del mismo sitio) avisa el equity de la cuenta
+  if (e.origin !== location.origin || !e.data || e.data.cct !== 'equity') return;
+  const v = +e.data.value; if (!Number.isFinite(v) || v < 0 || !state.acct || state.acct.auto === false) return;
+  const A = state.acct; if (A.cur === Math.round(v * 100) / 100 && A.start > 0) return;
+  state.acct = sanAcct({start: A.start > 0 ? A.start : v, cur: v, auto: true}); save(); renderAcct();
+});
+renderAcct();
 
 /* ───────── Tema, exportar e importar ───────── */
 window.addEventListener('cct-theme', () => { try { if (typeof render === 'function' && candles) render(); } catch {} });
@@ -3204,7 +3322,7 @@ function novaPreviewSvg() {
 }
 function novaCard() {
   const on = novaOn(), act = NN_KEYS.filter(k => state.indicators[k]).length;
-  return `<div class="nova-card ${on ? 'on' : ''}">${novaPreviewSvg()}<div class="nova-body"><div><b>Nova Nexus</b><small>${on ? `${act} de ${NN_KEYS.length} módulos activos` : 'Apagado'} · señales IA, nube EMA, SMC, liquidaciones, perfil de volumen y más</small></div><div class="script-btns"><button class="small-button" data-nova-set="1">⚙ Configurar</button><button class="toggle ${on ? 'on' : ''}" data-nova-tog="1" aria-pressed="${on}" aria-label="Activar Nova Nexus"></button></div></div></div>`;
+  return `<div class="nova-card ${on ? 'on' : ''}">${novaPreviewSvg()}<div class="nova-body"><div><b>Nova Nexus</b><small>${on ? `${act} de ${NN_KEYS.length} módulos activos` : 'Apagado'} · señales IA, nube EMA, SMC, liquidaciones, perfil de volumen y más</small></div><div class="script-btns"><button class="small-button" data-nova-set="1">${I('gear', 14)} Configurar</button><button class="toggle ${on ? 'on' : ''}" data-nova-tog="1" aria-pressed="${on}" aria-label="Activar Nova Nexus"></button></div></div></div>`;
 }
 function novaToggleAll(on) {
   if (on) { const sv = state.novaSaved; for (const k of NN_KEYS) state.indicators[k] = sv ? !!sv[k] : NOVA_DEFAULT.includes(k); if (!novaOn()) NOVA_DEFAULT.forEach(k => state.indicators[k] = true); state.novaSaved = null; }
@@ -3351,7 +3469,7 @@ const catPineOf = c => state.pine.find(p => p.sid === 'cat:' + c.id);
 function catalogCards() {
   return (window.CCTCatalog || []).filter(c => c.id !== 'nova-scr').map(c => {
     const p = catPineOf(c);
-    return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small><button class="small-button" data-pine-retry="${p.sid}">↻ Reintentar</button>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">⚙ Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
+    return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small><button class="small-button" data-pine-retry="${p.sid}">↻ Reintentar</button>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">${I('gear', 14)} Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
   }).join('');
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-std-set]'); if (b) openStdDialog(b.dataset.stdSet); const r = e.target.closest('[data-pine-retry]'); if (r) { delete pineRes[r.dataset.pineRetry]; pineKey = ''; schedulePine(); renderIndicators(); if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows(); } });
@@ -3372,8 +3490,8 @@ function pineSection() {
     const s = scripts.find(x => x.id === p.sid); if (!s) return ''; if ((window.CCTCatalog || []).some(c => c.code === s.code)) return ''; const r = pineRes[p.sid]; let st;
     if (!p.on) st = 'Apagado'; else if (!r) st = 'Calculando…';
     else if (!r.ok) st = `<span class="pine-err">Error${r.error.line ? ' · línea ' + r.error.line : ''}: ${esc(r.error.msg)}</span>`;
-    else { const u = r.warnings.filter(w => w.level === 'unsupported').length; st = `${r.plots.length} plot${r.plots.length === 1 ? '' : 's'} · ` + (u ? `<span class="pine-warn">⚠ ${u} aviso${u > 1 ? 's' : ''} de no soportado</span>` : r.warnings.length ? `${r.warnings.length} aviso${r.warnings.length > 1 ? 's' : ''}` : 'sin avisos') + (r.meta.overlay ? '' : ' · panel propio') + (r.strategy ? ` · <b class="${r.strategy.stats.net >= 0 ? 'positive' : 'negative'}">Estrategia ${r.strategy.stats.net >= 0 ? '+' : ''}${r.strategy.stats.netPct.toFixed(2)}% · ${r.strategy.tradesTotal} ops</b>` : ''); }
-    return `<div class="setting-row pine-row"><div><b>${esc(s.name)}</b><small>${st}</small>${r && r.ok ? `<select class="pane-sel" data-pine-pane="${p.sid}" aria-label="Panel"><option value="" ${!p.pane ? 'selected' : ''}>Panel: automático (${r.meta.overlay ? 'sobre el gráfico' : 'abajo'})</option><option value="main" ${p.pane === 'main' ? 'selected' : ''}>Panel: sobre el gráfico</option><option value="top" ${p.pane === 'top' ? 'selected' : ''}>Panel: arriba (propio)</option><option value="bottom" ${p.pane === 'bottom' ? 'selected' : ''}>Panel: abajo (propio)</option></select>` : ''}</div><div class="script-btns">${r && r.ok && r.strategy ? `<button class="small-button" data-pine-rep="${p.sid}" aria-label="Informe">📊</button>` : ''}<button class="small-button" data-pine-set="${p.sid}" aria-label="Ajustes">⚙</button><button class="small-button danger" data-pine-del="${p.sid}" aria-label="Quitar">✕</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${p.on}" aria-label="Activar"></button></div></div>`;
+    else { const u = r.warnings.filter(w => w.level === 'unsupported').length; st = `${r.plots.length} plot${r.plots.length === 1 ? '' : 's'} · ` + (u ? `<span class="pine-warn">${I('warn', 14)} ${u} aviso${u > 1 ? 's' : ''} de no soportado</span>` : r.warnings.length ? `${r.warnings.length} aviso${r.warnings.length > 1 ? 's' : ''}` : 'sin avisos') + (r.meta.overlay ? '' : ' · panel propio') + (r.strategy ? ` · <b class="${r.strategy.stats.net >= 0 ? 'positive' : 'negative'}">Estrategia ${r.strategy.stats.net >= 0 ? '+' : ''}${r.strategy.stats.netPct.toFixed(2)}% · ${r.strategy.tradesTotal} ops</b>` : ''); }
+    return `<div class="setting-row pine-row"><div><b>${esc(s.name)}</b><small>${st}</small>${r && r.ok ? `<select class="pane-sel" data-pine-pane="${p.sid}" aria-label="Panel"><option value="" ${!p.pane ? 'selected' : ''}>Panel: automático (${r.meta.overlay ? 'sobre el gráfico' : 'abajo'})</option><option value="main" ${p.pane === 'main' ? 'selected' : ''}>Panel: sobre el gráfico</option><option value="top" ${p.pane === 'top' ? 'selected' : ''}>Panel: arriba (propio)</option><option value="bottom" ${p.pane === 'bottom' ? 'selected' : ''}>Panel: abajo (propio)</option></select>` : ''}</div><div class="script-btns">${r && r.ok && r.strategy ? `<button class="small-button" data-pine-rep="${p.sid}" aria-label="Informe">${I('chart', 16)}</button>` : ''}<button class="small-button" data-pine-set="${p.sid}" aria-label="Ajustes">${I('gear', 16)}</button><button class="small-button danger" data-pine-del="${p.sid}" aria-label="Quitar">✕</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${p.on}" aria-label="Activar"></button></div></div>`;
   }).join('');
   return `<div class="pine-head"><b>Scripts de Pine</b><small>Pega código de TradingView: se interpreta aquí y se dibuja en el gráfico</small></div>${rows}<div class="setting-row"><button class="primary" data-pine-new="1">＋ Pegar / convertir Pine</button></div>`;
 }
@@ -3397,7 +3515,7 @@ function openStrategyReport(sid) {
   el.innerHTML = `<div class="cfg-dlg" role="dialog" aria-modal="true" aria-label="Informe de estrategia"><div class="cfg-head"><strong>${esc(S.title || pineName(sid))}</strong><button class="cfg-x" aria-label="Cerrar">✕</button></div>
     <div class="rep-ctl"><select id="rpSym" aria-label="Activo">${[...new Set([state.symbol, ...state.symbols])].map(s => `<option value="${s}" ${s === rsym ? 'selected' : ''}>${esc(base(s))}</option>`).join('')}</select><select id="rpTf" aria-label="Temporalidad">${INTERVALS.map(t => `<option ${t === ritv ? 'selected' : ''}>${t}</option>`).join('')}</select><select id="rpN" aria-label="Historial">${[500, 1000, 3000, 5000, 10000].map(n => `<option value="${n}" ${n === 1000 ? 'selected' : ''}>${n}</option>`).join('')}</select><button class="small-button" id="rpGo">Recalcular</button></div>
     <div class="cfg-tabs"><button data-rt="sum" class="on">Resumen</button><button data-rt="tr">Operaciones</button><button data-rt="par">Supuestos</button></div>
-    <div class="cfg-body" id="repBody"></div><div class="cfg-foot"><button class="cfg-btn" data-act="csvT">⬇ Operaciones</button><button class="cfg-btn" data-act="csvE">⬇ Capital</button><span class="cfg-sp"></span><button class="cfg-btn cfg-ok" data-act="cancel">Cerrar</button></div></div>`;
+    <div class="cfg-body" id="repBody"></div><div class="cfg-foot"><button class="cfg-btn" data-act="csvT">${I('download', 14)} Operaciones</button><button class="cfg-btn" data-act="csvE">${I('download', 14)} Capital</button><span class="cfg-sp"></span><button class="cfg-btn cfg-ok" data-act="cancel">Cerrar</button></div></div>`;
   document.body.appendChild(el);
   const body = el.querySelector('#repBody'); let tab = 'sum';
   const drawEq = cv => {
@@ -3459,9 +3577,9 @@ function pineMsgHtml(res, code) {
   if (!res.ok) { const src = (code || '').split('\n')[res.error.line - 1]; return `<div class="pine-box err"><b>No se pudo interpretar</b><div>${res.error.line ? 'Línea ' + res.error.line + ': ' : ''}${esc(res.error.msg)}</div>${src ? `<pre>${esc(src.trim().slice(0, 160))}</pre>` : ''}</div>`; }
   const un = res.warnings.filter(w => w.level === 'unsupported'), fx = res.warnings.filter(w => w.level === 'fix'), rest = res.warnings.filter(w => w.level !== 'unsupported' && w.level !== 'fix');
   const li = w => `<li>${w.line ? 'Línea ' + w.line + ' · ' : ''}${esc(w.msg)}</li>`;
-  return `<div class="pine-box ${res.complete ? 'ok' : 'warn'}"><b>${res.complete ? '✓ Interpretado: no se detectó nada sin soporte' : '⚠ Interpretado con partes SIN soporte: el resultado puede diferir de TradingView'}</b>`
+  return `<div class="pine-box ${res.complete ? 'ok' : 'warn'}"><b>${res.complete ? '✓ Interpretado: no se detectó nada sin soporte' : I('warn', 14) + ' Interpretado con partes SIN soporte: el resultado puede diferir de TradingView'}</b>`
     + `<div>${res.plots.length + (res.candles || []).length} plot(s) · ${res.shapes.length} forma(s) · ${res.labels.length + res.lines.length + res.boxes.length + (res.polylines || []).length + (res.tables || []).length + (res.linefills || []).length} objeto(s) · ${res.stats.ms} ms</div>`
-    + (fx.length ? `<div class="pine-fix"><b>🔧 Reparado automáticamente (${fx.length})</b><ul class="info">${fx.map(li).join('')}</ul></div>` : '') + (un.length ? `<ul>${un.map(li).join('')}</ul>` : '') + (rest.length ? `<ul class="info">${rest.map(li).join('')}</ul>` : '') + '</div>';
+    + (fx.length ? `<div class="pine-fix"><b>${I('wrench', 14)} Reparado automáticamente (${fx.length})</b><ul class="info">${fx.map(li).join('')}</ul></div>` : '') + (un.length ? `<ul>${un.map(li).join('')}</ul>` : '') + (rest.length ? `<ul class="info">${rest.map(li).join('')}</ul>` : '') + '</div>';
 }
 const PINE_EXAMPLE = `//@version=5
 indicator("Cruce de EMAs (ejemplo)", overlay=true)
@@ -3578,7 +3696,7 @@ function applyState(data, soft = false) {
   if (sameChart && JSON.stringify(next) === JSON.stringify(state)) return;
   const prevSource = state.source; state = next; applyUi(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource();
   if (sameChart) { drawHist.u.length = drawHist.r.length = 0; updateDrawUI(); } else clearTransient(); // mismo gráfico: se conserva la escala manual, la retícula y lo que se esté dibujando
-  if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader();
+  if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader(); renderAcct(); renderMoveAlerts();
   if (!sameChart || prevSource !== state.source) { closeWS(); candles = []; ind = {}; loadCandles(); }
 }
 
@@ -3593,8 +3711,8 @@ function renderAccount() {
     return;
   }
   if (fbUser) {
-    top.hidden = false; top.innerHTML = fbUser.photoURL ? `<img src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : '👤'; top.title = 'Cuenta';
-    box.innerHTML = `<div class="setting-row account-row">${fbUser.photoURL ? `<img class="avatar" src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : '<span class="avatar">👤</span>'}<div><b>${esc(fbUser.displayName || 'Cuenta de Google')}</b><small>${esc(fbUser.email || '')}<br>${esc(syncStatus)}</small></div></div><button class="setting-row action-row" id="signOutBtn"><span>Cerrar sesión</span><span>⏻</span></button>`;
+    top.hidden = false; top.innerHTML = fbUser.photoURL ? `<img src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : I('user', 18); top.title = 'Cuenta';
+    box.innerHTML = `<div class="setting-row account-row">${fbUser.photoURL ? `<img class="avatar" src="${esc(fbUser.photoURL)}" alt="" referrerpolicy="no-referrer">` : `<span class="avatar">${I('user', 22)}</span>`}<div><b>${esc(fbUser.displayName || 'Cuenta de Google')}</b><small>${esc(fbUser.email || '')}<br>${esc(syncStatus)}</small></div></div><button class="setting-row action-row" id="signOutBtn"><span>Cerrar sesión</span><span>${I('power', 18)}</span></button>`;
     $('#signOutBtn').onclick = signOut;
   } else {
     top.hidden = false; top.textContent = 'Iniciar sesión'; top.title = 'Iniciar sesión con Google';
@@ -3613,17 +3731,19 @@ async function signIn() {
     if (!['auth/popup-closed-by-user', 'auth/cancelled-popup-request'].includes(e.code)) toast('No se pudo iniciar sesión: ' + (e.code || e.message));
   }
 }
-function signOut() { if (auth) auth.signOut(); }
+async function signOut() { if (!auth) return; clearTimeout(pushTimer); try { await cloudPushNow(); } catch {} auth.signOut(); } // antes de salir se sube lo último que cambiaste (el envío tiene 1 s de espera)
 async function onUser(user) {
   if (unsubCloud) { unsubCloud(); unsubCloud = null; }
   if (unsubScripts) { unsubScripts(); unsubScripts = null; }
   clearTimeout(pushTimer); fbUser = user;
   if (!user) {
     try { localStorage.removeItem(LASTUID); } catch {}
-    if (uid) { uid = null; lastRemote = ''; scriptsRemote = ''; applyState(readLocal(STORE)); scripts = withCatalog(readScripts()); renderScripts(); } // vuelve al estado local sin sesión; los datos de la cuenta no se quedan visibles
+    if (uid) { uid = null; stateUid = null; lastRemote = ''; scriptsRemote = ''; applyState(readLocal(STORE)); scripts = withCatalog(readScripts()); renderScripts(); } // vuelve al estado local sin sesión; los datos de la cuenta no se quedan visibles
     syncStatus = ''; renderAccount(); return;
   }
   uid = user.uid; try { localStorage.setItem(LASTUID, uid); } catch {}
+  if (stateUid !== uid && lsGet(storeKey())) { try { applyState(readLocal(storeKey())); } catch {} } // cambios de esta cuenta guardados aquí que aún no subieron (no el estado de «sin sesión»)
+  stateUid = uid;
   const anonScripts = (readLocal(SCRIPTS_KEY).items || []).filter(x => x && typeof x.id === 'string'); // scripts guardados antes de iniciar sesión
   scripts = withCatalog(readScripts()); scriptsRemote = ''; renderScripts();
   syncStatus = 'Sincronizando…'; renderAccount();
@@ -3738,7 +3858,7 @@ async function initCloud() {
 /* ───────── Arranque ───────── */
 renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); buildRail(); updateDrawUI(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
 if (isDesktop()) onLayoutChange();
-fetchTicker(); loadCandles(); initCloud(); refreshPop();
+fetchTicker(); loadCandles(); initCloud(); if (!PANE) refreshPop();
 
 /* Solo para pruebas automáticas: se activa añadiendo ?cct_debug=1 a la dirección */
 if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
@@ -3784,20 +3904,39 @@ window.CCT_getAIContext = function () {
   const tk = tickers[state.symbol];
   return {symbol: symOf(state.symbol), exchange: exName(state.symbol), interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine};
 };
-/* ───────── Divisiones: 1 o 2 gráficos ───────── */
-const LAYOUTS = [['1', 'Un gráfico', '▢'], ['2v', 'Dos · lado a lado', '◫'], ['2h', 'Dos · arriba y abajo', '⬒']];
-function paneSrc() { return `index.html?pane=2&sym=${encodeURIComponent(state.symbol === 'ETHUSDT' ? 'BTCUSDT' : 'ETHUSDT')}&light=${state.light ? 1 : 0}`; }
+/* ───────── Divisiones: de 1 a 5 gráficos ─────────
+   Cada gráfico extra es la misma app dentro de un iframe (con su propio activo, temporalidad e indicadores). 3, 4 y 5 gráficos solo en pantallas anchas. */
+const LR = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1.6"/>`;
+const LAYOUTS = [
+  ['1', 'Un gráfico', LR(4, 5, 16, 14)],
+  ['2v', 'Dos · lado a lado', LR(3.5, 5, 7.5, 14) + LR(13, 5, 7.5, 14)],
+  ['2h', 'Dos · arriba y abajo', LR(4, 3.5, 16, 7.5) + LR(4, 13, 16, 7.5)],
+  ['3', 'Tres · uno grande y dos', LR(3.5, 4.5, 9, 15) + LR(14.5, 4.5, 6, 6.8) + LR(14.5, 12.7, 6, 6.8)],
+  ['4', 'Cuatro · cuadrícula', LR(3.5, 3.5, 8, 8) + LR(12.5, 3.5, 8, 8) + LR(3.5, 12.5, 8, 8) + LR(12.5, 12.5, 8, 8)],
+  ['5', 'Cinco · dos arriba y tres abajo', LR(3, 3.5, 8.6, 8) + LR(12.4, 3.5, 8.6, 8) + LR(3, 12.5, 5.4, 8) + LR(9.3, 12.5, 5.4, 8) + LR(15.6, 12.5, 5.4, 8)]
+];
+const LAY_PANES = {'1': 0, '2v': 1, '2h': 1, '3': 2, '4': 3, '5': 4}, LAY_ICON = id => SV((LAYOUTS.find(l => l[0] === id) || LAYOUTS[0])[2], 16);
+const effLayout = () => state.layout !== '1' && innerWidth < 1024 ? '2h' : state.layout; // en pantalla angosta solo caben uno arriba y otro abajo
+function paneSrc(n) {
+  const order = state.symbol === 'ETHUSDT' ? ['BTCUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'] : ['ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'BTCUSDT'];
+  const sym = order.filter(x => x !== state.symbol)[n - 2] || 'BTCUSDT';
+  return `index.html?pane=${n}&sym=${encodeURIComponent(sym)}&light=${state.light ? 1 : 0}`;
+}
 function applyLayout() {
   if (PANE) return;
-  const narrow = innerWidth < 1024, eff = state.layout === '2v' && narrow ? '2h' : state.layout; // en pantalla angosta solo caben uno arriba y otro abajo
+  const eff = effLayout(), need = LAY_PANES[eff] || 0;
+  document.body.dataset.lay = eff;
   document.body.classList.toggle('split', eff !== '1'); document.body.classList.toggle('split-v', eff === '2v'); document.body.classList.toggle('split-h', eff === '2h');
-  let fr = $('#pane2');
-  if (eff === '1') { if (fr) fr.remove(); }
-  else if (!fr) { fr = document.createElement('iframe'); fr.id = 'pane2'; fr.title = 'Segundo gráfico'; fr.src = paneSrc(); fr.allow = 'fullscreen'; $('main').appendChild(fr); }
-  const b = $('#layoutBtn'); if (b) { const l = LAYOUTS.find(x => x[0] === state.layout) || LAYOUTS[0]; b.textContent = l[2] + ' Diseño'; }
+  for (const k of ['3', '4', '5']) document.body.classList.toggle('split-' + k, eff === k);
+  for (let n = 2; n <= 5; n++) {
+    let fr = $('#pane' + n);
+    if (n - 1 > need) { if (fr) fr.remove(); continue; }
+    if (!fr) { fr = document.createElement('iframe'); fr.id = 'pane' + n; fr.className = 'pane-fr'; fr.title = 'Gráfico ' + n; fr.src = paneSrc(n); fr.allow = 'fullscreen'; $('main').appendChild(fr); }
+  }
+  const b = $('#layoutBtn'); if (b) b.innerHTML = LAY_ICON(state.layout) + ' Diseño';
   requestAnimationFrame(() => { render(); window.dispatchEvent(new Event('resize')); });
 }
-function pushPaneTheme() { const fr = $('#pane2'); if (fr && fr.contentWindow) { try { fr.contentWindow.postMessage({cct: 'light', light: !!state.light}, location.origin); } catch {} } }
+function pushPaneTheme() { document.querySelectorAll('.pane-fr').forEach(fr => { if (fr.contentWindow) { try { fr.contentWindow.postMessage({cct: 'light', light: !!state.light}, location.origin); } catch {} } }); }
 if (PANE) {
   window.addEventListener('message', e => { if (e.origin !== location.origin || !e.data || e.data.cct !== 'light') return; state.light = !!e.data.light; theme(); });
   switchView('chartView');
@@ -3805,17 +3944,18 @@ if (PANE) {
   $('#layoutBtn').onclick = e => {
     e.stopPropagation(); const old = $('#layoutMenu'); if (old) { old.remove(); return; }
     const m = document.createElement('div'); m.id = 'layoutMenu'; m.className = 'pop-menu';
-    m.innerHTML = LAYOUTS.filter(l => !(l[0] === '2v' && innerWidth < 700)).map(l => `<button data-ly="${l[0]}" class="${state.layout === l[0] ? 'on' : ''}"><span>${l[2]}</span>${l[1]}</button>`).join('');
+    m.innerHTML = LAYOUTS.filter(l => !(l[0] === '2v' && innerWidth < 700) && !(['3', '4', '5'].includes(l[0]) && innerWidth < 1024)).map(l => `<button data-ly="${l[0]}" class="${state.layout === l[0] ? 'on' : ''}"><span>${LAY_ICON(l[0])}</span>${l[1]}</button>`).join('');
     const r = e.currentTarget.getBoundingClientRect(); document.body.appendChild(m);
     m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.top = Math.min(innerHeight - m.offsetHeight - 8, r.bottom + 6) + 'px';
     m.onclick = ev => { const k = ev.target.closest('[data-ly]'); if (!k) return; state.layout = k.dataset.ly; save(); applyLayout(); m.remove(); };
     setTimeout(() => document.addEventListener('click', function f() { m.remove(); document.removeEventListener('click', f); }), 0);
   };
-  window.addEventListener('resize', () => { const fr = $('#pane2'), narrow = innerWidth < 1024; if (state.layout === '2v' && !!fr && document.body.classList.contains('split-v') === narrow) applyLayout(); });
+  window.addEventListener('resize', () => { if (document.body.dataset.lay !== effLayout()) applyLayout(); });
   applyLayout();
 }
 setInterval(fetchTicker, 30000);
-setInterval(() => { if (!document.hidden) refreshPop(); }, 120000);
+setInterval(() => { if (!document.hidden && !PANE) refreshPop(); }, 120000);
 setInterval(() => { if (!document.hidden) checkAlertsPoll(); }, 10000);
+setInterval(movePoll, 15000); setTimeout(movePoll, 3000);
 setInterval(() => { if (currentView === 'chartView' && !wsOpen && candles.length && !document.hidden) loadCandles(true); }, 20000);
 })();

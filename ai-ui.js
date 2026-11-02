@@ -26,7 +26,7 @@
   const modeLabel = () => st.mode === 'claude' && (st.key || st.proxy) ? 'Claude' : 'Local';
   function shell() {
     root.innerHTML = `
-      <div class="ai-top"><div class="ai-badge" id="aiBadge"></div><div class="ai-top-r"><button class="ai-brief" id="aiBrief" type="button" title="Resumen del día con tu análisis"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a2 2 0 0 1 2 2v13a1 1 0 0 0 1 1H7a2 2 0 0 1-2-2z"/><path d="M18 9h2a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2"/><path d="M9 8h5M9 12h5M9 16h3"/></svg>Brief del día</button><button class="ai-gear" id="aiGear" aria-label="Ajustes de la IA" title="Ajustes de la IA">⚙</button></div></div>
+      <div class="ai-top"><div class="ai-badge" id="aiBadge"></div><div class="ai-top-r"><button class="ai-brief" id="aiBrief" type="button" title="Resumen del día con tu análisis"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a2 2 0 0 1 2 2v13a1 1 0 0 0 1 1H7a2 2 0 0 1-2-2z"/><path d="M18 9h2a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2"/><path d="M9 8h5M9 12h5M9 16h3"/></svg>Brief del día</button><button class="ai-gear" id="aiGear" aria-label="Ajustes de la IA" title="Ajustes de la IA">${CCTI.svg('gear', 16)}</button></div></div>
       <div class="ai-cfg" id="aiCfg" hidden>
         <label class="ai-row"><span>Modo</span><select id="aiMode"><option value="local">Local (gratis, sin clave)</option><option value="claude">Claude (preguntas libres)</option></select></label>
         <label class="ai-row"><span>Clave de Anthropic</span><input id="aiKey" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"></label>
@@ -37,7 +37,7 @@
       </div>
       <div class="ai-log" id="aiLog" aria-live="polite"></div>
       <div class="ai-chips" id="aiChips">${['Analiza el gráfico', '¿Cuál es la tendencia?', 'Soportes y resistencias', '¿Cómo van mis indicadores?', 'Noticias que me afectan', 'Calendario económico', '¿Qué escenarios ves?', 'Gestión de riesgo'].map(q => `<button data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
-      <form class="ai-form" id="aiForm"><input id="aiInput" placeholder="Pregunta sobre tu gráfico, indicadores o el mercado cripto…" autocomplete="off" maxlength="600"><button class="ai-send" id="aiSend" aria-label="Enviar">➤</button></form>
+      <form class="ai-form" id="aiForm"><input id="aiInput" placeholder="Pregunta sobre tu gráfico, indicadores o el mercado cripto…" autocomplete="off" maxlength="600"><button class="ai-send" id="aiSend" aria-label="Enviar">${CCTI.svg('send', 16)}</button></form>
       <p class="ai-disc">Análisis educativo basado en tus datos. No es asesoría financiera.</p>`;
     $('#aiMode').value = st.mode; $('#aiKey').value = st.key; $('#aiModel').value = st.model; $('#aiProxy').value = st.proxy; badge();
   }
@@ -55,7 +55,7 @@
     try {
       if (!ctx && isBrief) out = AI.briefLocal(null, extra);
       else if (!ctx) out = 'Aún no hay un gráfico con velas cargadas. Abre la pestaña **Gráfico**, espera a que cargue y pregúntame de nuevo.';
-      else if (useClaude && AI.intent(q) !== 'off') { try { out = await AI.askClaude({key: st.key, model: st.model, proxy: st.proxy}, ctx, st.hist, q, extra); } catch (e) { out = '⚠ ' + (e.message || 'No se pudo consultar a Claude') + '\n\nTe respondo con el análisis local:\n\n' + AI.answerLocal(q, ctx, extra); } }
+      else if (useClaude && AI.intent(q) !== 'off') { try { out = await AI.askClaude({key: st.key, model: st.model, proxy: st.proxy}, ctx, st.hist, q, extra); } catch (e) { out = 'Atención: ' + (e.message || 'No se pudo consultar a Claude') + '\n\nTe respondo con el análisis local:\n\n' + AI.answerLocal(q, ctx, extra); } }
       else out = AI.answerLocal(q, ctx, extra);
     } catch (e) { out = 'Ocurrió un error al analizar: ' + (e.message || e); }
     typing.remove(); push('bot', out); st.hist.push({role: 'user', text: q}, {role: 'assistant', text: out}); if (st.hist.length > 16) st.hist.splice(0, 2);
@@ -63,7 +63,7 @@
   }
   function init() {
     root = document.getElementById('aiRoot'); if (!root) return; shell();
-    push('bot', 'Hola 👋 Soy tu **analista de gráficos cripto**. Leo tu gráfico abierto con los indicadores que tengas activados, las noticias y el calendario económico.\n\nToca una sugerencia o escríbeme tu pregunta.');
+    push('bot', 'Hola. Soy tu **analista de gráficos cripto**. Leo tu gráfico abierto con los indicadores que tengas activados, las noticias y el calendario económico.\n\nToca una sugerencia o escríbeme tu pregunta.');
     root.addEventListener('click', e => {
       if (e.target.closest('#aiBrief')) { ask(BRIEF_Q, 'Brief del día'); return; }
       const q = e.target.closest('[data-q]'); if (q) { ask(q.dataset.q); return; }

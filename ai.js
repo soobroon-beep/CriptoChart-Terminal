@@ -161,13 +161,13 @@
     const lean = A.score >= 12 ? 'long' : A.score <= -12 ? 'short' : null, one = (k, q) => `**${k === 'long' ? 'Escenario alcista' : 'Escenario bajista'}**${lean === k ? ' (el favorecido por los datos)' : ''}: ${k === 'long' ? 'busca' : 'busca'} confirmación ${k === 'long' ? 'sobre' : 'bajo'} el precio actual; invalidación ${k === 'long' ? 'bajo' : 'sobre'} ${fp(q.stop)} (${q.riskPct.toFixed(1)}% de riesgo); objetivos ${fp(q.t1)} y ${fp(q.t2)}; relación beneficio/riesgo al 1.er objetivo ≈ ${q.rr ? q.rr.toFixed(1) : '—'}:1.`;
     const L = [one('long', P.long), one('short', P.short)];
     if (lean == null) L.push('Sin sesgo claro: suele ser mejor esperar a que rompa un nivel con volumen.');
-    else { const q = P[lean]; if (q.rr != null && q.rr < 1.2) L.push('⚠ La relación beneficio/riesgo es baja desde aquí; esperar un retroceso a un mejor nivel mejoraría el trade.'); }
+    else { const q = P[lean]; if (q.rr != null && q.rr < 1.2) L.push('Atención: la relación beneficio/riesgo es baja desde aquí; esperar un retroceso a un mejor nivel mejoraría el trade.'); }
     return L.join('\n');
   }
   function secNews(N) {
     if (!N) return '**Noticias:** aún no hay noticias cargadas (abre la sección Noticias para actualizarlas).';
     if (!N.top.length) return `**Noticias:** no hay noticias recientes (36 h) sobre ${N.base} ni de alto impacto cripto.`;
-    const ic = s => s > 0 ? '🟢' : s < 0 ? '🔴' : '⚪';
+    const ic = s => s > 0 ? '▲' : s < 0 ? '▼' : '●';
     return [`**Noticias (${N.about ? N.about + ' sobre ' + N.base : 'mercado cripto'}) · tono ${N.tone}:**`, ...N.top.map(i => `- ${ic(i.s)} ${i.title} _(${i.src})_`)].join('\n');
   }
   function secCalendar(C, now) {

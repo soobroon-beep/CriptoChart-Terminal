@@ -1053,7 +1053,7 @@ const cv=NNT.cv,rgbaOf=NNT.rgba;
       <!-- SETUP API KEY (si no está configurada) -->
       <div id="ai-setup-wrap" style="display:none">
         <div class="ai-setup">
-          <div class="ai-setup-title">🔑 Configura tu IA</div>
+          <div class="ai-setup-title">Configura tu IA</div>
           <p>El asesor usa Claude (Anthropic) para analizar tus trades en tiempo real. Necesitas una API key gratuita de Anthropic.</p>
           <div class="field">
             <label>Anthropic API Key</label>
@@ -1081,12 +1081,12 @@ const cv=NNT.cv,rgbaOf=NNT.rgba;
           </div>
           <div class="ai-badges" id="ai-badges"></div>
           <div class="ai-actions">
-            <button class="ai-btn" onclick="aiAnalyze('full')">📊 Análisis Completo</button>
-            <button class="ai-btn" onclick="aiAnalyze('behavior')">🧠 Mi Conducta</button>
-            <button class="ai-btn" onclick="aiAnalyze('edge')">⚡ Mi Edge</button>
-            <button class="ai-btn" onclick="aiAnalyze('risk')">🛡️ Gestión Riesgo</button>
+            <button class="ai-btn" onclick="aiAnalyze('full')">Análisis Completo</button>
+            <button class="ai-btn" onclick="aiAnalyze('behavior')">Mi Conducta</button>
+            <button class="ai-btn" onclick="aiAnalyze('edge')">Mi Edge</button>
+            <button class="ai-btn" onclick="aiAnalyze('risk')">Gestión Riesgo</button>
             <button class="ai-btn primary" id="ai-positions-btn" onclick="aiAnalyze('positions')" style="display:none">
-              🔴 Analizar Posiciones Abiertas
+              Analizar Posiciones Abiertas
             </button>
           </div>
         </div>
@@ -1324,7 +1324,7 @@ async function loadDashboard(){
     if(!b){try{const r=await bx('/openApi/swap/v2/user/balance');b=r.data?.balance;}catch(e2){balErr=e2.message;}}
     if(b){
       const eq=parseFloat(b.equity||b.balance||b.availableMargin||0);
-      accountEquity=eq;badge.textContent=eq.toFixed(2)+' USDT';badge.className='badge on';
+      accountEquity=eq;badge.textContent=eq.toFixed(2)+' USDT';badge.className='badge on';try{if(window.parent&&window.parent!==window&&Number.isFinite(eq))window.parent.postMessage({cct:'equity',value:eq},location.origin);}catch(_e){}
     }else{badge.textContent='Sin datos';badge.className='badge';
       document.getElementById('open-positions-wrap').innerHTML=`<div style="color:var(--neg);font-size:.66rem;padding:6px 0">Error BingX: ${balErr}</div>`;}
   }catch(e){console.warn('balance',e);}
@@ -1748,7 +1748,7 @@ function renderBehavior(){
   const M=window.METRICS||{};const ins=document.getElementById('behavior-insights');
   if(!M.n){ins.innerHTML='<div style="color:var(--txt3);font-size:.66rem">Sin datos suficientes.</div>';renderSessionPerf();renderDowPerf();renderHeatmap();renderRevenge();return;}
   const cards=[];const rv=M.revenge;
-  if(rv.afterLossN>=3){if(rv.afterLossExp<rv.afterWinExp-Math.abs(M.expectancy)*0.3)cards.push({t:'warn',i:'⚠',title:'Posible revenge trading',d:`Tras perder, tu resultado baja a ${rv.afterLossExp.toFixed(1)}$ vs ${rv.afterWinExp.toFixed(1)}$ tras ganar.`});else cards.push({t:'good',i:'✓',title:'Disciplina post-pérdida',d:`Tu resultado se mantiene estable tras perder. Buena gestión emocional.`});}
+  if(rv.afterLossN>=3){if(rv.afterLossExp<rv.afterWinExp-Math.abs(M.expectancy)*0.3)cards.push({t:'warn',i:'!',title:'Posible revenge trading',d:`Tras perder, tu resultado baja a ${rv.afterLossExp.toFixed(1)}$ vs ${rv.afterWinExp.toFixed(1)}$ tras ganar.`});else cards.push({t:'good',i:'✓',title:'Disciplina post-pérdida',d:`Tu resultado se mantiene estable tras perder. Buena gestión emocional.`});}
   if(rv.hasSize&&rv.afterLossSize>0&&rv.avgSize>0){const d=(rv.afterLossSize/rv.avgSize-1)*100;if(d>20)cards.push({t:'warn',i:'◭',title:'Aumentas tamaño tras perder',d:`Posición media tras pérdida es ${d.toFixed(0)}% mayor que tu media. Señal de querer recuperar.`});}
   if(M.maxTradesDay>M.avgTradesPerDay*2.5&&M.avgTradesPerDay>0)cards.push({t:'note',i:'≣',title:'Días de sobre-operación',d:`Tu día más activo (${M.maxTradesDay} ops) supera 2.5× tu media (${M.avgTradesPerDay.toFixed(1)}/día).`});
   const tLS=(M.longCount+M.shortCount)||1;const lPct=M.longCount/tLS;
@@ -1789,7 +1789,7 @@ function renderRevenge(){
   const rv=M.revenge||{};if(!rv.afterLossN||!rv.afterWinN){el.innerHTML='<div style="color:var(--txt3);font-size:.68rem">Datos insuficientes.</div>';return;}
   const al=rv.afterLossExp,aw=rv.afterWinExp;const maxA=Math.max(Math.abs(al),Math.abs(aw),1);
   const bar=(v,label)=>{const pct=Math.round(Math.abs(v)/maxA*100);const col=v>=0?'var(--pos)':'var(--neg)';return `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:.58rem;color:var(--txt2);margin-bottom:3px"><span>${label}</span><span style="color:${col};font-weight:600">${(v>=0?'+':'')+v.toFixed(2)}$</span></div><div class="sr-track"><div class="sr-fill" style="width:${pct}%;background:${col}"></div></div></div>`;};
-  const verdict=al<aw-Math.abs(M.expectancy)*0.3?`<div class="insight warn"><div class="ins-icon">⚠</div><div><div class="ins-title">Revenge trading detectado</div><div class="ins-desc">Operas peor después de perder. Regla: tras 2 pérdidas seguidas, cierra la plataforma 30 min.</div></div></div>`:`<div class="insight good"><div class="ins-icon">✓</div><div><div class="ins-title">Sin revenge trading</div><div class="ins-desc">Tu rendimiento se mantiene estable tras perder.</div></div></div>`;
+  const verdict=al<aw-Math.abs(M.expectancy)*0.3?`<div class="insight warn"><div class="ins-icon">!</div><div><div class="ins-title">Revenge trading detectado</div><div class="ins-desc">Operas peor después de perder. Regla: tras 2 pérdidas seguidas, cierra la plataforma 30 min.</div></div></div>`:`<div class="insight good"><div class="ins-icon">✓</div><div><div class="ins-title">Sin revenge trading</div><div class="ins-desc">Tu rendimiento se mantiene estable tras perder.</div></div></div>`;
   el.innerHTML=bar(aw,`Tras GANAR (${rv.afterWinN} ops)`)+bar(al,`Tras PERDER (${rv.afterLossN} ops)`)+verdict;
 }
 
@@ -2180,7 +2180,7 @@ async function renderAIPositions() {
       </div>
       <div class="ai-verdict loading" id="${id}">⟳ Analizando esta posición...</div>
       <button class="ai-btn" style="margin-top:7px;width:100%;justify-content:center" onclick="analyzePosition('${sym}','${side}',${pnl},${entry},'${id}')">
-        🔄 Re-analizar
+        Re-analizar
       </button>
     </div>`;
   }).join('');

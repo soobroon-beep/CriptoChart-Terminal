@@ -65,7 +65,7 @@
     slMult: 1.0, tp1Mult: 1.5, tp2Mult: 2.5, tp3Mult: 4.0, tpBars: 40,
     rulesText: '• Opera solo a favor de la estructura\n• Espera confirmación BOS / CHoCH\n• No operar en rango\n• Riesgo fijo por trade'
   };
-  const stars = n => '⭐'.repeat(Math.max(0, Math.min(5, n)));
+  const stars = n => '★'.repeat(Math.max(0, Math.min(5, n)));
 
 
   /* ───────────────────────── SMC: estructura de mercado + Order Blocks volumétricos ─────────────────────────
@@ -350,7 +350,7 @@
   }
   function tooltip(sg) {
     const r1 = v => (Math.round(v * 10) / 10).toString();
-    const parts = [`${sg.side === 'buy' ? '🟢 BUY' : '🔴 SELL'} ${sg.score}/5 ${stars(sg.score)}`, `OSC ${r1(sg.osc)}`, `Flow ${r1(sg.flux)}`, `ADX ${r1(sg.adx)}${sg.range ? ' (rango)' : ''}`];
+    const parts = [`${sg.side === 'buy' ? '▲ BUY' : '▼ SELL'} ${sg.score}/5 ${stars(sg.score)}`, `OSC ${r1(sg.osc)}`, `Flow ${r1(sg.flux)}`, `ADX ${r1(sg.adx)}${sg.range ? ' (rango)' : ''}`];
     if (sg.div) parts.push(sg.side === 'buy' ? 'Divergencia D+' : 'Divergencia D-');
     return parts.join(' · ');
   }

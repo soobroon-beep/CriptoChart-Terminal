@@ -2,6 +2,7 @@
    Puro (sin globales de la app): recibe el contexto g, el resultado de CCTPine.run y las funciones de escala. */
 (function (root) {
   'use strict';
+  const stripE = t => (typeof CCTI !== 'undefined' && CCTI.strip) ? CCTI.strip(t) : t; // texto del lienzo sin emojis
   const isn = v => v === null || v === undefined || v !== v;
   const fmtV = (v, prec) => v == null ? '—' : (typeof prec === 'number' && prec >= 0) ? v.toLocaleString('en-US', {minimumFractionDigits: prec, maximumFractionDigits: prec}) : Math.abs(v) >= 1000 ? v.toLocaleString('en-US', {maximumFractionDigits: 2}) : Math.abs(v) >= 1 ? v.toFixed(2) : Math.abs(v) === 0 ? '0' : v.toFixed(6);
   const SIZE = {tiny: 3.5, small: 5, auto: 7, normal: 7, large: 10, huge: 13};
@@ -148,7 +149,7 @@
           const al = b.th === 'left' ? 'left' : b.th === 'right' ? 'right' : 'center', tx = al === 'left' ? bx + 3 : al === 'right' ? bx + bw - 3 : bx + bw / 2;
           const va = b.tv === 'top' ? 'top' : b.tv === 'bottom' ? 'bottom' : 'middle';
           g.fillStyle = col(b.tci) || '#fff'; g.textAlign = al; g.textBaseline = va;
-          g.fillText(b.text, tx, va === 'top' ? by + 2 : va === 'bottom' ? by + bh - 2 : by + bh / 2 + .5);
+          g.fillText(stripE(b.text), tx, va === 'top' ? by + 2 : va === 'bottom' ? by + bh - 2 : by + bh / 2 + .5);
           g.restore();
         }
       }
@@ -207,7 +208,7 @@
         if (c.bci !== null && c.bci !== undefined && P[c.bci]) { g.fillStyle = bgOf(c.bci); g.fillRect(x, y, cw(c.c), rh(c.r)); }
         if (!c.text) continue; const fs = SZ[(c.size || 'small').replace(/^size\./, '')] || 9; g.font = fs + 'px system-ui'; g.fillStyle = (c.tci !== null && c.tci !== undefined && P[c.tci]) || '#d1d4dc';
         const al = String(c.halign || 'center').replace(/^text\./, ''); g.textAlign = al === 'left' ? 'left' : al === 'right' ? 'right' : 'center';
-        g.fillText(c.text.split('\n')[0], al === 'left' ? x + 4 : al === 'right' ? x + cw(c.c) - 4 : x + cw(c.c) / 2, y + rh(c.r) / 2, cw(c.c) - 4);
+        g.fillText(stripE(c.text.split('\n')[0]), al === 'left' ? x + 4 : al === 'right' ? x + cw(c.c) - 4 : x + cw(c.c) / 2, y + rh(c.r) / 2, cw(c.c) - 4);
       }
       if (t.frame !== null && t.frame !== undefined && P[t.frame] && t.fw > 0) { g.strokeStyle = P[t.frame]; g.lineWidth = Math.min(3, t.fw); g.strokeRect(x0, y0, W, H); }
       g.restore();
@@ -239,7 +240,7 @@
     else if (st === 'flag') { g.beginPath(); g.moveTo(x - sz * .6, y + sz); g.lineTo(x - sz * .6, y - sz); g.stroke(); g.fillRect(x - sz * .6, y - sz, sz * 1.5, sz); }
     else if (st === 'labelup' || st === 'labeldown') { drawLabel(g, {text: text || '', size: s.size, style: st === 'labelup' ? 'label_up' : 'label_down'}, x, y + (st === 'labelup' ? -sz : sz), color || undefined, tcolor, st === 'labelup' ? 'up' : 'down'); return; }
     else { g.beginPath(); g.moveTo(x - sz, y - sz); g.lineTo(x + sz, y + sz); g.moveTo(x + sz, y - sz); g.lineTo(x - sz, y + sz); g.stroke(); } // xcross
-    if (text && s.kind !== 'char' || (text && s.kind === 'char')) { g.fillStyle = tcolor || color; g.font = '10px system-ui'; g.textAlign = 'center'; g.fillText(text, x, dir <= 0 ? y - sz - 3 : y + sz + 11); }
+    if (text && s.kind !== 'char' || (text && s.kind === 'char')) { g.fillStyle = tcolor || color; g.font = '10px system-ui'; g.textAlign = 'center'; g.fillText(stripE(text), x, dir <= 0 ? y - sz - 3 : y + sz + 11); }
     g.textAlign = 'left';
   }
   // Filas del perfil de volumen (volumen, sentimiento y precios): relleno casi transparente para que no tapen las velas cuando el gráfico se acerca al perfil (el borde conserva el color).
@@ -252,7 +253,7 @@
   function drawLabel(g, lb, x, y, bg, fg, force) {
     const fs = FONT[lb.size] || 11; g.font = `${fs}px system-ui`; const text = lb.text || '', lines = text.split('\n'), tw = Math.max(0, ...lines.map(t => g.measureText(t).width)), pad = 5, w = tw + pad * 2, h = lines.length * (fs + 2) + pad * 2 - 2;
     let st = String(lb.style || 'label_down').replace(/^label_/, ''); if (force === 'up') st = 'up'; if (force === 'down') st = 'down';
-    if (st === 'none' || st === 'text_outline') { g.fillStyle = fg || '#fff'; g.textAlign = 'center'; lines.forEach((t, k) => g.fillText(t, x, y + fs + k * (fs + 2) - fs / 2)); g.textAlign = 'left'; return; }
+    if (st === 'none' || st === 'text_outline') { g.fillStyle = fg || '#fff'; g.textAlign = 'center'; lines.forEach((t, k) => g.fillText(stripE(t), x, y + fs + k * (fs + 2) - fs / 2)); g.textAlign = 'left'; return; }
     let bx = x - w / 2, by = y - h - 5; // "down": la etiqueta queda encima del punto
     if (st === 'up') by = y + 5; else if (st === 'left') { bx = x + 5; by = y - h / 2; } else if (st === 'right') { bx = x - w - 5; by = y - h / 2; } else if (st === 'center') by = y - h / 2;
     else if (st === 'lower_left') { bx = x - w; by = y + 3; } else if (st === 'lower_right') { bx = x; by = y + 3; } else if (st === 'upper_left') { bx = x - w; by = y - h - 3; } else if (st === 'upper_right') { bx = x; by = y - h - 3; }
@@ -260,7 +261,7 @@
     g.fillStyle = bg || '#2962FF'; g.beginPath(); (g.roundRect ? g.roundRect(bx, by, w, h, 3) : g.rect(bx, by, w, h)); g.fill();
     if (st === 'down' || st === 'up') { g.beginPath(); if (st === 'down') { g.moveTo(x - 4, by + h); g.lineTo(x + 4, by + h); g.lineTo(x, by + h + 5); } else { g.moveTo(x - 4, by); g.lineTo(x + 4, by); g.lineTo(x, by - 5); } g.closePath(); g.fill(); }
     }
-    g.fillStyle = fg || '#fff'; g.textAlign = 'left'; lines.forEach((t, k) => g.fillText(t, bx + pad, by + pad + fs - 2 + k * (fs + 2)));
+    g.fillStyle = fg || '#fff'; g.textAlign = 'left'; lines.forEach((t, k) => g.fillText(stripE(t), bx + pad, by + pad + fs - 2 + k * (fs + 2)));
   }
   root.CCTPineDraw = {draw, range, drawTrades, contrib, legend, fmtV};
 })(typeof self !== 'undefined' ? self : this);

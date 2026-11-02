@@ -20,14 +20,14 @@
 <div id="app">
   <header class="topbar">
     <div class="brand">
-      <div class="brand-icon"><img data-app-icon src="icons/principal-192.png" alt="VORTEX" width="34" height="34"></div>
+      <div class="brand-icon"><img data-app-icon src="icons/principal-192.png" alt="VORTEX" width="28" height="28"></div>
       <div><strong>VORTEX</strong><small>Powered by Nova Nexus</small></div>
     </div>
     <div class="top-actions">
       <span id="connection" class="connection">● Conectando</span>
       <button id="accountBtn" class="account-btn" hidden>Iniciar sesión</button>
-      <button id="settingsBtn" class="icon-btn" title="Ajustes" aria-label="Ajustes">⚙</button>
-      <button id="themeBtn" title="Cambiar tema" class="icon-btn">◐</button>
+      <button id="settingsBtn" class="icon-btn" title="Ajustes" aria-label="Ajustes"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      <button id="themeBtn" title="Cambiar tema" class="icon-btn"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg></button>
     </div>
   </header>
 
@@ -43,6 +43,7 @@
       <button class="rr-btn" data-side="lensView" data-tip="Nexus Lens · mi cuenta" aria-label="Nexus Lens · mi cuenta"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.8 17.5V6.5l6.4 11v-11"/><path d="M14 6.5v11h7.2"/></svg></button>
       <button class="rr-btn" data-side="alertsView" data-tip="Alertas" aria-label="Alertas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/></svg></button>
       <button class="rr-btn" data-side="aiView" data-tip="IA" aria-label="IA"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3l1.9 5.3L18 10l-5.1 1.7L11 17l-1.9-5.3L4 10l5.1-1.7z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></svg></button>
+      <button class="rr-btn rr-acct-bar" id="acctBar" data-acct-bar data-acct-open data-tip="Saldo de la cuenta" aria-label="Saldo de la cuenta" type="button"><span class="ab-track"><span class="ab-fill"></span><span class="ab-mark"></span></span><span class="ab-val">—</span></button>
       <button class="rr-btn rr-end" id="rrAccount" data-tip="Iniciar sesión" aria-label="Iniciar sesión" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.8-3.6 3.7-5.4 7-5.4s6.2 1.8 7 5.4"/></svg></button>
       <button class="rr-btn" data-side="settingsView" data-tip="Ajustes" aria-label="Ajustes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
     </nav>
@@ -63,7 +64,7 @@
         <div><span>Ganando 24h</span><strong id="winners">—</strong></div>
         <div><span>Perdiendo 24h</span><strong id="losers">—</strong></div>
       </div>
-      <div class="search"><span>⌕</span><input id="searchCoins" type="search" placeholder="Buscar BTC, ETH, SOL..." autocomplete="off"></div>
+      <div class="search"><span><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.500"/><path d="m16 16 4.500 4.500"/></svg></span><input id="searchCoins" type="search" placeholder="Buscar BTC, ETH, SOL..." autocomplete="off"></div>
       <div class="list-heading"><span>ACTIVO</span><span>ÚLTIMO PRECIO / 24H</span></div>
       <div id="watchRows" class="watch-rows"></div>
       <p class="small-note">Cotizaciones públicas de Binance Spot. No se ejecutan operaciones. Toca un activo para abrir su gráfico.</p>
@@ -97,21 +98,20 @@
       <div class="chart-toolbar">
         <button id="tfBtn" class="tf-btn" aria-haspopup="true" aria-expanded="false" title="Temporalidad">1h ▾</button>
         <button data-panel="indicators">ƒx <span id="indicatorCount">Indicadores</span></button>
-        <button data-panel="tools">✎ Dibujar</button>
-        <button id="undoDraw" title="Deshacer">↶</button>
-        <button id="deleteDraw" class="danger" hidden>🗑 Borrar</button>
+        <button data-panel="tools"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4L16.500 4.500a2.100 2.100 0 0 1 3 3L8 19z"/><path d="m14.500 6.500 3 3"/></svg> Dibujar</button>
+        <button id="undoDraw" title="Deshacer"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+        <button id="deleteDraw" class="danger" hidden><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg> Borrar</button>
         <button id="moreBtn" class="more-btn" aria-haspopup="true" aria-expanded="false" aria-label="Más opciones" title="Más opciones">⋯</button>
         <span class="more-group" id="moreGroup">
-          <button id="fitChart">⤢ Ajustar</button>
-          <button id="fullscreen">⛶ Expandir</button>
-          <button id="layoutBtn" title="Dividir el gráfico">▢ Diseño</button>
-          <button id="ctypeBtn" title="Tipo de vela">🕯 Velas</button>
-          <button id="chartStyleBtn" title="Aspecto del gráfico">🎨 Aspecto</button>
+          <button id="fitChart"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/><path d="m9 15-5 5M15 9l5-5" opacity=".0"/></svg> Ajustar</button>
+          <button id="fullscreen"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg> Expandir</button>
+          <button id="layoutBtn" title="Dividir el gráfico"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg> Diseño</button>
+          <button id="ctypeBtn" title="Tipo de vela"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M17 6v13"/><rect x="5" y="8" width="4" height="7" rx=".6" fill="currentColor"/><rect x="15" y="9" width="4" height="6" rx=".6"/></svg> Velas</button>
         </span>
       </div>
       </div>
       <div class="chart-area" id="chartArea">
-        <div class="brand-fab" title="VORTEX · Powered by Nova Nexus" aria-label="VORTEX · Powered by Nova Nexus"><img data-app-icon src="icons/principal-192.png" alt="VORTEX" width="22" height="22"><span class="bf-tip"><b>VORTEX</b><small>Powered by Nova Nexus</small></span></div>
+        <div class="brand-fab" title="VORTEX · Powered by Nova Nexus" aria-label="VORTEX · Powered by Nova Nexus"><img data-app-icon src="icons/principal-192.png" alt="VORTEX" width="24" height="24"><span class="bf-tip"><b>VORTEX</b><small>Powered by Nova Nexus</small></span></div>
         <div class="chart-label">
           <strong id="chartLabel">BTCUSDT</strong> <span id="intervalLabel">1h</span> <span id="liveDot" class="live-dot" title="Tiempo real"></span>
           <button id="legToggle" class="leg-toggle" type="button" aria-expanded="false" hidden><span id="legCount">0 indicadores</span></button>
@@ -164,6 +164,8 @@
         <button class="primary" id="alAdd" style="margin-top:0">＋ Crear alerta de precio</button>
         <button class="small-button" id="alInd" style="padding:14px;font-size:14px">ƒx Crear alerta con indicador</button>
       </div>
+      <div class="section-label">MOVIMIENTOS BRUSCOS</div>
+      <div id="moveBox" class="settings-list"></div>
       <div id="alertList" class="settings-list"></div>
       <p class="small-note">Las alertas se revisan mientras la app está abierta (cada pocos segundos, o al instante con el gráfico en vivo). Avisan con mensaje, sonido y vibración; las notificaciones del sistema requieren tu permiso. No ejecutan órdenes. Se guardan en este dispositivo y en tu cuenta si iniciaste sesión.</p>
     </section>
@@ -187,6 +189,14 @@
         <div><b>Tema</b><small>Interfaz clara u oscura</small></div>
         <button id="themeSetting" class="small-button">Cambiar</button>
       </div>
+      <div class="setting-row">
+        <div><b>Aspecto del gráfico</b><small>Colores, cuadrícula y cursor. En computadora también con clic derecho sobre el gráfico</small></div>
+        <button id="chartStyleSetting" class="small-button">Abrir</button>
+      </div>
+      <div class="setting-row">
+        <div><b>Saldo de la cuenta</b><small id="acctSub">Sin configurar</small><div class="ab-h" data-acct-bar><span class="ab-fill"></span></div></div>
+        <button class="small-button" data-acct-open type="button">Editar</button>
+      </div>
       <div id="appInstall"></div>
       <div class="section-label">DATOS Y SEGUIMIENTO</div>
       <button class="setting-row action-row" id="exportData"><span>Exportar mi configuración (JSON)</span><span>↗</span></button>
@@ -197,11 +207,11 @@
   </main>
 
   <nav class="bottom-nav" aria-label="Navegación">
-    <button data-view="watchView" class="active"><span>☷</span><small>Seguimiento</small></button>
-    <button data-view="chartView"><span>▥</span><small>Gráfico</small></button>
-    <button data-view="newsView"><span>▤</span><small>Noticias</small></button>
-    <button data-view="aiView"><span>✦</span><small>IA</small></button>
-    <button data-view="alertsView"><span>◔</span><small>Alertas</small></button>
+    <button data-view="watchView" class="active"><span><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.500" cy="6" r="1.100"/><circle cx="4.500" cy="12" r="1.100"/><circle cx="4.500" cy="18" r="1.100"/></svg></span><small>Seguimiento</small></button>
+    <button data-view="chartView"><span><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 20V10M12 20V4M18 20v-7"/></svg></span><small>Gráfico</small></button>
+    <button data-view="newsView"><span><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h11a1 1 0 0 1 1 1v13H6a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1z"/><path d="M17 9h3v8a2 2 0 0 1-2 2"/><path d="M8 9h6M8 13h6"/></svg></span><small>Noticias</small></button>
+    <button data-view="aiView"><span><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3l1.900 5.300L18 10l-5.100 1.700L11 17l-1.900-5.300L4 10l5.100-1.700z"/><path d="M19 16l.8 2.200L22 19l-2.200.8L19 22l-.8-2.200L16 19l2.200-.8z"/></svg></span><small>IA</small></button>
+    <button data-view="alertsView"><span><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/></svg></span><small>Alertas</small></button>
     <button data-view="lensView"><span class="nl-mark">NL</span><small>Lens</small></button>
   </nav>
 
@@ -215,6 +225,7 @@
   <div id="toast" role="status"></div>
 </div>
 <script src="firebase-config.js"></script>
+<script src="icons.js"></script>
 <script src="markets.js"></script>
 <script src="indicators.js"></script>
 <script src="patterns.js"></script>

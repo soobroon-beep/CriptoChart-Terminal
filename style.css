@@ -493,9 +493,9 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .brand-fab{display:none}
 @media(min-width:1024px){
   .topbar,.chart-mode .topbar,.expanded .topbar{display:none!important}
-  .brand-fab{display:flex;align-items:center;position:absolute;left:10px;bottom:36px;z-index:6;height:36px;opacity:.85;transition:opacity .15s}
-  .brand-fab:hover{opacity:1}.brand-fab img{width:34px;height:34px;border-radius:9px;display:block;box-shadow:0 2px 10px #0006}
-  .brand-fab .bf-tip{position:absolute;left:42px;bottom:0;display:none;flex-direction:column;white-space:nowrap;background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:6px 10px;box-shadow:0 6px 18px #0008}
+  .brand-fab{display:flex;align-items:center;position:absolute;left:10px;bottom:36px;z-index:6;height:26px;opacity:.85;transition:opacity .15s}
+  .brand-fab:hover{opacity:1}.brand-fab img{width:24px;height:24px;border-radius:0;display:block;object-fit:contain;background:none;box-shadow:none;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5))}
+  .brand-fab .bf-tip{position:absolute;left:32px;bottom:0;display:none;flex-direction:column;white-space:nowrap;background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:6px 10px;box-shadow:0 6px 18px #0008}
   .brand-fab:hover .bf-tip{display:flex}.bf-tip b{font-size:12px;letter-spacing:1.5px;color:#edf3fc}.bf-tip small{font-size:10px;color:#8796ab}
   .right-rail{top:0}
 }
@@ -513,3 +513,54 @@ body.pane #chartView{display:flex!important;height:100dvh}
 
 .ind-row{display:flex;align-items:center;gap:12px}.ind-row>div:not(.script-btns){flex:1;min-width:0}.ind-row .script-btns{flex:none}
 .ind-art{flex:none;display:grid;place-items:center;width:48px;height:32px;border-radius:8px;background:rgba(127,140,160,.1)}
+
+/* ── Barra de progreso de la cuenta ── */
+body.pane .right-rail{display:none!important}
+.right-rail .rr-acct-bar{height:auto;min-height:36px;margin-top:auto;padding:2px 0 3px;flex-direction:column;gap:3px;display:flex;align-items:center;justify-content:center}
+.right-rail .rr-acct-bar+.rr-btn.rr-end{margin-top:0}
+.rr-acct-bar .ab-track{position:relative;display:block;width:10px;height:clamp(40px,11vh,84px);border-radius:6px;background:rgba(127,140,160,.18);border:1px solid var(--line);overflow:hidden}
+.rr-acct-bar .ab-fill{position:absolute;left:0;right:0;bottom:0;height:var(--ab-p,0%);border-radius:5px;transition:height .5s ease,background .5s ease}
+.rr-acct-bar .ab-mark{position:absolute;left:0;right:0;top:50%;height:1px;background:var(--text);opacity:.55}
+.rr-acct-bar .ab-val{font-size:9px;font-weight:800;line-height:1;color:var(--muted);letter-spacing:-.2px;font-variant-numeric:tabular-nums}
+.rr-acct-bar.empty .ab-track{border-style:dashed;opacity:.7}
+.rr-acct-bar.broke .ab-track{border-color:var(--red);box-shadow:0 0 0 1px color-mix(in srgb,var(--red) 40%,transparent)}
+.ab-h{position:relative;height:8px;margin-top:8px;border-radius:5px;background:rgba(127,140,160,.18);border:1px solid var(--line);overflow:hidden;max-width:260px}
+.ab-h::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--text);opacity:.5}
+.ab-h .ab-fill{position:absolute;left:0;top:0;bottom:0;width:var(--ab-p,0%);border-radius:5px;transition:width .5s ease,background .5s ease}
+.ab-h.empty{border-style:dashed}.ab-h.broke{border-color:var(--red)}
+.acct-pop{position:fixed;z-index:80;right:calc(var(--rail-w,52px) + 10px);bottom:70px;width:min(310px,calc(100vw - 24px));display:flex;flex-direction:column;gap:10px;padding:14px;background:var(--raised);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+.acct-pop b{font-size:14px}.acct-pop small{font-size:11.5px;color:var(--muted);line-height:1.4}
+.acct-pop label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
+.acct-pop input[type=text],.acct-pop input:not([type]){background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-size:14px}
+.acct-pop .ac-chk{flex-direction:row;align-items:flex-start;gap:8px;font-size:11.5px}.acct-pop .ac-chk input{margin-top:2px}
+.acct-pop .ac-btns{display:flex;gap:8px;justify-content:flex-end}.acct-pop .ac-btns .primary{margin:0;padding:8px 16px;font-size:13px;border-radius:10px;width:auto}
+@media(max-width:1023px){.acct-pop{right:12px;left:12px;width:auto;bottom:84px}}
+
+/* ── Hasta 5 gráficos (solo pantallas anchas) ── */
+.pane-fr{display:none;border:0;width:100%;height:100%;background:var(--bg);min-height:0}
+#pane2{grid-area:pane}#pane3{grid-area:pane3}#pane4{grid-area:pane4}#pane5{grid-area:pane5}
+#layoutBtn svg,#layoutMenu svg{vertical-align:-3px}
+@media(min-width:1024px){
+  body.split-3 .pane-fr,body.split-4 .pane-fr,body.split-5 .pane-fr,body.split-3 #pane2,body.split-4 #pane2,body.split-5 #pane2{display:block;border-left:1px solid var(--line);border-top:1px solid var(--line)}
+  body.split-3 main{grid-template-columns:var(--wl-w) minmax(0,1.5fr) minmax(0,1fr) var(--side-w);grid-template-rows:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"watch chart pane side" "watch chart pane3 side"}
+  body.split-4 main{grid-template-columns:var(--wl-w) minmax(0,1fr) minmax(0,1fr) var(--side-w);grid-template-rows:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"watch chart pane side" "watch pane3 pane4 side"}
+  body.split-5 main{grid-template-columns:var(--wl-w) repeat(6,minmax(0,1fr)) var(--side-w);grid-template-rows:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"watch chart chart chart pane pane pane side" "watch pane3 pane3 pane4 pane4 pane5 pane5 side"}
+  body.split-3.expanded main{grid-template-columns:var(--wl-w) minmax(0,1.5fr) minmax(0,1fr);grid-template-areas:"watch chart pane" "watch chart pane3"}
+  body.split-4.expanded main{grid-template-columns:var(--wl-w) minmax(0,1fr) minmax(0,1fr);grid-template-areas:"watch chart pane" "watch pane3 pane4"}
+  body.split-5.expanded main{grid-template-columns:var(--wl-w) repeat(6,minmax(0,1fr));grid-template-areas:"watch chart chart chart pane pane pane" "watch pane3 pane3 pane4 pane4 pane5 pane5"}
+  body.split-3 #chartView,body.split-4 #chartView,body.split-5 #chartView{min-height:0}
+}
+
+/* ── Avisos de movimientos bruscos ── */
+.move-row.up b{color:var(--green)}.move-row.down b{color:var(--red)}
+#moveBox .pane-sel{max-width:170px}
+
+/* ── Iconos (icons.js) ── */
+svg.ic{display:inline-block;vertical-align:-3px;flex:none}
+.bottom-nav button>span svg.ic{display:block;margin:0 auto}
+.search>span svg.ic{vertical-align:-4px}
+
+/* ── Iconos (icons.js) ── */
+svg.ic{display:inline-block;vertical-align:-3px;flex:none}
+.bottom-nav button>span svg.ic{display:block;margin:0 auto}
+.search>span svg.ic{vertical-align:-4px}
