@@ -68,7 +68,11 @@
   const network = () => { offline.hidden = navigator.onLine; }; network();
   window.addEventListener('online', network); window.addEventListener('offline', network);
   if ('serviceWorker' in navigator && window.isSecureContext) {
-    navigator.serviceWorker.addEventListener('controllerchange', () => { if (reloadForUpdate) location.reload(); });
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { // versión nueva lista: se recarga una sola vez para no quedarse con código viejo
+      let last = 0; try { last = +sessionStorage.getItem('cct_sw_reload') || 0; } catch {}
+      if ((reloadForUpdate || hadController) && Date.now() - last > 60000) { try { sessionStorage.setItem('cct_sw_reload', String(Date.now())); } catch {} location.reload(); }
+    });
     const showUpdate = worker => { waitingWorker = worker; root.querySelector('#updateApp').hidden = false; };
     root.querySelector('#updateApp').addEventListener('click', () => { if (waitingWorker) { reloadForUpdate = true; waitingWorker.postMessage({type: 'ACTIVATE_UPDATE'}); } });
     navigator.serviceWorker.register('./sw.js', {scope: './', updateViaCache: 'none'}).then(reg => {

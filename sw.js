@@ -1,13 +1,13 @@
 'use strict';
 // Bump this version when changing cached application files. No API responses or account data are cached.
-const CACHE = 'cct-shell-v42';
+const CACHE = 'cct-shell-v43';
 const ROOT = new URL('./', self.location.href);
 const SHELL = ['index.html', 'style.css', 'glass.css', 'pwa.css', 'pwa-icons.js', 'pwa.js', 'icons.js',
   'app.js', 'screener.js', 'firebase-config.js', 'markets.js', 'indicators.js', 'patterns.js', 'nova-nexus.js', 'catalog.js', 'pine.js',
   'pine-draw.js', 'pine-settings.js', 'news.js', 'ai.js', 'ai-ui.js', 'fx.js', 'lens.html'];
 const ASSETS = new Set(SHELL.map(p => new URL(p, ROOT).href));
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL.map(p => new Request(new URL(p, ROOT), {cache:'reload'})))));
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL.map(p => new Request(new URL(p, ROOT), {cache:'reload'})))).then(() => self.skipWaiting())); // la versión nueva se activa sola
 });
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
@@ -28,7 +28,7 @@ self.addEventListener('fetch', event => {
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
     try {
-      const response = await fetch(req);
+      const response = await fetch(req, {cache: 'no-cache'}); // siempre se revalida: sin esto el navegador podía servir código viejo hasta 10 min
       if (response.ok && response.type !== 'opaque' && !response.redirected) await cache.put(key, response.clone());
       return response;
     } catch {

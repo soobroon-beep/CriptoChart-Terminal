@@ -171,7 +171,8 @@ let uid = cloudEnabled ? lsGet(LASTUID) : null, fbUser = null, auth = null, db =
 const storeKey = () => uid ? `${STORE}_${uid}` : STORE;
 const readLocal = key => { try { return JSON.parse(lsGet(key) || '{}'); } catch { return {}; } };
 const LAY_KEY = 'cct_layout_pref_v1', LAY_OK = ['1', '2v', '2h', '3', '4', '5']; // el diseño (1 a 5 gráficos) depende de la pantalla de cada dispositivo: se guarda aquí y no lo pisa la nube
-const withLocalLayout = o => { const lp = lsGet(LAY_KEY); return lp && LAY_OK.includes(lp) && o && typeof o === 'object' ? {...o, layout: lp} : o; };
+let layoutNow = null; // diseño en uso en este dispositivo (se actualiza al elegirlo)
+const withLocalLayout = o => { const lp = lsGet(LAY_KEY) || layoutNow; return lp && LAY_OK.includes(lp) && o && typeof o === 'object' ? {...o, layout: lp} : o; };
 let state = merge(withLocalLayout(readLocal(storeKey()))), stateUid = uid; // stateUid: de qué cuenta viene el estado en memoria
 if (PANE) { document.body.classList.add('pane'); const q = new URLSearchParams(location.search); if (!lsGet(STORE)) { state.symbol = /^[A-Z0-9]{5,15}$/.test(q.get('sym') || '') ? q.get('sym') : ['ETHUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'][PANE_N - 1]; } state.light = q.get('light') === '1'; }
 const dirtyKey = () => uid ? `${STORE}_dirty_${uid}` : null;
@@ -3127,7 +3128,7 @@ function updateAutoBtn() { const b = $('#autoScale'); if (b) b.hidden = !priceMa
 $('#autoScale').onclick = () => { priceMan = null; updateAutoBtn(); render(); };
 $('#zoomIn').onclick = () => glide({visible: clamp((glideT && glideT.visible != null ? glideT.visible : visible) / 1.3, 15, 400)});
 $('#zoomOut').onclick = () => glide({visible: clamp((glideT && glideT.visible != null ? glideT.visible : visible) * 1.3, 15, 400)});
-$('#fitChart').onclick = fit;
+
 /* Clic derecho sobre el gráfico (como en TradingView): Restablecer gráfico = vuelve el zoom, el desplazamiento, la escala de precio y las alturas de los paneles a su tamaño original */
 function resetChart() {
   priceMan = null; paneMan = {_k: state.symbol + '|' + state.interval}; if (typeof paneH === 'object') { for (const k of Object.keys(paneH)) delete paneH[k]; savePaneH(); }
@@ -3143,9 +3144,9 @@ area.addEventListener('contextmenu', e => {
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
   m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'reset') resetChart(); else if (b.dataset.a === 'style') openChartStyle(); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
 });
-function syncFullscreenLabel() { $('#fullscreen').innerHTML = document.body.classList.contains('expanded') ? I('shrink', 16) + ' Reducir' : I('expand', 16) + ' Expandir'; }
+function syncFullscreenLabel() {} // los botones Expandir y Ajustar ya no existen (se hace con el doble toque y el botón A)
 const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} syncUi(); scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
-$('#fullscreen').onclick = () => { document.body.classList.toggle('expanded'); syncFullscreenLabel(); requestAnimationFrame(render); };
+
 if (window.ResizeObserver) new ResizeObserver(() => scheduleRender()).observe(area);
 window.addEventListener('resize', scheduleRender);
 
@@ -3863,7 +3864,7 @@ if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud(); if (!PANE) refreshPop();
 
 /* Solo para pruebas automáticas: se activa añadiendo ?cct_debug=1 a la dirección */
-if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
+if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
 
 /* ───────── Puente para el Screener (screener.js) ───────── */
 window.CCT_host = {
@@ -3949,11 +3950,11 @@ if (PANE) {
     m.innerHTML = LAYOUTS.filter(l => !(l[0] === '2v' && innerWidth < 700) && !(['3', '4', '5'].includes(l[0]) && innerWidth < 1024)).map(l => `<button data-ly="${l[0]}" class="${state.layout === l[0] ? 'on' : ''}"><span>${LAY_ICON(l[0])}</span>${l[1]}</button>`).join('');
     const r = e.currentTarget.getBoundingClientRect(); document.body.appendChild(m);
     m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.top = Math.min(innerHeight - m.offsetHeight - 8, r.bottom + 6) + 'px';
-    m.onclick = ev => { const k = ev.target.closest('[data-ly]'); if (!k) return; state.layout = k.dataset.ly; try { localStorage.setItem(LAY_KEY, state.layout); } catch {} save(); applyLayout(); m.remove(); };
+    m.onclick = ev => { const k = ev.target.closest('[data-ly]'); if (!k) return; state.layout = layoutNow = k.dataset.ly; try { localStorage.setItem(LAY_KEY, state.layout); } catch {} save(); applyLayout(); m.remove(); };
     setTimeout(() => document.addEventListener('click', function f() { m.remove(); document.removeEventListener('click', f); }), 0);
   };
   window.addEventListener('resize', () => { if (document.body.dataset.lay !== effLayout()) applyLayout(); });
-  applyLayout();
+  layoutNow = state.layout; applyLayout();
 }
 setInterval(fetchTicker, 30000);
 setInterval(() => { if (!document.hidden && !PANE) refreshPop(); }, 120000);
