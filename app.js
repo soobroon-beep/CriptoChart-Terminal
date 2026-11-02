@@ -170,7 +170,9 @@ const lsGet = k => { try { return localStorage.getItem(k); } catch { return null
 let uid = cloudEnabled ? lsGet(LASTUID) : null, fbUser = null, auth = null, db = null, unsubCloud = null, unsubScripts = null, pushTimer = 0, lastRemote = '', syncStatus = '';
 const storeKey = () => uid ? `${STORE}_${uid}` : STORE;
 const readLocal = key => { try { return JSON.parse(lsGet(key) || '{}'); } catch { return {}; } };
-let state = merge(readLocal(storeKey())), stateUid = uid; // stateUid: de qué cuenta viene el estado en memoria
+const LAY_KEY = 'cct_layout_pref_v1', LAY_OK = ['1', '2v', '2h', '3', '4', '5']; // el diseño (1 a 5 gráficos) depende de la pantalla de cada dispositivo: se guarda aquí y no lo pisa la nube
+const withLocalLayout = o => { const lp = lsGet(LAY_KEY); return lp && LAY_OK.includes(lp) && o && typeof o === 'object' ? {...o, layout: lp} : o; };
+let state = merge(withLocalLayout(readLocal(storeKey()))), stateUid = uid; // stateUid: de qué cuenta viene el estado en memoria
 if (PANE) { document.body.classList.add('pane'); const q = new URLSearchParams(location.search); if (!lsGet(STORE)) { state.symbol = /^[A-Z0-9]{5,15}$/.test(q.get('sym') || '') ? q.get('sym') : ['ETHUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'][PANE_N - 1]; } state.light = q.get('light') === '1'; }
 const dirtyKey = () => uid ? `${STORE}_dirty_${uid}` : null;
 const save = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
@@ -3692,7 +3694,7 @@ function applyState(data, soft = false) {
   // Cambio remoto (nube) sobre el mismo gráfico: no se toca nada mientras el dedo está sobre el gráfico y, si no cambió nada, no se hace nada.
   // Antes cada aviso de la nube borraba la escala de precio manual (y el trazo en curso) y el gráfico «saltaba» de vuelta a la escala automática.
   if (sameChart && (gest || pinch)) { clearTimeout(applyState.t); applyState.t = setTimeout(() => applyState(data, soft), 350); return; }
-  const next = merge(data);
+  const next = merge(withLocalLayout(data));
   if (sameChart && JSON.stringify(next) === JSON.stringify(state)) return;
   const prevSource = state.source; state = next; applyUi(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource();
   if (sameChart) { drawHist.u.length = drawHist.r.length = 0; updateDrawUI(); } else clearTransient(); // mismo gráfico: se conserva la escala manual, la retícula y lo que se esté dibujando
@@ -3947,7 +3949,7 @@ if (PANE) {
     m.innerHTML = LAYOUTS.filter(l => !(l[0] === '2v' && innerWidth < 700) && !(['3', '4', '5'].includes(l[0]) && innerWidth < 1024)).map(l => `<button data-ly="${l[0]}" class="${state.layout === l[0] ? 'on' : ''}"><span>${LAY_ICON(l[0])}</span>${l[1]}</button>`).join('');
     const r = e.currentTarget.getBoundingClientRect(); document.body.appendChild(m);
     m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.top = Math.min(innerHeight - m.offsetHeight - 8, r.bottom + 6) + 'px';
-    m.onclick = ev => { const k = ev.target.closest('[data-ly]'); if (!k) return; state.layout = k.dataset.ly; save(); applyLayout(); m.remove(); };
+    m.onclick = ev => { const k = ev.target.closest('[data-ly]'); if (!k) return; state.layout = k.dataset.ly; try { localStorage.setItem(LAY_KEY, state.layout); } catch {} save(); applyLayout(); m.remove(); };
     setTimeout(() => document.addEventListener('click', function f() { m.remove(); document.removeEventListener('click', f); }), 0);
   };
   window.addEventListener('resize', () => { if (document.body.dataset.lay !== effLayout()) applyLayout(); });
