@@ -1696,7 +1696,7 @@ function placeFavBar() {
 }
 function renderFavBar() {
   const ar = $('#chartArea'); if (!ar) return; let bar = $('#favBar');
-  const on = !PANE && FB.show && isDesktop();
+  const on = !PANE && FB.show;
   if (!on) { if (bar) bar.remove(); return; }
   if (!bar) { bar = document.createElement('div'); bar.id = 'favBar'; bar.className = 'favbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Herramientas favoritas'); ar.appendChild(bar); }
   const tools = favTools();
@@ -1725,6 +1725,10 @@ function setFavBar(show) { FB.show = !!show; syncUi(); renderFavBar(); toast(FB.
     setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
     m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'hide') setFavBar(false); else { FB.x = FB.y = null; syncUi(); placeFavBar(); } };
   }, true);
+  { let lp = null; // celular: mantener presionado el asa abre el mismo menú
+    ar.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch' || !e.target.closest('.fb-grip')) return; const x = e.clientX, y = e.clientY; clearTimeout(lp); lp = setTimeout(() => { lp = null; ar.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: x, clientY: y})); }, 600); });
+    ['pointermove', 'pointerup', 'pointercancel'].forEach(t => addEventListener(t, () => { if (lp) { clearTimeout(lp); lp = null; } }));
+  }
   window.addEventListener('resize', () => { renderFavBar(); });
   deskMQ.addEventListener && deskMQ.addEventListener('change', renderFavBar);
 }
@@ -2106,6 +2110,7 @@ function openChartStyle() {
   }});
 }
 { const b = $('#chartStyleSetting'); if (b) b.onclick = openChartStyle; }
+{ const b = $('#favBarSetting'); if (b) b.onclick = () => setFavBar(!FB.show); }
 function ctypeLabel() { const c = CTYPES.find(x => x[0] === state.ctype) || CTYPES[0]; return I(c[2], 16) + ' ' + c[1]; }
 function syncCtypeBtn() { const b = $('#ctypeBtn'); if (b) b.innerHTML = ctypeLabel(); }
 $('#ctypeBtn').onclick = e => {
@@ -3200,7 +3205,7 @@ area.addEventListener('contextmenu', e => {
   if (e.target.closest('.chart-label, .leg-row, button, .pop-menu, .favbar')) return;
   e.preventDefault(); document.querySelectorAll('.chart-ctx').forEach(x => x.remove());
   const m = document.createElement('div'); m.className = 'pop-menu chart-ctx';
-  m.innerHTML = `<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${isDesktop() && !PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
+  m.innerHTML = `<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
   document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
   const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
