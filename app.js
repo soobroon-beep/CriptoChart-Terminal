@@ -3979,7 +3979,7 @@ if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud(); if (!PANE) refreshPop();
 
 /* Solo para pruebas automáticas: se activa añadiendo ?cct_debug=1 a la dirección */
-if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, save, setDrawings, pickTool, get FB() { return FB; }, get FAVS() { return FAVS; }, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, get view() { return {pan, visible}; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
+if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, save, setDrawings, pickTool, get FB() { return FB; }, get FAVS() { return FAVS; }, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, toggleFav, get view() { return {pan, visible}; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
 
 /* ───────── Puente para el Screener (screener.js) ───────── */
 window.CCT_host = {
