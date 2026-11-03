@@ -2146,7 +2146,15 @@ const legStep = () => legBtnH() + 4; // separación vertical entre filas con bot
 function legAt(text, x, y, act, dim) { legRows.push({x: x + g.measureText(text).width + 8, y: y - Math.round(legBtnH() / 2 + 5), act, dim: !!dim}); }
 /* Leyenda de indicadores plegable: cerrada solo se ve «N indicadores»; abierta muestra nombres, valores y botones (ocultar, ajustes, eliminar) */
 let legOpen = lsGet('cct_legOpen_v1') === '1', legN = 0;
-function legLabel(text, x, y, act, dim) { legN++; if (!legOpen) return; const f = g.font; g.font = LEG_FONT; g.fillText(text, x, y); legAt(text, x, y, act, dim); g.font = f; }
+function legLabel(text, x, y, act, dim) {
+  legN++; if (!legOpen) return; const f = g.font; g.font = LEG_FONT;
+  const css = getComputedStyle(document.documentElement), muted = css.getPropertyValue('--muted').trim().toLowerCase(), fg = css.getPropertyValue('--text').trim();
+  if (fg) { // nombres más legibles: activos casi blancos (los que traen su propio color no se tocan) y ocultos atenuados pero claros
+    if (dim) { g.fillStyle = fg; g.globalAlpha = .6; }
+    else if (String(g.fillStyle).toLowerCase() === muted) g.fillStyle = fg;
+  }
+  g.fillText(text, x, y); legAt(text, x, y, act, dim); g.font = f;
+}
 function syncLegToggle() {
   const b = $('#legToggle'); if (!b) return; b.hidden = !legN; if (!legN) return;
   $('#legCount').textContent = legN === 1 ? '1 indicador' : legN + ' indicadores';

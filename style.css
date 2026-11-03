@@ -628,3 +628,5 @@ body.pane .favbar{display:none}
   .sym-body{grid-template-rows:auto 1fr}.sym-sp{flex-basis:56px}.sym-sp .spark{width:56px}.sym-px{flex-basis:84px}
 }
 .ex-dom{color:#20bf9f}
+
+.sym-top,.sym-tabs,.sym-search,.sym-foot{flex:0 0 auto}.sym-tabs{min-height:46px;align-items:center}

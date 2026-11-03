@@ -33,16 +33,27 @@ function merge(old, add, keep, bucket) { // une series [t,v] sin repetir hueco (
   return [...m.entries()].filter(([t]) => t >= lim).sort((a, b) => a[0] - b[0]).map(([t, v]) => [t, +v.toFixed(4)]);
 }
 
-async function backfill() { // [t, % USDT] diario, o null si CoinGecko no entrega el total histórico
-  try {
-    const tether = await getJSON(`${API}/coins/tether/market_chart?vs_currency=usd&days=365&interval=daily`); await sleep(2500);
-    const total = await getJSON(`${API}/global/market_cap_chart?days=365&vs_currency=usd`);
-    const tc = tether.market_caps || [], gc = (total.market_cap_chart && total.market_cap_chart.market_cap) || total.market_caps || [];
-    if (!tc.length || !gc.length) return null;
-    const g = new Map(gc.map(([t, v]) => [Math.floor(t / D), v])), out = [];
-    for (const [t, v] of tc) { const tot = g.get(Math.floor(t / D)); if (tot > 0 && v > 0) out.push([Math.floor(t / D) * D, v / tot * 100]); }
-    return out.length > 30 ? out : null;
-  } catch (e) { console.warn('Sin historial previo de CoinGecko:', e.message); return null; }
+/* Historial de la dominancia. CoinGecko no entrega gratis la capitalización total histórica, así que se reconstruye:
+   total(día) = suma de la capitalización de las ~40 monedas más grandes con 1 año completo de datos × k, con k = (total real de hoy) / (suma de esas monedas hoy).
+   USDT.D = capitalización de Tether / total(día). Es una aproximación (la cola de monedas pequeñas se supone proporcional), por eso se marca como «reconstruido». Solo se corre a mano (BACKFILL=1). */
+async function backfill(realTotal) {
+  const top = await getJSON(`${API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=60&page=1`); await sleep(6000);
+  const ids = top.map(c => c.id), series = {}, N = 40;
+  for (const id of ids) {
+    if (Object.keys(series).length >= N) break;
+    try {
+      const j = await getJSON(`${API}/coins/${id}/market_chart?vs_currency=usd&days=365&interval=daily`), m = new Map();
+      for (const [t, v] of j.market_caps || []) if (v > 0) m.set(Math.floor(t / D) * D, v);
+      if (m.size >= 360) series[id] = m; else console.log('omitida (poco historial):', id, m.size);
+    } catch (e) { console.warn('omitida', id, e.message); }
+    await sleep(6500);
+  }
+  if (!series.tether || Object.keys(series).length < 15) { console.warn('Muy pocas monedas con historial:', Object.keys(series).length); return null; }
+  const days = [...series.tether.keys()].sort((a, b) => a - b), sums = days.map(d => Object.values(series).reduce((a, m) => a + (m.get(d) || 0), 0));
+  const k = realTotal / sums[sums.length - 1], out = {'USDT.D': [], 'BTC.D': []};
+  days.forEach((d, i) => { const tot = sums[i] * k; if (!(tot > 0)) return; out['USDT.D'].push([d, series.tether.get(d) / tot * 100]); if (series.bitcoin && series.bitcoin.get(d)) out['BTC.D'].push([d, series.bitcoin.get(d) / tot * 100]); });
+  console.log(`Reconstruido con ${Object.keys(series).length} monedas, ${days.length} días, k=${k.toFixed(3)}`);
+  return out['USDT.D'].length > 30 ? out : null;
 }
 
 async function main() {
@@ -50,7 +61,10 @@ async function main() {
   const g = (await getJSON(`${API}/global`)).data, pc = g && g.market_cap_percentage || {};
   if (!(pc.usdt > 0)) throw new Error('CoinGecko no devolvió la dominancia de USDT');
   const now = Date.now(), t = Math.floor(now / H) * H;
-  if (!S['USDT.D'].d.length) { const b = await backfill(); if (b) { S['USDT.D'].d = merge([], b, KEEP_D, D); db.note = 'historial diario reconstruido con la capitalización de Tether / capitalización total'; } else db.note = 'historial propio desde la primera ejecución'; }
+  if (process.env.BACKFILL === '1') {
+    const tot = g.total_market_cap && g.total_market_cap.usd, b = tot > 0 ? await backfill(tot) : null;
+    if (b) for (const k of ['USDT.D', 'BTC.D']) if (b[k] && b[k].length) { S[k].d = merge(b[k], clean(S[k].d).filter(p => p[0] >= b[k][b[k].length - 1][0]), KEEP_D, D); db.note = 'historial diario reconstruido con las 40 monedas más grandes (aproximado); lo reciente son muestras reales cada 15 min'; }
+  }
   for (const [k, v] of [['USDT.D', pc.usdt], ['BTC.D', pc.btc]]) {
     if (!(v > 0)) continue; const s = S[k];
     s.h = merge(clean(s.h), [[t, v]], KEEP_H, H);
