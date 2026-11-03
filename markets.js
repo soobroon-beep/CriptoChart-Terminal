@@ -119,6 +119,7 @@
     const pts = domPoints(await domData(), sym), ms = TF_MS[tf] || 36e5, m = new Map();
     for (const [t, v] of pts) { const k = Math.floor(t / ms) * ms, c = m.get(k); if (!c) m.set(k, {t: k, o: v, h: v, l: v, c: v, v: 0}); else { c.h = Math.max(c.h, v); c.l = Math.min(c.l, v); c.c = v; } }
     const out = [...m.values()].sort((a, b) => a.t - b.t);
+    for (let i = 1; i < out.length; i++) { const c = out[i], pc = out[i - 1].c; c.o = pc; c.h = Math.max(c.h, pc); c.l = Math.min(c.l, pc); } // cada vela abre donde cerró la anterior: sin rayitas planas
     if (out.length < 2) throw Error('La dominancia aún está juntando historial: vuelve en un rato');
     return out.slice(-limit);
   }
