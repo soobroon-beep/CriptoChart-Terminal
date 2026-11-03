@@ -1,0 +1,22 @@
+name: Actualizar dominancia
+# Guarda la dominancia de USDT y BTC (USDT.D, BTC.D) en dominance-data.json cada hora, para el buscador y el gráfico de VORTEX.
+on:
+  schedule: [{cron: '7 * * * *'}]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: {group: dominance, cancel-in-progress: false}
+jobs:
+  dominance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: node scripts/fetch-dominance.js
+      - name: Guardar si cambió
+        run: |
+          git config user.name "dominance-bot"; git config user.email "dominance-bot@users.noreply.github.com"
+          git add dominance-data.json
+          git diff --cached --quiet || (git commit -m "chore: dominancia" && git pull --rebase -q && git push)
