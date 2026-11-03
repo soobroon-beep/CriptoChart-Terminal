@@ -119,6 +119,7 @@ function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estil
   if (o.ds != null && o.ds !== 'dash' && o.ds !== 'dot') delete o.ds;
   if (o.ts != null) { const v = Math.round(+o.ts); if (Number.isFinite(v)) o.ts = Math.max(8, Math.min(36, v)); else delete o.ts; }
   if (o.label != null) { o.label = String(o.label).slice(0, 80); if (!o.label) delete o.label; }
+  if (o.sp != null) { const v = +o.sp; if (Number.isFinite(v) && v > 0) o.sp = v; else delete o.sp; } // Long/Short: precio del stop puesto a mano
   if (o.gc != null && !hex(o.gc)) delete o.gc; if (o.rc != null && !hex(o.rc)) delete o.rc; // Long/Short: color del objetivo y del stop
   for (const k of ['nt', 'no', 'ns']) if (o[k] !== true) delete o[k]; // Long/Short: ocultar título / texto del objetivo / texto del stop
   if (o.lock !== true) delete o.lock; if (o.hide !== true) delete o.hide;
@@ -1516,7 +1517,7 @@ function sbApplyTpl(i) {
   if (d.type === 'brush' && t.col) { state.brush.c = t.col; save(); }
 }
 const isPos = d => !!d && (d.type === 'long' || d.type === 'short');
-function sbResetStyle() { const d = curDraw(); if (!d) return; patchD(d.type === 'brush' ? {col: '#e9c36e', w: d.hl ? 9 : 3} : {col: null, lw: null, ds: null, tc: null, ts: null, label: null, gc: null, rc: null, nt: null, no: null, ns: null}); }
+function sbResetStyle() { const d = curDraw(); if (!d) return; patchD(d.type === 'brush' ? {col: '#e9c36e', w: d.hl ? 9 : 3} : {col: null, lw: null, ds: null, tc: null, ts: null, label: null, gc: null, rc: null, nt: null, no: null, ns: null, sp: null}); }
 const posColors = d => `<label class="pp-lbl">Objetivo (ganancia)</label>${sbPal('data-pgc', d.gc || '#089981')}<label class="pp-lbl">Stop (pérdida)</label>${sbPal('data-prc', d.rc || '#f23645')}`;
 const posToggles = d => `<label class="pp-lbl">Textos que se muestran</label><div class="pp-col">${[['nt', 'Título (Long / Short)'], ['no', 'Texto del objetivo'], ['ns', 'Texto del stop']].map(([k, n]) => `<button class="pp-item${d[k] ? '' : ' on'}" data-ptog="${k}"><span class="pp-ic">${d[k] ? '' : I('check', 16)}</span><span>${n}</span></button>`).join('')}</div>`;
 const sbSw = (attr, c, cur) => `<button class="pp-sw${String(cur || '').toLowerCase() === c ? ' on' : ''}" ${attr}="${c}" style="background:${c}" aria-label="${c}"></button>`;
@@ -1809,6 +1810,7 @@ function handlesOf(d) {
   if (d.type === 'vertical') return [{key: 'a', x: X(idxOfTime(d.a.t)), y: geo.plotTop + geo.plotH / 2}];
   if (ONEPT.includes(d.type)) return [{key: 'a', ...px(d.a)}];
   const hs = [{key: 'a', ...px(d.a)}, {key: 'b', ...px(d.b)}];
+  if (d.type === 'long' || d.type === 'short') { const q = posBox(d); hs.push({key: 's', x: (q.x1 + q.x2) / 2, y: q.yS}); } // asa del stop loss
   if (d.c) hs.push({key: 'c', ...px(d.c)});
   return hs;
 }
@@ -1819,8 +1821,9 @@ function channelOff(d) { // desplazamiento vertical (en precio) de la paralela q
 }
 function posBox(d) { // Long/Short: entrada = a, objetivo = b, stop espejo a 2:1
   const A = px(d.a), B = px(d.b), x1 = Math.min(A.x, B.x); let x2 = Math.max(A.x, B.x); if (x2 - x1 < 40) x2 = x1 + 40;
-  const risk = (d.b.p - d.a.p) / 2;
-  return {x1, x2, entry: d.a.p, target: d.b.p, stop: d.a.p - risk, yE: Y(d.a.p), yT: Y(d.b.p), yS: Y(d.a.p - risk)};
+  const manual = Number.isFinite(d.sp) && (d.sp - d.a.p) * (d.b.p - d.a.p) < 0; // stop movido a mano (debe quedar del lado contrario al objetivo)
+  const stop = manual ? d.sp : d.a.p - (d.b.p - d.a.p) / 2;
+  return {x1, x2, entry: d.a.p, target: d.b.p, stop, yE: Y(d.a.p), yT: Y(d.b.p), yS: Y(stop), manual};
 }
 function fmtDur(ms) { const m = Math.round(Math.abs(ms) / 6e4), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60; return d ? `${d} d ${h} h` : h ? `${h} h ${mm} min` : `${mm} min`; }
 function markerKind(d) { const c = candles[clamp(Math.round(idxOfTime(d.a.t)), 0, candles.length - 1)]; return c && Math.abs(d.a.p - c.h) <= Math.abs(d.a.p - c.l) ? 'high' : 'low'; }
@@ -2876,7 +2879,7 @@ function drawShapeExtra(d, a, b, rightX, col) {
     g.strokeStyle = rc; g.strokeRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE));
     g.strokeStyle = 'rgba(160,170,185,.9)'; g.beginPath(); g.moveTo(q.x1, q.yE); g.lineTo(q.x2, q.yE); g.stroke(); g.setLineDash([]);
     const pc = v => pct((v - q.entry) / q.entry * 100), tc = d.tc || '#fff', fs = d.ts ? Math.max(9, d.ts - 3) : 10;
-    if (!d.nt) tag(d.label ? d.label : `${lg ? 'Long' : 'Short'} · R:R 2.00`, q.x1, q.yE, '#5b6b83', 'left', tc, fs);
+    if (!d.nt) tag(d.label ? d.label : `${lg ? 'Long' : 'Short'} · R:R ${(Math.abs(q.target - q.entry) / (Math.abs(q.entry - q.stop) || 1)).toFixed(2)}`, q.x1, q.yE, '#5b6b83', 'left', tc, fs);
     if (!d.no) tag(`Objetivo ${fmt(q.target)} (${pc(q.target)})`, q.x1, q.yT + (q.yT < q.yE ? -11 : 11), gc, 'left', tc, fs);
     if (!d.ns) tag(`Stop ${fmt(q.stop)} (${pc(q.stop)})`, q.x1, q.yS + (q.yS < q.yE ? -11 : 11), rc, 'left', tc, fs);
   }
@@ -3111,7 +3114,8 @@ area.addEventListener('pointermove', e => {
   else if (gest.mode === 'handle') {
     const arr = getDrawings(), d = arr.find(x => x.id === selectedId); if (!d) return;
     const s = snapPoint(pt);
-    if (d.type === 'horizontal') d.a = {t: d.a.t, p: s.p}; else if (d.type === 'vertical') d.a = {t: s.t, p: d.a.p}; else if (/^p\d+$/.test(gest.handle) && d.pts) { d.pts[+gest.handle.slice(1)] = s; d.a = d.pts[0]; } else d[gest.handle] = s;
+    if (gest.handle === 's' && (d.type === 'long' || d.type === 'short')) { const dir = Math.sign(d.b.p - d.a.p) || 1, p = dir > 0 ? Math.min(s.p, d.a.p - 1e-9 * Math.abs(d.a.p)) : Math.max(s.p, d.a.p + 1e-9 * Math.abs(d.a.p)); d.sp = p; }
+    else if (d.type === 'horizontal') d.a = {t: d.a.t, p: s.p}; else if (d.type === 'vertical') d.a = {t: s.t, p: d.a.p}; else if (/^p\d+$/.test(gest.handle) && d.pts) { d.pts[+gest.handle.slice(1)] = s; d.a = d.pts[0]; } else d[gest.handle] = s;
     scheduleRender();
   }
   else if (gest.mode === 'scaleY') { // arriba = agrandar · abajo = achicar
@@ -3979,7 +3983,7 @@ if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud(); if (!PANE) refreshPop();
 
 /* Solo para pruebas automáticas: se activa añadiendo ?cct_debug=1 a la dirección */
-if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, save, setDrawings, pickTool, get FB() { return FB; }, get FAVS() { return FAVS; }, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, toggleFav, get view() { return {pan, visible}; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
+if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, save, setDrawings, pickTool, get FB() { return FB; }, get FAVS() { return FAVS; }, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, toggleFav, handlesOf, get view() { return {pan, visible}; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
 
 /* ───────── Puente para el Screener (screener.js) ───────── */
 window.CCT_host = {
