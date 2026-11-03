@@ -107,6 +107,8 @@ function sanUi(u) {
   if (q.panes && typeof q.panes === 'object') { o.panes = {}; for (const k of ['pc', 'movil']) if (q.panes[k]) o.panes[k] = sanPanes(q.panes[k]); } // tamaño de paneles: uno para PC y otro para móvil
   if (q.dopt && typeof q.dopt === 'object' && !Array.isArray(q.dopt)) { const d = {}; for (const k of ['magnet', 'stay', 'lock', 'hide']) if (typeof q.dopt[k] === 'boolean') d[k] = q.dopt[k]; o.dopt = d; }
   if (typeof q.icon === 'string' && /^[a-z]{3,12}$/.test(q.icon)) o.icon = q.icon;
+  if (q.favBar && typeof q.favBar === 'object') { const f = q.favBar, c01 = v => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null; o.favBar = {show: f.show !== false, x: c01(f.x), y: c01(f.y)}; }
+  if (Array.isArray(q.favs)) o.favs = q.favs.filter(x => typeof x === 'string' && /^[a-zA-Z0-9]{2,24}$/.test(x)).slice(0, 24);
   return o;
 }
 function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estilo de línea, texto, bloqueo y visibilidad
@@ -117,6 +119,8 @@ function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estil
   if (o.ds != null && o.ds !== 'dash' && o.ds !== 'dot') delete o.ds;
   if (o.ts != null) { const v = Math.round(+o.ts); if (Number.isFinite(v)) o.ts = Math.max(8, Math.min(36, v)); else delete o.ts; }
   if (o.label != null) { o.label = String(o.label).slice(0, 80); if (!o.label) delete o.label; }
+  if (o.gc != null && !hex(o.gc)) delete o.gc; if (o.rc != null && !hex(o.rc)) delete o.rc; // Long/Short: color del objetivo y del stop
+  for (const k of ['nt', 'no', 'ns']) if (o[k] !== true) delete o[k]; // Long/Short: ocultar título / texto del objetivo / texto del stop
   if (o.lock !== true) delete o.lock; if (o.hide !== true) delete o.hide;
   return o;
 }
@@ -176,7 +180,9 @@ const withLocalLayout = o => { const lp = lsGet(LAY_KEY) || layoutNow; return lp
 let state = merge(withLocalLayout(readLocal(storeKey()))), stateUid = uid; // stateUid: de qué cuenta viene el estado en memoria
 if (PANE) { document.body.classList.add('pane'); const q = new URLSearchParams(location.search); if (!lsGet(STORE)) { state.symbol = /^[A-Z0-9]{5,15}$/.test(q.get('sym') || '') ? q.get('sym') : ['ETHUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'][PANE_N - 1]; } state.light = q.get('light') === '1'; }
 const dirtyKey = () => uid ? `${STORE}_dirty_${uid}` : null;
-const save = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
+const persistLocal = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch {} };
+let remoteRev = 0; // versión (rev) más reciente que se sabe que hay en la nube
+const save = () => { state.rev = Math.max(Date.now(), (+state.rev || 0) + 1); try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
 
 /* ───────── Utilidades ───────── */
 const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','A'],UNI:['Uniswap','U'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
@@ -1284,10 +1290,13 @@ const TOOL_GROUPS = [
 /* Favoritos: la estrella de cada herramienta la sube a la sección «Favoritos» (arriba de la barra y de la hoja del celular) */
 const FAV_KEY = 'cct_favtools_v1';
 let FAVS = ['brush']; try { const f = JSON.parse(lsGet(FAV_KEY) || 'null'); if (Array.isArray(f)) FAVS = f.filter(x => typeof x === 'string').slice(0, 24); } catch {}
+let FB = Object.assign({show: true, x: null, y: null}, (state.ui && state.ui.favBar) || {}); // barra flotante de favoritos: visible y posición (fracciones del gráfico)
+if (state.ui && Array.isArray(state.ui.favs)) FAVS = state.ui.favs.slice(0, 24);
 const favTools = () => FAVS.map(k => toolOf(k)).filter(Boolean);
 function toggleFav(k) {
   FAVS = FAVS.includes(k) ? FAVS.filter(x => x !== k) : [...FAVS, k];
   try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch {}
+  if (typeof syncUi === 'function') syncUi(); if (typeof renderFavBar === 'function') renderFavBar();
   buildRail(); const fl = $('#railFly'); if (fl) { fl.querySelectorAll('[data-star]').forEach(b => b.classList.toggle('on', FAVS.includes(b.dataset.star))); }
   if (typeof sheetMode !== 'undefined' && sheetMode === 'tools' && typeof renderSheet === 'function') renderSheet();
 }
@@ -1397,11 +1406,11 @@ document.addEventListener('click', e => {
 });
 function updateDrawUI() {
   $('#drawHint').hidden = !drawTool;
-  { const bo = $('#brushOpts'), want = isBrushTool(drawTool); if (bo && !want) bo.remove(); else if (want) { const h = brushOptsHtml(); if (bo) bo.outerHTML = h; else $('#drawHintText').insertAdjacentHTML('afterend', h); } $('#cancelDraw').textContent = want ? 'Listo' : 'Cancelar'; }
+  { const bo = $('#brushOpts'); if (bo) bo.remove(); $('#cancelDraw').textContent = isBrushTool(drawTool) ? 'Listo' : 'Cancelar'; } // la caja antigua de colores ya no existe: color y grosor están en la barra nueva
   if (drawTool) $('#drawHintText').textContent = (HINTS[drawTool] || HINTS.trend)(pending, pending2);
   $('#deleteDraw').hidden = !selectedId;
   $('#undoDraw').disabled = !drawHist.u.length && !getDrawings().length;
-  renderSelBar(); syncHiddenChip();
+  renderSelBar(); syncHiddenChip(); if (typeof renderFavBar === 'function') renderFavBar();
   $('#chartArea').classList.toggle('drawing', !!drawTool); $('#chartArea').dataset.tool = drawTool;
   syncRail();
 }
@@ -1506,7 +1515,10 @@ function sbApplyTpl(i) {
   patchD(d.type === 'brush' ? {col: t.col, w: Math.round((t.lw || (d.hl ? d.w / 3 : d.w)) * (d.hl ? 3 : 1))} : {col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts});
   if (d.type === 'brush' && t.col) { state.brush.c = t.col; save(); }
 }
-function sbResetStyle() { const d = curDraw(); if (!d) return; patchD(d.type === 'brush' ? {col: '#e9c36e', w: d.hl ? 9 : 3} : {col: null, lw: null, ds: null, tc: null, ts: null, label: null}); }
+const isPos = d => !!d && (d.type === 'long' || d.type === 'short');
+function sbResetStyle() { const d = curDraw(); if (!d) return; patchD(d.type === 'brush' ? {col: '#e9c36e', w: d.hl ? 9 : 3} : {col: null, lw: null, ds: null, tc: null, ts: null, label: null, gc: null, rc: null, nt: null, no: null, ns: null}); }
+const posColors = d => `<label class="pp-lbl">Objetivo (ganancia)</label>${sbPal('data-pgc', d.gc || '#089981')}<label class="pp-lbl">Stop (pérdida)</label>${sbPal('data-prc', d.rc || '#f23645')}`;
+const posToggles = d => `<label class="pp-lbl">Textos que se muestran</label><div class="pp-col">${[['nt', 'Título (Long / Short)'], ['no', 'Texto del objetivo'], ['ns', 'Texto del stop']].map(([k, n]) => `<button class="pp-item${d[k] ? '' : ' on'}" data-ptog="${k}"><span class="pp-ic">${d[k] ? '' : I('check', 16)}</span><span>${n}</span></button>`).join('')}</div>`;
 const sbSw = (attr, c, cur) => `<button class="pp-sw${String(cur || '').toLowerCase() === c ? ' on' : ''}" ${attr}="${c}" style="background:${c}" aria-label="${c}"></button>`;
 const sbPal = (attr, cur) => `<div class="pp-grid">${SB_PAL.flat().map(c => sbSw(attr, c, cur)).join('')}</div><label class="pp-custom">Otro color <input type="color" ${attr}-in value="${/^#[0-9a-f]{6}$/i.test(cur || '') ? cur : '#e9c36e'}"></label>`;
 const sbLwRow = (list, cur) => `<div class="pp-row">${list.map(w => `<button class="pp-lw${Math.round(cur) === w ? ' on' : ''}" data-pw="${w}"><i style="height:${Math.min(w, 8)}px"></i><span>${w}px</span></button>`).join('')}</div>`;
@@ -1519,17 +1531,18 @@ function sbTextBlock(d) {
 }
 function popHtml(kind, d) {
   const brush = sbBrushMode(d), col = d ? d.col || sbDefCol() : state.brush.c, lw = d ? (d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw || 2) : state.brush.w;
-  if (kind === 'col') return `<div class="pp-title">Color</div>${sbPal('data-pc', col)}`;
+  if (kind === 'col') return isPos(d) ? `<div class="pp-title">Colores</div>${posColors(d)}` : `<div class="pp-title">Color</div>${sbPal('data-pc', col)}`;
   if (kind === 'lw') return `<div class="pp-title">Grosor</div>${sbLwRow(brush ? SB_BW : SB_LW, lw)}`;
   if (!d) return '';
   if (kind === 'ds') return `<div class="pp-title">Estilo de línea</div>${sbDsRow(d.ds)}`;
-  if (kind === 'txt') return `<div class="pp-title">Texto</div>${sbTextBlock(d)}`;
+  if (kind === 'txt') return `<div class="pp-title">Texto</div>${isPos(d) ? posToggles(d) : ''}${sbTextBlock(d)}`;
   if (kind === 'tpl') {
     const list = (state.drawTpl || []).map((t, i) => `<div class="pp-tpl"><button class="pp-item" data-ptpl="${i}"><i class="pp-dot" style="background:${t.col || sbDefCol()}"></i><span>${esc(t.n)}</span><small>${t.lw || ''}${t.lw ? 'px' : ''}${t.ds ? ' · ' + (t.ds === 'dash' ? 'discont.' : 'puntos') : ''}</small></button><button class="pp-x" data-ptpl-del="${i}" aria-label="Borrar plantilla">×</button></div>`).join('');
     return `<div class="pp-title">Plantillas de estilo</div><button class="pp-item" data-sb="tplsave">＋ Guardar el estilo actual como plantilla…</button><button class="pp-item" data-sb="tplreset">↺ Restablecer estilo</button>${list ? '<div class="pp-sep"></div>' + list : '<p class="pp-note">Aún no tienes plantillas. Guarda el estilo de este dibujo para aplicarlo en otros.</p>'}`;
   }
   if (kind === 'set') {
     const noStyle = SB_NOSTYLE.has(d.type) || brush, hasPrice = d.type === 'horizontal' || d.type === 'hray';
+    if (isPos(d)) return `<div class="pp-title">Ajustes</div>${posColors(d)}<label class="pp-lbl">Grosor</label>${sbLwRow(SB_LW, lw)}<label class="pp-lbl">Estilo</label>${sbDsRow(d.ds)}${posToggles(d)}${sbTextBlock(d)}`;
     return `<div class="pp-title">Ajustes</div><label class="pp-lbl">Color</label>${sbPal('data-pc', col)}`
       + (brush ? `<label class="pp-lbl">Grosor</label>${sbLwRow(SB_BW, lw)}` : noStyle ? '' : `<label class="pp-lbl">Grosor</label>${sbLwRow(SB_LW, lw)}<label class="pp-lbl">Estilo</label>${sbDsRow(d.ds)}`)
       + (hasPrice ? `<label class="pp-lbl">Precio</label><div class="pp-row"><input class="pp-input" id="sbPrice" inputmode="decimal" value="${d.a.p}"><button class="pp-ok" data-sb="priceok">OK</button></div>` : '')
@@ -1568,7 +1581,7 @@ function renderSelBar() {
   const ul = c => `<i class="sb-ul" style="background:${c}"></i>`;
   bar.innerHTML = '<span class="sb-grip" title="Arrastra para mover la barra" aria-label="Mover barra">⋮⋮</span>'
     + (d ? b('tpl', '', 'Plantillas de estilo', sbIc('tpl')) + '<i class="sb-sep"></i>' : '')
-    + b('col', '', 'Color', `<span class="sb-st">${sbIc('pen')}${ul(col)}</span>`)
+    + b('col', '', isPos(d) ? 'Colores del objetivo y del stop' : 'Color', `<span class="sb-st">${sbIc('pen')}${ul(isPos(d) ? (d.gc || '#089981') : col)}</span>`)
     + (canText ? b('txt', '', SB_TEXT.has(d.type) ? 'Editar texto y su color' : 'Añadir texto y cambiar su color', `<span class="sb-st">${sbIc('txt')}${ul(d.tc || (d.type === 'text' && d.col) || '#2962ff')}</span>`) : '')
     + ((line || brush) ? b('lw', '', 'Grosor', `<i class="sb-ln" style="height:${Math.min(8, Math.max(1, lw))}px"></i><b>${lw}px</b>`) : '')
     + (line ? b('ds', '', 'Estilo de línea', `<svg width="30" height="8" viewBox="0 0 30 8"><path d="M1 4h28" stroke="currentColor" stroke-width="2" ${d.ds === 'dash' ? 'stroke-dasharray="6 4"' : d.ds === 'dot' ? 'stroke-dasharray="1.5 4" stroke-linecap="round"' : 'stroke-dasharray="1.5 4" stroke-linecap="round"'}/></svg>`) : '')
@@ -1589,10 +1602,12 @@ document.addEventListener('pointerdown', e => {
 });
 document.addEventListener('pointerdown', e => { if (selPop && !e.target.closest('.pbar, .pbar-pop')) closePop(); }, true);
 document.addEventListener('click', e => {
-  const t = e.target.closest('#selBar [data-sb], #selPop [data-sb], #selPop [data-pc], #selPop [data-ptc], #selPop [data-pw], #selPop [data-pd], #selPop [data-pts], #selPop [data-ptpl], #selPop [data-ptpl-del]'); if (!t) return;
-  const D = t.dataset, keep = selPop === 'set' || selPop === 'txt', done = () => { if (!keep) closePop(); }; // color, grosor, estilo y plantilla se cierran al elegir; Texto y Ajustes siguen abiertos
+  const t = e.target.closest('#selBar [data-sb], #selPop [data-sb], #selPop [data-pc], #selPop [data-ptc], #selPop [data-pgc], #selPop [data-prc], #selPop [data-ptog], #selPop [data-pw], #selPop [data-pd], #selPop [data-pts], #selPop [data-ptpl], #selPop [data-ptpl-del]'); if (!t) return;
+  const D = t.dataset, keep = selPop === 'set' || selPop === 'txt' || (selPop === 'col' && isPos(curDraw())), done = () => { if (!keep) closePop(); }; // color, grosor, estilo y plantilla se cierran al elegir; Texto y Ajustes siguen abiertos
   if (D.pc) { sbSetColor(D.pc); done(); return; }
   if (D.ptc) { patchD({tc: D.ptc}); return; }
+  if (D.pgc) { patchD({gc: D.pgc}); return; } if (D.prc) { patchD({rc: D.prc}); return; }
+  if (D.ptog) { const d = curDraw(); if (d) patchD({[D.ptog]: !d[D.ptog]}); return; }
   if (D.pw) { sbSetWidth(+D.pw); done(); return; }
   if (D.pd !== undefined) { patchD({ds: D.pd || null}); done(); return; }
   if (D.pts) { patchD({ts: +D.pts}); return; }
@@ -1609,7 +1624,7 @@ document.addEventListener('click', e => {
   if (k === 'undo') undoDrawing(); else if (k === 'redo') redoDrawing();
   else if (k === 'clear') { closePop(); if (!getDrawings().length) return toast('No hay dibujos'); if (confirm('¿Borrar todos los dibujos de este gráfico? (Ctrl+Z los recupera)')) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); } }
 });
-document.addEventListener('change', e => { const i = e.target.closest('#selPop input[type=color]'); if (!i) return; if (i.hasAttribute('data-pc-in')) sbSetColor(i.value); else if (i.hasAttribute('data-ptc-in')) patchD({tc: i.value}); });
+document.addEventListener('change', e => { const i = e.target.closest('#selPop input[type=color]'); if (!i) return; if (i.hasAttribute('data-pc-in')) sbSetColor(i.value); else if (i.hasAttribute('data-ptc-in')) patchD({tc: i.value}); else if (i.hasAttribute('data-pgc-in')) patchD({gc: i.value}); else if (i.hasAttribute('data-prc-in')) patchD({rc: i.value}); });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'sbTxt') { e.preventDefault(); sbEditText(e.target.value); } else if (e.key === 'Enter' && e.target.id === 'sbPrice') { e.preventDefault(); document.querySelector('#selPop [data-sb="priceok"]').click(); } });
 document.addEventListener('keydown', e => { // atajos de escritorio: copiar / pegar / clonar
   if (!(e.ctrlKey || e.metaKey) || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || currentView !== 'chartView') return;
@@ -1669,6 +1684,50 @@ function pickTool(k) {
   startTool(k);
 }
 function cancelTool() { drawTool = ''; pending = null; pending2 = null; multi = []; preview = null; updateDrawUI(); scheduleRender(); }
+/* ───────── Barra flotante permanente de herramientas favoritas (estilo TradingView) ─────────
+   Muestra tus favoritas (★) siempre a mano sobre el gráfico: se mueve arrastrando el asa y con clic derecho se oculta;
+   para mostrarla otra vez, clic derecho sobre el gráfico. Posición, visibilidad y favoritas se guardan en tu cuenta. Solo en computadora. */
+function placeFavBar() {
+  const bar = $('#favBar'), ar = $('#chartArea'); if (!bar || !ar) return;
+  if (FB.x == null || FB.y == null) { bar.style.left = '50%'; bar.style.top = 'auto'; bar.style.bottom = '50px'; bar.style.transform = 'translateX(-50%)'; return; }
+  const aw = ar.clientWidth, ah = ar.clientHeight, bw = bar.offsetWidth, bh = bar.offsetHeight;
+  bar.style.transform = 'none'; bar.style.bottom = 'auto';
+  bar.style.left = clamp(FB.x * Math.max(0, aw - bw), 0, Math.max(0, aw - bw)) + 'px'; bar.style.top = clamp(FB.y * Math.max(0, ah - bh), 0, Math.max(0, ah - bh)) + 'px';
+}
+function renderFavBar() {
+  const ar = $('#chartArea'); if (!ar) return; let bar = $('#favBar');
+  const on = !PANE && FB.show && isDesktop();
+  if (!on) { if (bar) bar.remove(); return; }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'favBar'; bar.className = 'favbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Herramientas favoritas'); ar.appendChild(bar); }
+  const tools = favTools();
+  bar.innerHTML = '<span class="fb-grip" title="Arrastra para mover · clic derecho: ocultar" aria-label="Mover barra"><svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></g></svg></span>'
+    + (tools.length ? tools.map(t => `<button type="button" class="fb-btn${drawTool === t[0] ? ' on' : ''}" data-fav-tool="${t[0]}" title="${esc(t[1])}" aria-label="${esc(t[1])}">${SV(t[3], 22)}</button>`).join('') : '<span class="fb-empty">Marca ★ en las herramientas para tenerlas aquí</span>');
+  placeFavBar();
+}
+function setFavBar(show) { FB.show = !!show; syncUi(); renderFavBar(); toast(FB.show ? 'Barra de favoritos visible' : 'Barra de favoritos oculta · clic derecho sobre el gráfico para mostrarla'); }
+{
+  const ar = $('#chartArea');
+  ar.addEventListener('click', e => { const b = e.target.closest('[data-fav-tool]'); if (!b) return; const k = b.dataset.favTool; if (drawTool === k) cancelTool(); else pickTool(k); });
+  ar.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return; const gr = e.target.closest('.fb-grip'); if (!gr) return; const bar = $('#favBar'); if (!bar) return; e.preventDefault();
+    const r = ar.getBoundingClientRect(), br = bar.getBoundingClientRect(), ox = e.clientX - br.left, oy = e.clientY - br.top;
+    const mv = ev => { const aw = ar.clientWidth - bar.offsetWidth, ah = ar.clientHeight - bar.offsetHeight; FB.x = aw > 0 ? clamp((ev.clientX - r.left - ox) / aw, 0, 1) : 0; FB.y = ah > 0 ? clamp((ev.clientY - r.top - oy) / ah, 0, 1) : 0; placeFavBar(); };
+    const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); syncUi(); };
+    addEventListener('pointermove', mv); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+  });
+  ar.addEventListener('contextmenu', e => {
+    { const fb = $('#favBar'), q = fb && fb.getBoundingClientRect(); if (!e.target.closest('#favBar') && !(q && e.clientX >= q.left && e.clientX <= q.right && e.clientY >= q.top && e.clientY <= q.bottom)) return; } e.preventDefault(); e.stopImmediatePropagation();
+    document.querySelectorAll('.chart-ctx').forEach(x => x.remove());
+    const m = document.createElement('div'); m.className = 'pop-menu chart-ctx';
+    m.innerHTML = `<button data-a="hide">${I('eyeoff', 16)}<span>Ocultar barra de favoritos</span></button><button data-a="pos">${I('reset', 16)}<span>Volver a su lugar</span></button>`;
+    document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
+    const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
+    setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
+    m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'hide') setFavBar(false); else { FB.x = FB.y = null; syncUi(); placeFavBar(); } };
+  }, true);
+  window.addEventListener('resize', () => { renderFavBar(); });
+  deskMQ.addEventListener && deskMQ.addEventListener('change', renderFavBar);
+}
 function clearAllDrawings() {
   if (!getDrawings().length) { toast('No hay dibujos en este gráfico'); return; }
   if (confirm('¿Borrar todos los dibujos de este gráfico? (Ctrl+Z los recupera)')) { snapDraw(); setDrawings([]); selectedId = null; updateDrawUI(); render(); }
@@ -1929,7 +1988,7 @@ let paneScale = paneScale0();
 const devClass = () => (window.matchMedia && matchMedia('(min-width: 1024px)').matches ? 'pc' : 'movil');
 function syncUi() { // vuelca las preferencias de interfaz al estado (que se guarda en el dispositivo y en la cuenta)
   const panes = Object.assign({}, (state.ui || {}).panes); panes[devClass()] = {paneH, paneScale}; // cada tipo de dispositivo guarda su propio tamaño
-  state.ui = sanUi({panes, dopt: DOPT, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
+  state.ui = sanUi({panes, dopt: DOPT, favBar: FB, favs: FAVS, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
 }
 function applyUi() { // al recibir el estado de la cuenta: aplica sus preferencias de interfaz en este dispositivo
   const u = state.ui || {};
@@ -1938,6 +1997,9 @@ function applyUi() { // al recibir el estado de la cuenta: aplica sus preferenci
   if (pn.paneScale) { paneScale = pn.paneScale; try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} }
   if (u.dopt) { Object.assign(DOPT, u.dopt); try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} }
   if (u.icon && window.CCTAppIcons && window.CCTAppIcons.selected !== u.icon) window.CCTAppIcons.apply(u.icon);
+  if (Array.isArray(u.favs)) { FAVS = u.favs.slice(0, 24); try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch {} if (typeof buildRail === 'function') buildRail(); }
+  if (u.favBar) FB = Object.assign({show: true, x: null, y: null}, u.favBar);
+  if (typeof renderFavBar === 'function') renderFavBar();
 }
 window.addEventListener('cct-theme', () => { const id = window.CCTAppIcons && window.CCTAppIcons.selected; if (id && (state.ui || {}).icon !== id && typeof save === 'function') syncUi(); });
 const LEG_FONT = '600 13px system-ui';
@@ -2759,10 +2821,10 @@ function arrowHead(from, to, size = 9) {
   const ang = Math.atan2(to.y - from.y, to.x - from.x);
   g.beginPath(); g.moveTo(to.x, to.y); g.lineTo(to.x - size * Math.cos(ang - .45), to.y - size * Math.sin(ang - .45)); g.lineTo(to.x - size * Math.cos(ang + .45), to.y - size * Math.sin(ang + .45)); g.closePath(); g.fill();
 }
-function tag(txt, x, y, fill, align = 'left') { // etiqueta con fondo
-  g.font = 'bold 10px system-ui'; const w = g.measureText(txt).width + 10; let x0 = align === 'right' ? x - w : x;
+function tag(txt, x, y, fill, align = 'left', tc = '#fff', fs = 10) { // etiqueta con fondo
+  g.font = `bold ${fs}px system-ui`; const w = g.measureText(txt).width + 10; let x0 = align === 'right' ? x - w : x;
   const rx = geo.left + geo.plotW; x0 = Math.max(geo.left, Math.min(x0, rx - w)); // dentro del área del gráfico
-  g.fillStyle = fill; roundRect(x0, y - 9, w, 17, 3); g.fill(); g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText(txt, x0 + 5, y + 3.5);
+  g.fillStyle = fill; roundRect(x0, y - 9, w, 17, 3); g.fill(); g.fillStyle = tc; g.textAlign = 'left'; g.fillText(txt, x0 + 5, y + 3.5);
 }
 function drawShapeExtra(d, a, b, rightX, col) {
   const t = d.type; g.setLineDash([]); g.globalAlpha = 1; g.textAlign = 'left';
@@ -2802,16 +2864,16 @@ function drawShapeExtra(d, a, b, rightX, col) {
     });
   }
   else if (t === 'long' || t === 'short') {
-    const q = posBox(d), lg = t === 'long', gc = '#089981', rc = '#f23645', w = q.x2 - q.x1;
+    const q = posBox(d), lg = t === 'long', gc = d.gc || '#089981', rc = d.rc || '#f23645', w = q.x2 - q.x1, lw = d.lw || 1.2, ds = d.ds === 'dash' ? [7, 5] : d.ds === 'dot' ? [1.5, 4] : [];
     g.globalAlpha = .16; g.fillStyle = gc; g.fillRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
     g.fillStyle = rc; g.fillRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE)); g.globalAlpha = 1;
-    g.lineWidth = 1.2; g.strokeStyle = gc; g.strokeRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
+    g.lineWidth = lw; g.setLineDash(ds); g.strokeStyle = gc; g.strokeRect(q.x1, Math.min(q.yE, q.yT), w, Math.abs(q.yT - q.yE));
     g.strokeStyle = rc; g.strokeRect(q.x1, Math.min(q.yE, q.yS), w, Math.abs(q.yS - q.yE));
-    g.strokeStyle = 'rgba(160,170,185,.9)'; g.beginPath(); g.moveTo(q.x1, q.yE); g.lineTo(q.x2, q.yE); g.stroke();
-    const pc = v => pct((v - q.entry) / q.entry * 100);
-    tag(`${lg ? 'Long' : 'Short'} · R:R 2.00`, q.x1, q.yE, '#5b6b83');
-    tag(`Objetivo ${fmt(q.target)} (${pc(q.target)})`, q.x1, q.yT + (q.yT < q.yE ? -11 : 11), gc);
-    tag(`Stop ${fmt(q.stop)} (${pc(q.stop)})`, q.x1, q.yS + (q.yS < q.yE ? -11 : 11), rc);
+    g.strokeStyle = 'rgba(160,170,185,.9)'; g.beginPath(); g.moveTo(q.x1, q.yE); g.lineTo(q.x2, q.yE); g.stroke(); g.setLineDash([]);
+    const pc = v => pct((v - q.entry) / q.entry * 100), tc = d.tc || '#fff', fs = d.ts ? Math.max(9, d.ts - 3) : 10;
+    if (!d.nt) tag(d.label ? d.label : `${lg ? 'Long' : 'Short'} · R:R 2.00`, q.x1, q.yE, '#5b6b83', 'left', tc, fs);
+    if (!d.no) tag(`Objetivo ${fmt(q.target)} (${pc(q.target)})`, q.x1, q.yT + (q.yT < q.yE ? -11 : 11), gc, 'left', tc, fs);
+    if (!d.ns) tag(`Stop ${fmt(q.stop)} (${pc(q.stop)})`, q.x1, q.yS + (q.yS < q.yE ? -11 : 11), rc, 'left', tc, fs);
   }
 }
 function drawShapeNew(d, a, b, rightX, col, selected) {
@@ -3135,14 +3197,14 @@ function resetChart() {
   updateAutoBtn(); legSig = ''; glide({visible: defaultVisible(), pan: 0}); scheduleRender(); toast('Gráfico restablecido');
 }
 area.addEventListener('contextmenu', e => {
-  if (e.target.closest('.chart-label, .leg-row, button, .pop-menu')) return;
+  if (e.target.closest('.chart-label, .leg-row, button, .pop-menu, .favbar')) return;
   e.preventDefault(); document.querySelectorAll('.chart-ctx').forEach(x => x.remove());
   const m = document.createElement('div'); m.className = 'pop-menu chart-ctx';
-  m.innerHTML = `<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>`;
+  m.innerHTML = `<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${isDesktop() && !PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
   document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
   const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
-  m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'reset') resetChart(); else if (b.dataset.a === 'style') openChartStyle(); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
+  m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'reset') resetChart(); else if (b.dataset.a === 'style') openChartStyle(); else if (b.dataset.a === 'favbar') setFavBar(!FB.show); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
 });
 function syncFullscreenLabel() {} // los botones Expandir y Ajustar ya no existen (se hace con el doble toque y el botón A)
 const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} syncUi(); scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
@@ -3754,16 +3816,25 @@ async function onUser(user) {
   try {
     const snap = await ref.get();
     const pendingLocal = (() => { try { return !!localStorage.getItem(dirtyKey()); } catch { return false; } })();
-    if (snap.exists && snap.data().state && pendingLocal) { lastRemote = snap.data().state; await cloudPushNow(); } // cambios hechos aquí que aún no habían subido: se conservan y se suben
-    else if (snap.exists && snap.data().state) { lastRemote = snap.data().state; applyState(JSON.parse(lastRemote)); save(); try { localStorage.removeItem(dirtyKey()); } catch {} }
-    else { // primera vez en esta cuenta: se sube lo que ya había en este dispositivo
-      const mine = JSON.stringify(state); lastRemote = mine; save();
-      await ref.set({state: mine, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+    const rdata = snap.exists ? snap.data() : null, rstr = rdata ? await readRemote(rdata) : '';
+    let rstate = null; try { rstate = rstr ? JSON.parse(rstr) : null; } catch {}
+    if (rstate) {
+      const rr = revOf(rstate, rdata), lr = +state.rev || 0; remoteRev = rr; lastRemote = rstr;
+      if (pendingLocal && lr >= rr) { await cloudPushNow(); } // lo de aquí es más nuevo: se sube
+      else if (pendingLocal) { const merged = reconcile(state, rstate); applyState(merged); persistLocal(); remoteRev = 0; await cloudPushNow(true); } // ambos cambiaron: se mezclan
+      else { applyState(rstate); persistLocal(); try { localStorage.removeItem(dirtyKey()); } catch {} }
+    } else { // primera vez en esta cuenta: se sube lo que ya había en este dispositivo
+      state.rev = Math.max(Date.now(), (+state.rev || 0)); const mine = JSON.stringify(state); persistLocal();
+      await ref.set({...(await packState(mine)), updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); lastRemote = mine; remoteRev = state.rev;
     }
-    unsubCloud = ref.onSnapshot(sn => { // cambios hechos desde otro dispositivo
+    let snapSeq = 0;
+    unsubCloud = ref.onSnapshot(async sn => { // cambios hechos desde otro dispositivo
       if (sn.metadata.hasPendingWrites || !sn.exists) return;
-      const str = sn.data().state; if (!str || str === lastRemote) return;
-      lastRemote = str; try { applyState(JSON.parse(str), true); save(); refreshPineAfterSync(); } catch {}
+      const seq = ++snapSeq, data = sn.data(), str = await readRemote(data); if (seq !== snapSeq || !str || str === lastRemote) return;
+      let st; try { st = JSON.parse(str); } catch { return; }
+      const rr = revOf(st, data); remoteRev = Math.max(remoteRev, rr);
+      if (rr <= (+state.rev || 0)) return; // eco viejo o igual a lo que ya tengo: se ignora
+      lastRemote = str; try { applyState(st, true); persistLocal(); refreshPineAfterSync(); } catch {}
     }, () => {});
     const sref = db.doc(`users/${uid}/data/scripts`), ssnap = await sref.get();
     if (ssnap.exists && ssnap.data().items) { scriptsRemote = ssnap.data().items; try { scripts = withCatalog(JSON.parse(scriptsRemote)); localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); renderScripts(); } catch {} }
@@ -3786,15 +3857,54 @@ async function onUser(user) {
 }
 const syncSummary = () => `${state.pine.length} script${state.pine.length === 1 ? '' : 's'} en el gráfico · ${scripts.length} guardado${scripts.length === 1 ? '' : 's'} · ${state.alerts.length} alerta${state.alerts.length === 1 ? '' : 's'}`;
 function refreshPineAfterSync() { renderIndicators(); countIndicators(); renderAlerts(); pineKey = ''; for (const k of Object.keys(pineRes)) if (!scripts.some(s => s.id === k)) delete pineRes[k]; schedulePine(); scheduleRender(); }
+/* ───────── Sincronización con la nube: versiones (rev), mezcla y compresión ─────────
+   Cada cambio lleva un número de versión (rev). Un cambio de la nube solo se aplica si es MÁS NUEVO que lo que hay aquí; así un eco viejo
+   ya no deshace lo último que hiciste (antes borraba dibujos y monedas recién añadidos). Si dos dispositivos cambian a la vez, se mezclan
+   (monedas, dibujos y alertas de ambos) en lugar de pisarse. Si el estado es muy grande se comprime. */
+const revOf = (st, data) => { const r = st && +st.rev; if (r > 0) return r; try { const u = data && data.updatedAt; return u && u.toMillis ? u.toMillis() : 0; } catch { return 0; } };
+async function gz(str) { const bs = await new Response(new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer(); let b = ''; const u = new Uint8Array(bs); for (let i = 0; i < u.length; i += 8192) b += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); return btoa(b); }
+async function gunz(b64) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); }
+async function readRemote(data) { // → cadena JSON del estado guardado en la nube
+  if (data && data.stateZ) { try { return await gunz(data.stateZ); } catch { return ''; } }
+  return (data && data.state) || '';
+}
+async function packState(str) { // → campos del documento (comprime si el estado se acerca al tope de 1 MiB)
+  if (str.length > 600000 && typeof CompressionStream === 'function') { try { return {state: '', stateZ: await gz(str)}; } catch {} }
+  return {state: str, stateZ: ''};
+}
+function reconcile(local, remote) { // mezcla de dos dispositivos que cambiaron a la vez: base = la nube + lo que solo existe aquí
+  const out = JSON.parse(JSON.stringify(remote));
+  const L = local || {};
+  if (Array.isArray(L.symbols)) { out.symbols = Array.isArray(out.symbols) ? out.symbols : []; for (const k of L.symbols) if (!out.symbols.includes(k)) out.symbols.push(k); }
+  if (L.symGroup && typeof L.symGroup === 'object') { out.symGroup = {...L.symGroup, ...(out.symGroup || {})}; }
+  if (Array.isArray(L.groups)) { out.groups = Array.isArray(out.groups) ? out.groups : []; for (const g of L.groups) if (!out.groups.some(x => x.id === g.id)) out.groups.push(g); }
+  if (L.drawings && typeof L.drawings === 'object') { out.drawings = out.drawings && typeof out.drawings === 'object' ? out.drawings : {}; for (const [k, arr] of Object.entries(L.drawings)) { const cur = Array.isArray(out.drawings[k]) ? out.drawings[k] : []; const ids = new Set(cur.map(d => d && d.id)); const extra = (Array.isArray(arr) ? arr : []).filter(d => d && !ids.has(d.id)); if (extra.length) out.drawings[k] = [...cur, ...extra].slice(-300); } }
+  if (Array.isArray(L.alerts)) { out.alerts = Array.isArray(out.alerts) ? out.alerts : []; for (const a of L.alerts) if (a && !out.alerts.some(x => x.id === a.id)) out.alerts.push(a); }
+  out.rev = Math.max(Date.now(), (+L.rev || 0), (+remote.rev || 0)) + 1;
+  return out;
+}
 const CLOUD_MAX = 950000; // Firestore limita cada documento a 1 MiB
-async function cloudPushNow() {
+async function cloudPushNow(force) {
   if (!uid || !db || !fbUser) return;
   const str = JSON.stringify(state);
-  if (str === lastRemote) { try { localStorage.removeItem(dirtyKey()); } catch {} return; }
-  if (str.length > CLOUD_MAX) { syncStatus = 'Tu configuración es demasiado grande para la nube (' + Math.round(str.length / 1024) + ' KB). Borra algunos trazos del pincel: siguen guardados en este dispositivo.'; renderAccount(); return; }
-  const mine = uid; lastRemote = str;
-  try { await db.doc(CLOUD_DOC(mine)).set({state: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); if (uid === mine) { try { localStorage.removeItem(dirtyKey()); } catch {} syncStatus = 'Guardado en tu cuenta · ' + syncSummary(); } }
-  catch { syncStatus = 'No se pudo guardar en la nube. Se reintentará al próximo cambio.'; lastRemote = ''; }
+  if (str === lastRemote && !force) { try { localStorage.removeItem(dirtyKey()); } catch {} return; }
+  const mine = uid, ref = db.doc(CLOUD_DOC(mine)), myRev = +state.rev || Date.now();
+  try {
+    const body = await packState(str);
+    if ((body.state || body.stateZ).length > CLOUD_MAX) { syncStatus = 'Tu configuración es demasiado grande para la nube (' + Math.round(str.length / 1024) + ' KB). Borra algunos trazos del pincel: siguen guardados en este dispositivo.'; if (!cloudPushNow.warned) { cloudPushNow.warned = 1; toast('Tu configuración es muy grande para sincronizar; borra trazos del pincel'); } renderAccount(); return; }
+    let merged = null;
+    if (navigator.onLine !== false) {
+      await db.runTransaction(async tx => { // si otro dispositivo guardó algo más nuevo desde la última vez, se mezcla en lugar de pisarlo
+        const sn = await tx.get(ref), data = sn.exists ? sn.data() : null; let st = null;
+        if (data) { try { st = JSON.parse(await readRemote(data)); } catch {} }
+        const rr = st ? revOf(st, data) : 0;
+        if (st && rr > remoteRev) { merged = reconcile(JSON.parse(str), st); const m = JSON.stringify(merged); tx.set(ref, {...(await packState(m)), updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); lastRemote = m; remoteRev = merged.rev; }
+        else { tx.set(ref, {...body, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); lastRemote = str; remoteRev = myRev; }
+      });
+    } else { await ref.set({...body, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); lastRemote = str; remoteRev = myRev; } // sin conexión: Firestore lo guarda y lo sube al volver
+    if (merged && uid === mine) { applyState(merged, true); persistLocal(); }
+    if (uid === mine) { try { localStorage.removeItem(dirtyKey()); } catch {} syncStatus = 'Guardado en tu cuenta · ' + syncSummary(); }
+  } catch (e) { syncStatus = 'No se pudo guardar en la nube. Se reintentará al próximo cambio.'; lastRemote = ''; setTimeout(() => { if (uid === mine) cloudPush(); }, 15000); }
   renderAccount();
 }
 function cloudPush() {
@@ -3859,12 +3969,12 @@ async function initCloud() {
 })();
 
 /* ───────── Arranque ───────── */
-renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); buildRail(); updateDrawUI(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
+renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); buildRail(); updateDrawUI(); renderFavBar(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
 if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud(); if (!PANE) refreshPop();
 
 /* Solo para pruebas automáticas: se activa añadiendo ?cct_debug=1 a la dirección */
-if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
+if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, save, setDrawings, pickTool, get FB() { return FB; }, get FAVS() { return FAVS; }, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
 
 /* ───────── Puente para el Screener (screener.js) ───────── */
 window.CCT_host = {

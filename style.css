@@ -564,3 +564,14 @@ svg.ic{display:inline-block;vertical-align:-3px;flex:none}
 svg.ic{display:inline-block;vertical-align:-3px;flex:none}
 .bottom-nav button>span svg.ic{display:block;margin:0 auto}
 .search>span svg.ic{vertical-align:-4px}
+
+/* ── Barra flotante de favoritos (estilo TradingView) ── */
+.favbar{position:absolute;z-index:7;display:flex;align-items:center;gap:2px;padding:4px 8px 4px 4px;background:color-mix(in srgb,var(--surface) 92%,transparent);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.45);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);max-width:calc(100% - 16px);overflow-x:auto;scrollbar-width:none}
+.favbar::-webkit-scrollbar{display:none}
+.favbar .fb-grip{display:grid;place-items:center;width:18px;height:34px;color:var(--muted);cursor:grab;touch-action:none;flex:none;opacity:.7}
+.favbar .fb-grip:active{cursor:grabbing}
+.favbar .fb-btn{display:grid;place-items:center;flex:none;width:36px;height:34px;border:0;border-radius:8px;background:none;color:var(--muted);padding:0;cursor:pointer}
+.favbar .fb-btn:hover{background:var(--raised);color:var(--text)}
+.favbar .fb-btn.on{background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent)}
+.favbar .fb-empty{font-size:12px;color:var(--muted);padding:0 8px;white-space:nowrap}
+body.pane .favbar{display:none}
