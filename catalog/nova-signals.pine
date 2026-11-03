@@ -1,0 +1,294 @@
+//@version=5
+indicator("Nova Nexus - Senales v2.7", "Nova Nexus© - iA Signals 2.1", overlay = true, max_labels_count = 500, max_lines_count = 500)
+
+// ─────────────────────────────────────────────────────────────
+//  INPUTS — TP / SL
+// ─────────────────────────────────────────────────────────────
+grpTP   = "Niveles TP / SL"
+showTP  = input.bool (true,  "Mostrar niveles TP / SL",  group = grpTP)
+slMult  = input.float(1.0,   "SL  x ATR", step = 0.25,   group = grpTP)
+tp1Mult = input.float(1.5,   "TP1 x ATR", step = 0.25,   group = grpTP)
+tp2Mult = input.float(2.5,   "TP2 x ATR", step = 0.25,   group = grpTP)
+tp3Mult = input.float(4.0,   "TP3 x ATR", step = 0.25,   group = grpTP)
+tpBars  = input.int  (40,    "Duracion (barras)", 5, 200, group = grpTP)
+
+// ─────────────────────────────────────────────────────────────
+//  INPUTS — Score
+// ─────────────────────────────────────────────────────────────
+grpSc     = "Score"
+showScore = input.bool(true, "Mostrar tabla de score", group = grpSc)
+minScore  = input.int(1, "Score minimo para mostrar senal", minval = 1, maxval = 5, group = grpSc, tooltip = "1 = todas  |  5 = solo perfectas")
+
+// ─────────────────────────────────────────────────────────────
+//  INPUTS — Cooldown
+// ─────────────────────────────────────────────────────────────
+grpCD       = "Cooldown"
+cdBars      = input.int(10, "Velas minimas entre senales", minval = 1, maxval = 100, group = grpCD, tooltip = "Evita senales consecutivas. Recomendado: 10 en 1H memecoins.")
+cdBothSides = input.bool(false, "Cooldown compartido (BUY y SELL)", group = grpCD, tooltip = "Si activo, despues de BUY tampoco genera SELL hasta cumplir cooldown.")
+
+// ─────────────────────────────────────────────────────────────
+//  INPUTS — Colores
+// ─────────────────────────────────────────────────────────────
+grpVis  = "Colores"
+colBuy  = input.color(#11cf77, "BUY",   group = grpVis)
+colSell = input.color(#d11645, "SELL",  group = grpVis)
+colRng  = input.color(#9b59b6, "Rango", group = grpVis)
+colSL   = input.color(#ff4444, "SL",    group = grpVis)
+colTP1  = input.color(#11cf77, "TP1",   group = grpVis)
+colTP2  = input.color(#00aaff, "TP2",   group = grpVis)
+colTP3  = input.color(#ff9900, "TP3",   group = grpVis)
+
+// ─────────────────────────────────────────────────────────────
+//  CONSTANTES
+// ─────────────────────────────────────────────────────────────
+int   _len     = 20
+int   _sig     = 3
+int   _dfl     = 30
+float _obLevel = 40.0
+float _osLevel = -40.0
+float _obRange = 35.0
+float _osRange = -35.0
+int   _emaLen  = 200
+float _mfMin   = 3.0
+int   _adxLen  = 14
+float _adxThr  = 25.0
+int   _divLook = 5
+int   _divTrs  = 25
+int   _atrLen  = 14
+
+// ─────────────────────────────────────────────────────────────
+//  CALCULO — Oscillator
+// ─────────────────────────────────────────────────────────────
+_hl2   = math.avg(high, low)
+_av    = ta.sma(_hl2, _len)
+_hh    = ta.highest(_len)
+_ll    = ta.lowest(_len)
+_hlAvg = math.avg(math.avg(_hh, _ll), _av)
+_atr   = ta.rma(math.max(math.max(high - low, math.abs(high - close[1])), math.abs(low - close[1])), _len)
+oscVal = ta.linreg((close - _hlAvg) / _atr * 100, _len, 0)
+sigVal = ta.sma(oscVal, _sig)
+
+// ─────────────────────────────────────────────────────────────
+//  CALCULO — Money Flow / Flux
+// ─────────────────────────────────────────────────────────────
+_haC  = math.avg(open, high, low, close)
+var float _haO = na
+_haO   := na(_haO[1]) ? math.avg(open, close) : math.avg(_haO[1], _haC[1])
+_haH    = math.max(high, math.max(_haO, _haC))
+_haL    = math.min(low,  math.min(_haO, _haC))
+_haAtr  = ta.rma(math.max(math.max(_haH - _haL, math.abs(_haH - _haC[1])), math.abs(_haL - _haC[1])), _dfl)
+_fluxUp = ta.rma(math.max(ta.change(_haH), 0), _dfl) / _haAtr
+_fluxDn = ta.rma(math.max(-ta.change(_haL), 0), _dfl) / _haAtr
+fluxVal = ta.rma((_fluxUp - _fluxDn) / (_fluxUp + _fluxDn), _dfl / 2) * 100
+
+// ─────────────────────────────────────────────────────────────
+//  CALCULO — EMA + ADX + ATR
+// ─────────────────────────────────────────────────────────────
+emaVal = ta.ema(close, _emaLen)
+[_, __, adxVal] = ta.dmi(_adxLen, _adxLen)
+atrVal = ta.atr(_atrLen)
+
+bool isRange = adxVal < _adxThr
+bool isTrend = not isRange
+
+// ─────────────────────────────────────────────────────────────
+//  FILTROS
+// ─────────────────────────────────────────────────────────────
+float obUse = isRange ? _obRange : _obLevel
+float osUse = isRange ? _osRange : _osLevel
+float mfUse = isRange ? _mfMin / 2 : _mfMin
+
+bool inOB     = oscVal >= obUse
+bool inOS     = oscVal <= osUse
+bool crossBuy = ta.crossover(oscVal, sigVal) and inOS
+bool crossSel = ta.crossunder(oscVal, sigVal) and inOB
+bool f2Buy    = isTrend ? close > emaVal : true
+bool f2Sell   = isTrend ? close < emaVal : true
+bool f3Buy    = fluxVal > mfUse
+bool f3Sell   = fluxVal < -mfUse
+
+// ─────────────────────────────────────────────────────────────
+//  DIVERGENCIAS
+// ─────────────────────────────────────────────────────────────
+pricePivotLow  = ta.lowest(low,     _divLook)
+pricePivotHigh = ta.highest(high,   _divLook)
+oscPivotLow    = ta.lowest(oscVal,  _divLook)
+oscPivotHigh   = ta.highest(oscVal, _divLook)
+
+bool divBull = low  < pricePivotLow[1]  and oscVal > oscPivotLow[1]  and oscVal < -_divTrs and crossBuy
+bool divBear = high > pricePivotHigh[1] and oscVal < oscPivotHigh[1] and oscVal >  _divTrs and crossSel
+
+// ─────────────────────────────────────────────────────────────
+//  SCORE — una variable por componente, sin multilinea
+// ─────────────────────────────────────────────────────────────
+int sBuyOsc   = inOS           ? 1 : 0
+int sBuyEma   = close > emaVal ? 1 : 0
+int sBuyFlux  = fluxVal > mfUse ? 1 : 0
+int sBuyTrend = isTrend        ? 1 : 0
+int sBuyDiv   = divBull        ? 1 : 0
+int scoreBuy  = sBuyOsc + sBuyEma + sBuyFlux + sBuyTrend + sBuyDiv
+
+int sSelOsc   = inOB            ? 1 : 0
+int sSelEma   = close < emaVal  ? 1 : 0
+int sSelFlux  = fluxVal < -mfUse ? 1 : 0
+int sSelTrend = isTrend         ? 1 : 0
+int sSelDiv   = divBear         ? 1 : 0
+int scoreSell = sSelOsc + sSelEma + sSelFlux + sSelTrend + sSelDiv
+
+stars(int n) => n == 5 ? "*****" : n == 4 ? "****" : n == 3 ? "***" : n == 2 ? "**" : n == 1 ? "*" : ""
+
+// ─────────────────────────────────────────────────────────────
+//  SENALES — antes del cooldown
+// ─────────────────────────────────────────────────────────────
+bool rawBuy  = crossBuy and f2Buy  and f3Buy  and scoreBuy  >= minScore
+bool rawSell = crossSel and f2Sell and f3Sell and scoreSell >= minScore
+
+// ─────────────────────────────────────────────────────────────
+//  COOLDOWN
+// ─────────────────────────────────────────────────────────────
+var int lastBuyBar  = -9999
+var int lastSellBar = -9999
+var int lastAnyBar  = -9999
+
+int barsSinceBuy  = bar_index - lastBuyBar
+int barsSinceSell = bar_index - lastSellBar
+int barsSinceAny  = bar_index - lastAnyBar
+
+bool cdOkBuy  = cdBothSides ? barsSinceAny  >= cdBars : barsSinceBuy  >= cdBars
+bool cdOkSell = cdBothSides ? barsSinceAny  >= cdBars : barsSinceSell >= cdBars
+
+bool finalBuy     = rawBuy  and cdOkBuy
+bool finalSell    = rawSell and cdOkSell
+bool finalDivBull = finalBuy  and divBull
+bool finalDivBear = finalSell and divBear
+
+if finalBuy
+    lastBuyBar := bar_index
+    lastAnyBar := bar_index
+
+if finalSell
+    lastSellBar := bar_index
+    lastAnyBar  := bar_index
+
+// ─────────────────────────────────────────────────────────────
+//  TOOLTIP — helper y funciones
+// ─────────────────────────────────────────────────────────────
+f_tooltip_buy() =>
+    string osc  = str.tostring(math.round(oscVal,  1))
+    string flux = str.tostring(math.round(fluxVal, 1))
+    string adx  = str.tostring(math.round(adxVal,  1))
+    string atr  = str.tostring(math.round(atrVal,  8))
+    string sc   = str.tostring(scoreBuy) + " / 5"
+    string t    = "🟢 BUY  " + sc + "  " + stars(scoreBuy) + "\n"
+    t := t + "📊 ATR " + atr + "\n"
+    t := t + "─────────────\n"
+    t := inOS           ? t + "✅ OSC Sobreventa " + osc + "\n"  : t
+    t := close > emaVal ? t + "✅ Precio sobre EMA 200\n"        : t
+    t := f3Buy          ? t + "✅ Money Flow " + flux + "\n"     : t
+    t := isTrend        ? t + "✅ Tendencia ADX " + adx + "\n"   : t
+    t := divBull        ? t + "📈 Divergencia D+\n"              : t
+    t
+
+f_tooltip_sell() =>
+    string osc  = str.tostring(math.round(oscVal,  1))
+    string flux = str.tostring(math.round(fluxVal, 1))
+    string adx  = str.tostring(math.round(adxVal,  1))
+    string atr  = str.tostring(math.round(atrVal,  8))
+    string sc   = str.tostring(scoreSell) + " / 5"
+    string t    = "🔴 SELL  " + sc + "  " + stars(scoreSell) + "\n"
+    t := t + "📊 ATR " + atr + "\n"
+    t := t + "─────────────\n"
+    t := inOB           ? t + "✅ OSC Sobrecompra " + osc + "\n" : t
+    t := close < emaVal ? t + "✅ Precio bajo EMA 200\n"         : t
+    t := f3Sell         ? t + "✅ Money Flow " + flux + "\n"     : t
+    t := isTrend        ? t + "✅ Tendencia ADX " + adx + "\n"   : t
+    t := divBear        ? t + "📉 Divergencia D-\n"              : t
+    t
+
+// ─────────────────────────────────────────────────────────────
+//  COLORES de senal
+// ─────────────────────────────────────────────────────────────
+color sigBuyColor  = isRange ? colRng : colBuy
+color sigSellColor = isRange ? colRng : colSell
+
+// ─────────────────────────────────────────────────────────────
+//  VARS — Lineas y etiquetas TP/SL
+// ─────────────────────────────────────────────────────────────
+var line  ln_entry = na
+var line  ln_sl    = na
+var line  ln_tp1   = na
+var line  ln_tp2   = na
+var line  ln_tp3   = na
+var label lb_sl    = na
+var label lb_tp1   = na
+var label lb_tp2   = na
+var label lb_tp3   = na
+
+// ─────────────────────────────────────────────────────────────
+//  VISUAL — Senales con tooltip
+// ─────────────────────────────────────────────────────────────
+if finalBuy
+    color  _c   = divBull ? colBuy : sigBuyColor
+    string _lbl = scoreBuy <= 2 ? "▲" : scoreBuy == 3 ? "▲ +" : scoreBuy == 4 ? "▲ D+" : "▲ D++"
+    label.new(bar_index, low, _lbl, xloc = xloc.bar_index, yloc = yloc.belowbar, style = label.style_label_up, color = _c, textcolor = color.white, size = size.small, tooltip = f_tooltip_buy())
+
+if finalSell
+    color  _c   = divBear ? colSell : sigSellColor
+    string _lbl = scoreSell <= 2 ? "▼" : scoreSell == 3 ? "▼ +" : scoreSell == 4 ? "▼ D-" : "▼ D--"
+    label.new(bar_index, high, _lbl, xloc = xloc.bar_index, yloc = yloc.abovebar, style = label.style_label_down, color = _c, textcolor = color.white, size = size.small, tooltip = f_tooltip_sell())
+
+// ─────────────────────────────────────────────────────────────
+//  VISUAL — Tabla score
+// ─────────────────────────────────────────────────────────────
+var table scoreTable = table.new(position.bottom_right, 2, 1, bgcolor = color.new(color.black, 20), border_color = color.new(color.gray, 40), border_width = 1, frame_color = color.new(color.gray, 40), frame_width = 1)
+
+if showScore and (finalBuy or finalSell)
+    int    _score  = finalBuy ? scoreBuy : scoreSell
+    color  _dirCol = finalBuy ? color.new(#11cf77, 0) : color.new(#d11645, 0)
+    string _dirTxt = finalBuy ? "BUY" : "SELL"
+    table.cell(scoreTable, 0, 0, _dirTxt, text_color = _dirCol, bgcolor = color.new(color.black, 30), text_size = size.small)
+    table.cell(scoreTable, 1, 0, str.tostring(_score) + "/5 " + stars(_score), text_color = _dirCol, bgcolor = color.new(color.black, 30), text_size = size.small)
+
+// ─────────────────────────────────────────────────────────────
+//  VISUAL — TP / SL
+// ─────────────────────────────────────────────────────────────
+if showTP and (finalBuy or finalSell)
+    line.delete(ln_entry)
+    line.delete(ln_sl)
+    line.delete(ln_tp1)
+    line.delete(ln_tp2)
+    line.delete(ln_tp3)
+    label.delete(lb_sl)
+    label.delete(lb_tp1)
+    label.delete(lb_tp2)
+    label.delete(lb_tp3)
+    float _entry = close
+    bool  _isBuy = finalBuy
+    float _sl    = _isBuy ? _entry - atrVal * slMult  : _entry + atrVal * slMult
+    float _tp1   = _isBuy ? _entry + atrVal * tp1Mult : _entry - atrVal * tp1Mult
+    float _tp2   = _isBuy ? _entry + atrVal * tp2Mult : _entry - atrVal * tp2Mult
+    float _tp3   = _isBuy ? _entry + atrVal * tp3Mult : _entry - atrVal * tp3Mult
+    int   _x2    = bar_index + tpBars
+    ln_entry := line.new(bar_index, _entry, _x2, _entry, xloc.bar_index, extend.none, color.new(color.gray, 60), line.style_dashed, 1)
+    ln_sl    := line.new(bar_index, _sl,    _x2, _sl,    xloc.bar_index, extend.none, color.new(colSL,  20), line.style_solid,  1)
+    ln_tp1   := line.new(bar_index, _tp1,   _x2, _tp1,  xloc.bar_index, extend.none, color.new(colTP1, 20), line.style_dashed, 1)
+    ln_tp2   := line.new(bar_index, _tp2,   _x2, _tp2,  xloc.bar_index, extend.none, color.new(colTP2, 20), line.style_dashed, 1)
+    ln_tp3   := line.new(bar_index, _tp3,   _x2, _tp3,  xloc.bar_index, extend.none, color.new(colTP3, 20), line.style_dashed, 1)
+    lb_sl    := label.new(_x2, _sl,  "SL",  xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(colSL,  30), textcolor = color.white, size = size.tiny)
+    lb_tp1   := label.new(_x2, _tp1, "TP1", xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(colTP1, 30), textcolor = color.white, size = size.tiny)
+    lb_tp2   := label.new(_x2, _tp2, "TP2", xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(colTP2, 30), textcolor = color.white, size = size.tiny)
+    lb_tp3   := label.new(_x2, _tp3, "TP3", xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(colTP3, 30), textcolor = color.white, size = size.tiny)
+
+// ─────────────────────────────────────────────────────────────
+//  ALERTAS
+// ─────────────────────────────────────────────────────────────
+alertcondition(finalBuy  and isTrend,        "NN BUY Tendencia",     "Nova Nexus: BUY en Tendencia")
+alertcondition(finalSell and isTrend,        "NN SELL Tendencia",    "Nova Nexus: SELL en Tendencia")
+alertcondition(finalBuy  and isRange,        "NN BUY Rango",         "Nova Nexus: BUY en Rango")
+alertcondition(finalSell and isRange,        "NN SELL Rango",        "Nova Nexus: SELL en Rango")
+alertcondition(finalDivBull,                 "NN BUY + D+",          "Nova Nexus: BUY con Divergencia D+")
+alertcondition(finalDivBear,                 "NN SELL + D-",         "Nova Nexus: SELL con Divergencia D-")
+alertcondition(finalBuy  and scoreBuy  == 5, "NN BUY PERFECTO 5",    "Nova Nexus: BUY perfecto 5 estrellas")
+alertcondition(finalSell and scoreSell == 5, "NN SELL PERFECTO 5",   "Nova Nexus: SELL perfecto 5 estrellas")
+alertcondition(finalBuy,                     "BOT WUNDERTRADING LONG",  "Pega aqui el mensaje ENTER LONG")
+alertcondition(finalSell,                    "BOT WUNDERTRADING SHORT", "Pega aqui el mensaje ENTER SHORT")

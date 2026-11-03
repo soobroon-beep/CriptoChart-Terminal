@@ -242,7 +242,7 @@ test('strategy: sintaxis antigua con when= y dirección booleana, y position_siz
 
 test('catálogo Nova: Oscillator y Screener se interpretan sin avisos de no soportado', () => {
   const fs = require('fs'), cs = walkC(400);
-  for (const f of ['nova-oscillator.pine', 'nova-screener.pine']) {
+  for (const f of ['nova-oscillator.pine', 'nova-screener.pine', 'nova-signals.pine']) {
     const r = P.run(fs.readFileSync(__dirname + '/../catalog/' + f, 'utf8'), cs, {interval: '1h', symbol: 'BTCUSDT', timeLimitMs: 20000});
     assert.ok(r.ok, f + ' ' + JSON.stringify(r.error));
     assert.equal(r.warnings.filter(w => w.level === 'unsupported').length, 0, f);

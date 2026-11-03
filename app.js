@@ -24,7 +24,7 @@ const MULTI = {
 const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
-  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
+  indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, dchan:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
   groups: [], symGroup: {}, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}
 };
 function sanAlert(a) {
@@ -68,6 +68,7 @@ const STD_SCHEMA = {
   supertrend: [['len', 'Período ATR', 'int', 10, 1, 200], ['factor', 'Factor', 'float', 3, .1, 20], ['up', 'Color alcista', 'color', '#089981'], ['down', 'Color bajista', 'color', '#f23645'], ['width', 'Grosor', 'int', 1, 1, 6]],
   vwap: [['color', 'Color y opacidad', 'color', '#ff8a65'], ['width', 'Grosor', 'int', 1, 1, 6], ['dash', 'Estilo de línea', 'string', 'Sólida', 0, 0, ['Sólida', 'Guiones', 'Puntos']]], obv: [['color', 'Color y opacidad', 'color', '#2ec4b6'], ['width', 'Grosor', 'int', 1, 1, 6]],
   volume: [['up', 'Color alcista y opacidad', 'color', '#089981aa'], ['down', 'Color bajista y opacidad', 'color', '#f23645aa']],
+  dchan: [['len', 'Longitud del pivote (velas)', 'int', 5, 2, 30], ['count', 'Canales a mostrar (escalas)', 'int', 2, 1, 3], ['ext', 'Extender a la derecha (velas)', 'int', 25, 0, 200], ['mid', 'Línea media', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['brk', 'Tolerancia de ruptura (× ATR)', 'float', 1, 0, 5], ['cUp', 'Color canal alcista', 'color', '#20bf9fb0'], ['cDn', 'Color canal bajista', 'color', '#f23645b0'], ['cFlat', 'Color canal lateral', 'color', '#8796abb0'], ['width', 'Grosor', 'int', 1, 1, 4], ['dash', 'Estilo de línea', 'string', 'Puntos', 0, 0, ['Sólida', 'Guiones', 'Puntos']]],
   patterns: [['len', 'Longitud del pivote (velas)', 'int', 5, 2, 30], ['dev', 'Movimiento mínimo (× ATR)', 'float', 1.5, .2, 10], ['tol', 'Tolerancia de proporciones (%)', 'int', 10, 2, 30], ['min', 'Puntuación mínima (0-100)', 'int', 60, 0, 100], ['max', 'Máximo de patrones a mostrar', 'int', 3, 1, 10], ['keep', 'Antigüedad máxima (velas)', 'int', 200, 20, 1000],
     ['g123', '1-2-3', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gabc', 'Corrección ABC', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gharm', 'Armónicos (ABCD, Gartley, Bat, Butterfly, Crab, Cypher)', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gchart', 'Chartistas (dobles, HCH, triángulos, cuñas)', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['gell', 'Ondas de Elliott', 'string', 'Sí', 0, 0, ['Sí', 'No']],
     ['labels', 'Etiquetas de los puntos', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['prz', 'Zona de reversión (PRZ) y objetivos', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['panel', 'Panel con los patrones detectados', 'string', 'Sí', 0, 0, ['Sí', 'No']], ['cBull', 'Color alcista', 'color', '#089981'], ['cBear', 'Color bajista', 'color', '#f23645']],
@@ -96,7 +97,7 @@ function sanStdParams(p) {
   return o;
 }
 const stdOn = k => !!state.indicators[k] && !(state.stdHide && state.stdHide[k]); // activo y no oculto con el ojito de la leyenda
-const stdName = k => ({ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', adx: `ADX ${sp('adx', 'len')}`, cci: `CCI ${sp('cci', 'len')}`, willr: `Williams %R ${sp('willr', 'len')}`, mfi: `MFI ${sp('mfi', 'len')}`, roc: `ROC ${sp('roc', 'len')}`, stochrsi: 'Estoc. RSI', ao: 'Awesome Osc.', cmf: `CMF ${sp('cmf', 'len')}`, donchian: `Donchian ${sp('donchian', 'len')}`, keltner: `Keltner ${sp('keltner', 'len')}`, ichimoku: 'Ichimoku', psar: 'Parabolic SAR', vpvr: 'VPVR', liqmap: 'Liquidaciones (heatmap)', patterns: 'Patrones', cross: 'Cruces EMA 20/50'}[k] || k);
+const stdName = k => ({ema20: `EMA ${sp('ema20', 'len')}`, ema50: `EMA ${sp('ema50', 'len')}`, sma200: `SMA ${sp('sma200', 'len')}`, wma20: `WMA ${sp('wma20', 'len')}`, bollinger: 'Bollinger', vwap: 'VWAP', supertrend: 'Supertrend', rsi: `RSI ${sp('rsi', 'len')}`, macd: 'MACD', stoch: 'Estocástico', atr: 'ATR', obv: 'OBV', volume: 'Volumen', adx: `ADX ${sp('adx', 'len')}`, cci: `CCI ${sp('cci', 'len')}`, willr: `Williams %R ${sp('willr', 'len')}`, mfi: `MFI ${sp('mfi', 'len')}`, roc: `ROC ${sp('roc', 'len')}`, stochrsi: 'Estoc. RSI', ao: 'Awesome Osc.', cmf: `CMF ${sp('cmf', 'len')}`, donchian: `Donchian ${sp('donchian', 'len')}`, keltner: `Keltner ${sp('keltner', 'len')}`, ichimoku: 'Ichimoku', psar: 'Parabolic SAR', vpvr: 'VPVR', liqmap: 'Liquidaciones (heatmap)', patterns: 'Patrones', dchan: 'Canales dinámicos', cross: 'Cruces EMA 20/50'}[k] || k);
 const DASHES = {'Sólida': [], 'Guiones': [6, 4], 'Puntos': [1.5, 3]};
 const lineSty = key => ({w: sp(key, 'width') || 1.4, d: DASHES[sp(key, 'dash')] || []});
 const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle || {}); if (!(state.chartStyle && state.chartStyle.bg) && document.body.classList.contains('light')) o.bg = ''; return o; }; // fondo por defecto #0d1019 (el tema claro conserva el suyo)
@@ -927,6 +928,7 @@ const IND_ART = {
   volume: '<path d="M5 20v-6M11 20v-10M17 20v-5M23 20v-12M29 20v-7M35 20v-9" stroke-width="3.6"/>',
   liqmap: '<path d="M2 5h36M2 11h36M2 17h36" stroke-width="4" opacity=".28"/><path d="M12 11h20" stroke-width="4" opacity=".75"/>',
   vpvr: '<path d="M38 3h-16M38 7h-26M38 11h-30M38 15h-20M38 19h-10" stroke-width="2.6"/>',
+  dchan: '<path d="M2 22 38 8" stroke-dasharray="2 3"/><path d="M2 31 38 17" stroke-dasharray="2 3"/><path d="M2 26.5 38 12.5" opacity=".4" stroke-dasharray="1 3"/>',
   patterns: '<path d="M3 20 11 6l6 9 7-12 6 10 7-5"/><circle cx="11" cy="6" r="1.6" fill="currentColor"/><circle cx="24" cy="3" r="1.6" fill="currentColor"/>'
 };
 const indArt = (k, col) => IND_ART[k] ? `<span class="ind-art" style="color:${col}"><svg viewBox="0 0 40 24" width="40" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IND_ART[k]}</svg></span>` : '';
@@ -959,6 +961,7 @@ const indicatorMeta = [
   ['volume','Volumen','Barras de volumen por vela','#8294a8'],
   ['liqmap','Mapa de calor de liquidaciones','Zonas donde se estima que hay liquidaciones apalancadas (estilo CoinGlass): se calcula con el volumen de cada vela y varios apalancamientos; cuanto más claro, más liquidaciones esperadas','#f5d90a'],
   ['vpvr','Perfil de volumen de rango visible (VPVR)','Volumen por nivel de precio de las velas que ves en pantalla, con POC y área de valor; se recalcula al mover o hacer zoom','#2962ff'],
+  ['dchan','Canales dinámicos','Dibuja con líneas punteadas discretas los canales que se van formando (alcista, bajista o lateral), a varias escalas; se recalculan con cada vela y se descartan cuando el precio los rompe','#20bf9f'],
   ['patterns','Patrones (1-2-3, ABC, armónicos, chartistas, Elliott)','Detecta y dibuja sobre el gráfico el patrón que se está formando: 1-2-3, ABC, ABCD/Gartley/Bat/Butterfly/Crab/Cypher con zona de reversión, dobles techos y suelos, hombro-cabeza-hombro, triángulos, cuñas e impulsos de Elliott','#f5a623'],
   ['nnIa','Nova Nexus · Señales IA','BUY/SELL con score ★, cooldown y divergencias (v2.7)','#11cf77'],
   ['nnEma','Nova Nexus · EMA Cloud','Nube EMA 55 ± 0.6 ATR','#8a97b3'],
@@ -1036,6 +1039,7 @@ function calcExtra() { // indicadores de la fase 2: solo se calculan los activad
   ind.piv = I.nnPiv ? T.pivots(candles, NP('pivLen')) : null;
   { const lk = `${state.symbol}|${state.interval}|${candles.length}|${candles[0].t}|${sp('liqmap', 'rows')}|${Math.floor(Date.now() / 20000)}`; if (!I.liqmap) ind.lm = null; else if (!ind.lm || ind.lm._k !== lk) { ind.lm = T.liquidationHeatmap(candles, {rows: sp('liqmap', 'rows')}); if (ind.lm) ind.lm._k = lk; } }
   ind.liq = I.nnLiq ? T.liquidations(candles, iv, {lookback: NP('liqLookback')}) : null;
+  ind.dch = I.dchan && window.CCTChannels ? CCTChannels.detect(candles, {len: sp('dchan', 'len'), count: sp('dchan', 'count'), brk: sp('dchan', 'brk')}) : null;
   { const Q = k => sp('patterns', k); ind.pat = I.patterns && window.CCTPatterns ? CCTPatterns.detect(candles, {len: Q('len'), dev: Q('dev'), tol: Q('tol') / 100, min: Q('min'), max: Q('max'), keep: Q('keep'), p123: Q('g123') === 'Sí', abc: Q('gabc') === 'Sí', harm: Q('gharm') === 'Sí', chart: Q('gchart') === 'Sí', ell: Q('gell') === 'Sí'}) : null; }
   ind.vp = I.nnVP ? T.volumeProfile(candles, {rows: NP('vpRows'), lookback: NP('vpLookback'), hiThr: NP('vpHi'), loThr: NP('vpLo')}) : null;
 }
@@ -2315,6 +2319,7 @@ function renderCore() {
   for (const {r} of pSub.concat(pTop)) if (r.strategy) CCTPineDraw.drawTrades(g, r.strategy, {X, Y, lo, hi, candles}); // estrategias con panel propio: las operaciones se marcan igual sobre el precio
   if (state.indicators.nnTrail && ind.trail) drawNovaTrailLine(ind.trail, lo, hi);
   if (state.indicators.nnSR && ind.sr) drawNovaSRLabels(ind.sr, lo, hi);
+  if (stdOn('dchan') && ind.dch) drawChannels(ind.dch.list);
   if (stdOn('patterns') && ind.pat) drawPatterns(ind.pat.list);
   // cruces EMA 20 / EMA 50
   if (stdOn('cross') && ind.cross) {
@@ -2360,7 +2365,7 @@ function renderCore() {
   const dimRow = (tx, act) => { g.globalAlpha = .5; g.fillStyle = text; legLabel(tx + ' (oculto)', left + 8, ly2, act, true); g.globalAlpha = 1; ly2 += LS; };
   const isHid = k => !!(state.indicators[k] && state.stdHide && state.stdHide[k]);
   const ovBy = {}; for (const o of overlays) if (o[4]) ovBy[o[4]] = o;
-  const SLOTS = ['ema20', 'ema50', 'sma200', 'wma20', 'vwap', 'bollinger', 'donchian', 'keltner', 'ichimoku', 'psar', 'volume', 'patterns', 'liqmap', 'vpvr'], PLAIN = {psar: 'Parabolic SAR', volume: 'Volumen', patterns: 'Patrones', liqmap: 'Liquidaciones', vpvr: 'VPVR'};
+  const SLOTS = ['ema20', 'ema50', 'sma200', 'wma20', 'vwap', 'bollinger', 'donchian', 'keltner', 'ichimoku', 'psar', 'volume', 'patterns', 'dchan', 'liqmap', 'vpvr'], PLAIN = {psar: 'Parabolic SAR', volume: 'Volumen', patterns: 'Patrones', dchan: 'Canales dinámicos', liqmap: 'Liquidaciones', vpvr: 'VPVR'};
   for (const k of SLOTS) {
     if (!state.indicators[k]) continue;
     if (isHid(k)) { dimRow(stdName(k), {t: 'std', key: k}); continue; }
@@ -2556,6 +2561,18 @@ function fmtVolPine(v) { // aproxima format.volume: 1.23K · 4.5M · 2B
 /* ───────── Patrones ─────────
    Dibuja lo que detecta patterns.js: la línea que une los puntos con sus etiquetas (X-A-B-C-D, 1-2-3, 0-5, A-B-C), las diagonales y rellenos de los armónicos, la zona de reversión (PRZ)
    de la D que se está formando, la línea de cuello, las líneas de triángulos y cuñas, y el objetivo / stop. El panel de arriba a la derecha dice qué patrón es y en qué estado está. */
+function drawChannels(list) { // líneas punteadas discretas de los canales vigentes (channels.js)
+  if (!list || !list.length) return;
+  const P = k => sp('dchan', k), n = candles.length, xl = geo.left, xr = geo.left + geo.plotW, dash = DASHES[P('dash')] || [1.5, 3], mid = P('mid') === 'Sí', ext = P('ext');
+  g.save(); g.beginPath(); g.rect(xl, geo.plotTop, geo.plotW, geo.plotH); g.clip(); g.lineCap = 'round';
+  for (const q of list) {
+    const col = q.dir > 0 ? P('cUp') : q.dir < 0 ? P('cDn') : P('cFlat'), x1 = X(q.i1), x2 = X(q.i2 + ext);
+    const ln = (a, b, w, d, al) => { g.globalAlpha = al; g.strokeStyle = col; g.lineWidth = w; g.setLineDash(d); g.beginPath(); g.moveTo(x1, Y(a.p1)); g.lineTo(x2, Y(a.p2 + (a.p2 - a.p1) / Math.max(1, q.i2 - q.i1) * ext)); g.stroke(); };
+    const w = P('width') * (1 - q.k * .15);
+    ln(q.up, 0, w, dash, 1); ln(q.lo, 0, w, dash, 1); if (mid) ln(q.mid, 0, Math.max(.8, w * .8), [1, 5], .6);
+  }
+  g.setLineDash([]); g.globalAlpha = 1; g.restore();
+}
 const PAT_STATE = {forming: 'en formación', confirmed: 'confirmado', complete: 'completo'};
 function drawPatterns(list) {
   if (!list.length) return;
@@ -3555,6 +3572,13 @@ function catPreviewSvg(id) {
     for (let i = 0; i < n; i++) { a += `${i ? 'L' : 'M'}${X(i).toFixed(1)},${flux(i).toFixed(1)}`; b += `${i ? 'L' : 'M'}${X(i).toFixed(1)},${mom(i).toFixed(1)}`; }
     f = `${a}L${X(n - 1)},65L${X(0)},65Z`;
     return `<svg class="nova-prev" viewBox="0 0 300 130" xmlns="http://www.w3.org/2000/svg">${bg}<line x1="0" x2="300" y1="30" y2="30" stroke="#444" stroke-dasharray="3 3"/><line x1="0" x2="300" y1="100" y2="100" stroke="#444" stroke-dasharray="3 3"/><line x1="0" x2="300" y1="65" y2="65" stroke="#333"/><path d="${f}" fill="rgba(0,230,118,.22)"/><path d="${a}" fill="none" stroke="#00e676" stroke-width="1.6"/><path d="${b}" fill="none" stroke="#ff9800" stroke-width="1.2"/><circle cx="${X(10)}" cy="${flux(10)}" r="3" fill="#ff2d55"/><circle cx="${X(29)}" cy="${flux(29)}" r="3" fill="#00e676"/><rect x="0" y="120" width="300" height="10" fill="#1c1c3d"/><rect x="${X(20)}" y="120" width="60" height="10" fill="#00e676" opacity=".7"/><text x="8" y="12" font-size="9" fill="#a5a5ff" font-weight="700">Nova Oscillator · Flux + Momentum</text></svg>`;
+  }
+  if (id === 'nova-sig') {
+    let cs = '', px = 0; const n = 30, X = i => 10 + i * 6.4, yy = v => 112 - v;
+    const ser = i => 48 + Math.sin(i / 3.2) * 20 + (i > 15 ? (i - 15) * 1.6 : 0);
+    for (let i = 0; i < n; i++) { const o = ser(i), c = ser(i + 1), hi = Math.max(o, c) + 5, lo = Math.min(o, c) - 5, up = c >= o, col = up ? '#11cf77' : '#d11645'; cs += `<line x1="${X(i)}" x2="${X(i)}" y1="${yy(hi)}" y2="${yy(lo)}" stroke="${col}"/><rect x="${X(i) - 2.2}" y="${yy(Math.max(o, c))}" width="4.4" height="${Math.max(2, Math.abs(c - o))}" fill="${col}"/>`; }
+    const ex = X(14), ey = yy(ser(15) - 6), tp = k => `<line x1="${ex}" x2="248" y1="${k[0]}" y2="${k[0]}" stroke="${k[1]}" stroke-dasharray="${k[2] ? '4 3' : ''}"/><rect x="248" y="${k[0] - 5}" width="22" height="10" rx="2" fill="${k[1]}" opacity=".85"/><text x="259" y="${k[0] + 3}" font-size="7" fill="#fff" text-anchor="middle" font-weight="700">${k[3]}</text>`;
+    return `<svg class="nova-prev" viewBox="0 0 300 130" xmlns="http://www.w3.org/2000/svg">${bg}${cs}${tp([ey + 14, '#ff4444', 0, 'SL'])}${tp([ey - 16, '#11cf77', 1, 'TP1'])}${tp([ey - 30, '#00aaff', 1, 'TP2'])}${tp([ey - 46, '#ff9900', 1, 'TP3'])}<line x1="${ex}" x2="248" y1="${ey}" y2="${ey}" stroke="#8796ab" stroke-dasharray="3 3" opacity=".7"/><rect x="${ex - 17}" y="${ey + 6}" width="34" height="13" rx="3" fill="#11cf77"/><text x="${ex}" y="${ey + 15.5}" font-size="8" fill="#fff" text-anchor="middle" font-weight="700">▲ D+</text><rect x="${X(26) - 10}" y="${yy(ser(27) + 11) - 15}" width="20" height="12" rx="3" fill="#d11645"/><text x="${X(26)}" y="${yy(ser(27) + 11) - 6}" font-size="8" fill="#fff" text-anchor="middle" font-weight="700">▼</text><rect x="198" y="108" width="96" height="16" fill="#000" opacity=".6" stroke="#555"/><text x="204" y="119" font-size="8" fill="#11cf77" font-weight="700">BUY</text><text x="236" y="119" font-size="8" fill="#11cf77" font-weight="700">4/5 ****</text></svg>`;
   }
   let rows = ''; const names = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA'], sg = [1, 0, -1, 2, 0, -2, 1];
   names.forEach((nm, i) => { const y = 26 + i * 14, c = sg[i] > 0 ? '#00e676' : sg[i] < 0 ? '#ff2d55' : '#40405c', t = sg[i] > 0 ? 'LONG' : sg[i] < 0 ? 'SHORT' : '—'; rows += `<rect x="40" y="${y - 10}" width="220" height="13" fill="${i % 2 ? '#0c0c16' : '#13131f'}"/><text x="48" y="${y}" font-size="9" fill="#eaeaff" font-weight="700">${nm}</text><text x="130" y="${y}" font-size="9" fill="${c}" font-weight="700">${t}</text><text x="200" y="${y}" font-size="9" fill="#b366ff">${sg[i] ? Math.abs(sg[i]) + 2 + '/5' : ''}</text>`; });
