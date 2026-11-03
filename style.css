@@ -69,13 +69,14 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   #watchView{display:block!important;grid-area:watch;border-right:1px solid var(--line);padding:18px 16px 20px}
   #chartView{display:flex!important;grid-area:chart;min-width:0}
   #indicatorView{display:none!important}
-  #newsView,#aiView,#settingsView,#alertsView,#screenerView,#lensView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
+  #newsView,#aiView,#settingsView,#alertsView,#screenerView,#lensView,#discordView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
   body:not([data-side]) #newsView,body[data-side="newsView"] #newsView{display:block}
   body[data-side="aiView"] #aiView{display:block}
   body[data-side="settingsView"] #settingsView{display:block}
   body[data-side="alertsView"] #alertsView{display:block}
   body[data-side="screenerView"] #screenerView{display:block}
   body[data-side="lensView"] #lensView{display:block}
+  body[data-side="discordView"] #discordView{display:block}
   #goChart{display:none}
   h1{font-size:21px}
   .view-head{margin-bottom:16px}
@@ -94,7 +95,7 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   .sheet-handle{display:none}
   #toast{bottom:36px}
   .expanded .topbar{display:flex}
-  .expanded #watchView,.expanded #newsView,.expanded #aiView,.expanded #alertsView,.expanded #settingsView,.expanded #screenerView,.expanded #lensView{display:none!important}
+  .expanded #watchView,.expanded #newsView,.expanded #aiView,.expanded #alertsView,.expanded #settingsView,.expanded #screenerView,.expanded #lensView,.expanded #discordView{display:none!important}
   .expanded main{grid-template-columns:1fr;grid-template-areas:"chart"}
 }
 @media(min-width:1024px){
@@ -187,7 +188,7 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
   #splitL{left:calc(var(--wl-w) - 4px)}#splitR{right:calc(var(--side-w) - 4px)}
   .split-btn{position:absolute;top:50%;left:-3px;transform:translateY(-50%);width:16px;height:44px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:14px;line-height:1;opacity:0;transition:opacity .15s;cursor:pointer}
   .splitter:hover .split-btn,.splitter.collapsed .split-btn{opacity:1}
-  body.wl-off #watchView,body.side-off #newsView,body.side-off #aiView,body.side-off #settingsView,body.side-off #alertsView,body.side-off #screenerView,body.side-off #lensView{display:none!important}
+  body.wl-off #watchView,body.side-off #newsView,body.side-off #aiView,body.side-off #settingsView,body.side-off #alertsView,body.side-off #screenerView,body.side-off #lensView,body.side-off #discordView{display:none!important}
   body.wl-off #splitL{left:0}body.side-off #splitR{right:0}
 }
 
@@ -246,7 +247,7 @@ body[data-indtab="std"] #indicatorView .legacy-scripts{display:none}
 
 /* ── Segundo gráfico (división) ── */
 #pane2{display:none;border:0;width:100%;height:100%;background:var(--bg);min-height:0}
-body.pane .topbar,body.pane .bottom-nav,body.pane .splitter,body.pane #watchView,body.pane #newsView,body.pane #aiView,body.pane #alertsView,body.pane #lensView,body.pane #screenerView,body.pane #settingsView,body.pane #indicatorView{display:none!important}
+body.pane .topbar,body.pane .bottom-nav,body.pane .splitter,body.pane #watchView,body.pane #newsView,body.pane #aiView,body.pane #alertsView,body.pane #lensView,body.pane #discordView,body.pane #screenerView,body.pane #settingsView,body.pane #indicatorView{display:none!important}
 body.pane #layoutBtn{display:none}
 body.pane #app,body.pane main{max-width:none;border:0;margin:0}
 body.pane main{display:block!important}
@@ -575,3 +576,23 @@ svg.ic{display:inline-block;vertical-align:-3px;flex:none}
 .favbar .fb-btn.on{background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent)}
 .favbar .fb-empty{font-size:12px;color:var(--muted);padding:0 8px;white-space:nowrap}
 body.pane .favbar{display:none}
+
+/* Discord: panel de envío de señales y avisos a un canal del servidor */
+#discordView .dc-head{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+#discordView .dc-logo{width:40px;height:40px;border-radius:12px;background:#5865f2;color:#fff;display:grid;place-items:center;flex:none}
+#discordView .dc-logo svg{width:24px;height:24px;fill:currentColor}
+#discordView .dc-card{padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:10px 0}
+#discordView .dc-card h3{margin:0 0 6px;font-size:13px}
+#discordView .dc-card p,#discordView .dc-card li,#discordView .dc-card small{font-size:12px;line-height:1.6;color:var(--muted)}
+#discordView .dc-card ol{margin:6px 0 0;padding-left:18px}
+#discordView .dc-input{width:100%;box-sizing:border-box;margin-top:8px;padding:9px 10px;background:var(--raised);border:1px solid var(--line);border-radius:8px;color:var(--text);font-size:12px}
+#discordView .dc-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+#discordView .dc-btn{padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--raised);color:var(--text);font-size:12px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+#discordView .dc-btn.pri{background:#5865f2;border-color:#5865f2;color:#fff}
+#discordView .dc-sw{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+#discordView .dc-sw:first-of-type{border-top:0}
+#discordView .dc-sw b{font-size:13px;display:block}
+#discordView .dc-sw small{display:block}
+#discordView .dc-st{font-size:12px;margin-top:8px}
+#discordView .dc-st.ok{color:var(--green)}#discordView .dc-st.err{color:var(--red)}
+.rr-btn.dc-on svg{color:#8b95ff}

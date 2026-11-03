@@ -21,7 +21,7 @@
 .bottom-nav::before{content:'';position:absolute;z-index:0;top:7px;bottom:calc(7px + env(safe-area-inset-bottom));left:0;width:var(--pill-w,0);transform:translateX(var(--pill-x,0));border-radius:16px;background:var(--glass-2);border:1px solid var(--glass-hi);box-shadow:var(--shadow);opacity:0;transition:transform .5s var(--spring),width .4s var(--ease),opacity .3s;margin:0 6px;box-sizing:border-box;width:calc(var(--pill-w,0px) - 12px);left:0}
 .bottom-nav.has-pill::before{opacity:1}
 @media(min-width:1024px){
-  #watchView,#newsView,#aiView,#settingsView,#alertsView{background:var(--glass);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-color:var(--glass-line)}
+  #watchView,#newsView,#aiView,#settingsView,#alertsView,#discordView{background:var(--glass);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-color:var(--glass-line)}
   .side-tabs{background:var(--glass);-webkit-backdrop-filter:var(--blur-s);backdrop-filter:var(--blur-s);border-color:var(--glass-line)}
   .side-tabs button{transition:background .35s var(--ease),color .3s,transform .3s var(--spring)}
   .side-tabs button:hover{color:var(--text)}.side-tabs button:active{transform:scale(.95)}

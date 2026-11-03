@@ -25,7 +25,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, dchan:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  groups: [], symGroup: {}, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}
+  groups: [], symGroup: {}, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -44,6 +44,13 @@ function sanAcct(a) { // saldo de la cuenta para la barra de progreso (USD)
 function sanMoveAlerts(a) { // avisos de movimientos bruscos del precio
   const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {};
   return {on: q.on !== false, pct: Math.max(0.5, Math.min(25, Math.round((+q.pct || 2) * 10) / 10)), sound: q.sound !== false};
+}
+function sanDiscord(a) { // Discord: webhook del canal #vortex, invitación al servidor y qué se envía (se guarda en la cuenta, privada del dueño)
+  const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {}, o = q.on && typeof q.on === 'object' ? q.on : {}, sn = q.sent && typeof q.sent === 'object' ? q.sent : {};
+  const url = typeof q.url === 'string' && /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/.test(q.url.trim()) ? q.url.trim() : '';
+  const inv = typeof q.invite === 'string' && /^https:\/\/(?:discord\.gg\/|(?:www\.)?discord\.com\/invite\/)[\w-]{2,40}$/.test(q.invite.trim()) ? q.invite.trim() : '';
+  const t = v => Number.isFinite(+v) && +v > 0 ? Math.round(+v) : 0;
+  return {url, invite: inv, on: {move: o.move !== false, price: o.price !== false, ind: o.ind !== false, s1h: o.s1h !== false, s4h: o.s4h !== false}, sent: {s1h: t(sn.s1h), s4h: t(sn.s4h)}};
 }
 const CTYPES = [['candles', 'Velas', 'c_candles'], ['hollow', 'Velas huecas', 'c_hollow'], ['ha', 'Heikin Ashi', 'c_ha'], ['bars', 'Barras OHLC', 'c_bars'], ['hlc', 'Barras HLC', 'c_hlc'], ['line', 'Línea', 'c_line'], ['area', 'Área', 'c_area'], ['step', 'Línea escalonada', 'c_step']];
 const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', okx: 'OKX Spot', coinbase: 'Coinbase', bingx: 'BingX'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
@@ -143,7 +150,7 @@ function merge(s) {
     o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 12).map(t => ({n: t.n.slice(0, 24), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})})) : [];
   }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
-  o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.moveAlerts = sanMoveAlerts(o.moveAlerts);
+  o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.discord = sanDiscord(o.discord);
   o.novaSaved = o.novaSaved && typeof o.novaSaved === 'object' && !Array.isArray(o.novaSaved) ? o.novaSaved : null;
   o.pine = Array.isArray(o.pine) ? o.pine.filter(p => p && typeof p.sid === 'string').slice(0, 12).map(p => Object.assign({sid: p.sid, on: p.on !== false, inputs: p.inputs && typeof p.inputs === 'object' && !Array.isArray(p.inputs) ? p.inputs : {}}, p.style && typeof p.style === 'object' && !Array.isArray(p.style) ? {style: p.style} : {}, p.vis && typeof p.vis === 'object' && !Array.isArray(p.vis) ? {vis: p.vis} : {}, ['main', 'top', 'bottom'].includes(p.pane) ? {pane: p.pane} : {}, p.hide === true ? {hide: true} : {})) : [];
   { // Nova Nexus: queda un solo indicador, el completo (Pine, en Mis indicadores). El módulo nativo antiguo se apaga y, si estaba encendido, se pasa al completo para no perderlo
@@ -224,7 +231,7 @@ function setSide(id) {
 }
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
-    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView') { setSide(id); if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
+    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView') { setSide(id); if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
     id = 'chartView';
   }
   currentView = id;
@@ -478,6 +485,7 @@ function fireAlert(a, price) {
   const msg = `${base(a.symbol)} ${a.dir === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`;
   toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
   try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {}
+  if (window.CCTDiscord) CCTDiscord.alert('price', {symbol: base(a.symbol), dir: a.dir, level: a.price, price, note: a.note, text: msg});
 }
 function checkAlerts(sym, price) {
   if (!Number.isFinite(price)) return;
@@ -546,6 +554,7 @@ function fireMove(sym, dir, ch, lbl, price) {
   moveLog.unshift({t: Date.now(), s: sym, d: dir, c: +ch.toFixed(2), w: lbl, p: price}); moveLog = moveLog.slice(0, 30); try { localStorage.setItem(MOVE_LOG_KEY, JSON.stringify(moveLog)); } catch {}
   toast('Movimiento brusco: ' + msg); if ((state.moveAlerts || {}).sound !== false) { alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} }
   try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Movimiento brusco', {body: msg}); } catch {}
+  if (window.CCTDiscord) CCTDiscord.alert('move', {symbol: base(sym), dir, pct: ch, win: lbl, price, text: msg});
   renderMoveAlerts();
 }
 async function movePoll() {
@@ -635,6 +644,7 @@ function fireInd(a, info) {
   const msg = `${base(a.symbol)} ${a.interval} · ${a.label}${info ? ' · ' + info : ''}${a.note ? ' · ' + a.note : ''}`;
   toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
   try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {}
+  if (window.CCTDiscord) CCTDiscord.alert('ind', {symbol: base(a.symbol), interval: a.interval, label: a.label, info, note: a.note, text: msg});
 }
 async function lastClosedBar(sym, itv) {
   const raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${itv}&limit=2`), now = Date.now(), cl = raw.filter(d => d[6] < now);
@@ -4031,6 +4041,8 @@ fetchTicker(); loadCandles(); initCloud(); if (!PANE) refreshPop();
 if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, save, setDrawings, pickTool, get FB() { return FB; }, get FAVS() { return FAVS; }, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, toggleFav, handlesOf, cancelTool, select: id => { selectedId = id; updateDrawUI(); render(); }, get view() { return {pan, visible}; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
 
 /* ───────── Puente para el Screener (screener.js) ───────── */
+window.CCT_switchView = id => switchView(id);
+window.CCT_discordStore = {get: () => state.discord, set: patch => { state.discord = sanDiscord({...state.discord, ...patch, on: {...(state.discord || {}).on, ...(patch.on || {})}, sent: {...(state.discord || {}).sent, ...(patch.sent || {})}}); save(); return state.discord; }};
 window.CCT_host = {
   interval: () => state.interval,
   async top(n) { try { if (!popAll.length) await loadPopTickers(); } catch {} return popAll.slice(0, n).map(t => ({symbol: t.symbol, price: +t.lastPrice, chg: +t.priceChangePercent})); },
