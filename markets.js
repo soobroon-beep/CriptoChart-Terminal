@@ -4,9 +4,9 @@
    Todo es de datos públicos (sin llaves). */
 (function (root) {
   'use strict';
-  const EXCH = {binance: 'Binance', binancef: 'Binance Futuros', bybit: 'Bybit', okx: 'OKX', coinbase: 'Coinbase', bingx: 'BingX'};
-  const SHORT = {binance: 'BINANCE', binancef: 'BINANCE·F', bybit: 'BYBIT', okx: 'OKX', coinbase: 'COINBASE', bingx: 'BINGX'};
-  const ORDER = ['binance', 'bybit', 'bingx', 'okx', 'coinbase', 'binancef'];
+  const EXCH = {binance: 'Binance', binancef: 'Binance Futuros', bybit: 'Bybit', okx: 'OKX', coinbase: 'Coinbase', bingx: 'BingX', dom: 'Dominancia'};
+  const SHORT = {binance: 'BINANCE', binancef: 'BINANCE·F', bybit: 'BYBIT', okx: 'OKX', coinbase: 'COINBASE', bingx: 'BINGX', dom: 'CRYPTO'};
+  const ORDER = ['binance', 'bybit', 'bingx', 'okx', 'coinbase', 'binancef', 'dom'];
   const QUOTE_OK = ['USDT', 'USDC', 'USD', 'BTC', 'EUR'];
 
   const parse = key => { const s = String(key || ''), i = s.indexOf('@'); const src = i < 0 ? 'binance' : s.slice(i + 1); return {sym: i < 0 ? s : s.slice(0, i), src: EXCH[src] ? src : 'binance'}; };
@@ -41,6 +41,7 @@
   let get = async url => { const r = await fetch(url); if (!r.ok) throw Error('HTTP ' + r.status); return r.json(); };
   const setFetcher = f => { get = f; };
   async function universe(src) {
+    if (src === 'dom') { const list = await domList(); cache.dom = {ts: Date.now(), list}; return list; }
     const c = cache[src]; if (c && Date.now() - c.ts < TTL) return c.list;
     if (c && c.p) return c.p;
     const p = (async () => { try { const list = N[src](await get(URLS[src])); cache[src] = {ts: Date.now(), list}; return list; } catch { cache[src] = {ts: Date.now() - TTL + 60000, list: (c && c.list) || []}; return (c && c.list) || []; } })();
@@ -57,7 +58,7 @@
       for (const r of list) {
         const full = r.base + r.quote, nm = String(names(r.base) || '').toUpperCase();
         let score = -1;
-        if (!t) score = r.quote === 'USDT' || r.quote === 'USD' ? 1 : -1;
+        if (!t) score = r.quote === 'USDT' || r.quote === 'USD' || r.src === 'dom' ? 1 : -1;
         else if (r.base === t) score = 100 + (r.quote === 'USDT' ? 5 : r.quote === 'USD' ? 4 : 0);
         else if (full === t) score = 110;
         else if (full.startsWith(t)) score = 60;
@@ -76,6 +77,7 @@
   async function tickers(keys) {
     const by = {}; for (const k of keys) { const p = parse(k); if (p.src !== 'binance') (by[p.src] = by[p.src] || []).push(p); }
     const out = {};
+    if (by.dom) { try { const m = new Map((await domList()).map(r => [r.sym, r])); for (const p of by.dom) { const r = m.get(p.sym); if (r) out[mk(p.sym, 'dom')] = {symbol: mk(p.sym, 'dom'), lastPrice: String(r.last), priceChangePercent: String(r.chg)}; } } catch {} delete by.dom; }
     await Promise.all(Object.entries(by).map(async ([src, ps]) => {
       try {
         if (src === 'binancef' || src === 'bybit' || src === 'okx') { const list = await universe(src), m = new Map(list.map(r => [r.sym, r])); for (const p of ps) { const r = m.get(p.sym); if (r) out[mk(p.sym, src)] = {symbol: mk(p.sym, src), lastPrice: String(r.last), priceChangePercent: String(r.chg)}; } }
@@ -86,6 +88,41 @@
     return out;
   }
 
+
+  // ── Dominancia (USDT.D, BTC.D): muestras que guarda .github/workflows/dominance.yml en dominance-data.json ──
+  const DOM_NAMES = {'USDT.D': 'Tether Dominance', 'BTC.D': 'Bitcoin Dominance'};
+  const DOM_URLS = ['dominance-data.json', 'https://raw.githubusercontent.com/soobroon-beep/CriptoChart-Terminal/main/dominance-data.json'];
+  let domCache = null;
+  async function domData() {
+    if (domCache && Date.now() - domCache.ts < 120000) return domCache.d;
+    let d = null;
+    for (const u of DOM_URLS) { try { const r = await fetch(u + (u.includes('?') ? '&' : '?') + 'v=' + Math.floor(Date.now() / 120000)); if (r.ok) { d = await r.json(); if (d && d.series) break; } } catch {} }
+    if (!d || !d.series) { if (domCache) return domCache.d; throw Error('Sin datos de dominancia'); }
+    domCache = {ts: Date.now(), d}; return d;
+  }
+  function domPoints(d, sym) { // [t, %] en orden: el diario (largo plazo) y el de 15 min (reciente) sin repetir
+    const s = d.series[sym]; if (!s) return [];
+    const h = s.h || [], t0 = h.length ? h[0][0] : Infinity;
+    return [...(s.d || []).filter(p => p[0] < t0), ...h].sort((a, b) => a[0] - b[0]);
+  }
+  async function domList() {
+    const d = await domData(), out = [];
+    for (const sym of Object.keys(DOM_NAMES)) {
+      const pts = domPoints(d, sym); if (!pts.length) continue;
+      const last = pts[pts.length - 1], ref = [...pts].reverse().find(p => p[0] <= last[0] - 864e5 + 9e5);
+      out.push(row('dom', sym, sym, '', last[1], ref ? (last[1] / ref[1] - 1) * 100 : NaN, 1e12));
+    }
+    return out;
+  }
+  const TF_MS = {'1m': 6e4, '5m': 3e5, '15m': 9e5, '30m': 18e5, '1h': 36e5, '2h': 72e5, '4h': 144e5, '6h': 216e5, '8h': 288e5, '12h': 432e5, '1d': 864e5, '3d': 2592e5, '1w': 6048e5, '1M': 2592e6};
+  async function klinesDom(sym, tf, limit = 1000) {
+    const pts = domPoints(await domData(), sym), ms = TF_MS[tf] || 36e5, m = new Map();
+    for (const [t, v] of pts) { const k = Math.floor(t / ms) * ms, c = m.get(k); if (!c) m.set(k, {t: k, o: v, h: v, l: v, c: v, v: 0}); else { c.h = Math.max(c.h, v); c.l = Math.min(c.l, v); c.c = v; } }
+    const out = [...m.values()].sort((a, b) => a.t - b.t);
+    if (out.length < 2) throw Error('La dominancia aún está juntando historial: vuelve en un rato');
+    return out.slice(-limit);
+  }
+
   // BingX: velas (el orden que devuelve no está garantizado, se ordena por tiempo)
   const BX_IV = {'1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1h', '4h': '4h', '1d': '1d', '1w': '1w', '1M': '1M'};
   async function klinesBingx(sym, tf, limit = 1000) {
@@ -94,6 +131,6 @@
     return d.map(x => Array.isArray(x) ? {t: +x[0], o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[5]} : {t: +x.openTime || +x.time, o: +x.open, h: +x.high, l: +x.low, c: +x.close, v: +x.volume}).sort((a, b) => a.t - b.t).filter((c, i, arr) => !i || c.t !== arr[i - 1].t);
   }
 
-  root.CCTMarkets = {EXCH, SHORT, ORDER, parse, symOf, srcOf, mk, norm, N, universe, loaded, search, tickers, klinesBingx, BX_IV, setFetcher, splitQ};
+  root.CCTMarkets = {DOM_NAMES, klinesDom, EXCH, SHORT, ORDER, parse, symOf, srcOf, mk, norm, N, universe, loaded, search, tickers, klinesBingx, BX_IV, setFetcher, splitQ};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.CCTMarkets;
 })(typeof window !== 'undefined' ? window : globalThis);

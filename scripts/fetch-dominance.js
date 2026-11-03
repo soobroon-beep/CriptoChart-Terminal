@@ -4,7 +4,7 @@
 // · Si el archivo está vacío, intenta rellenar el pasado dividiendo la capitalización de Tether entre la capitalización total (365 días). Si CoinGecko no da el total histórico, el historial empieza hoy: nunca se inventan puntos.
 const fs = require('fs'), path = require('path');
 const FILE = path.join(__dirname, '..', 'dominance-data.json'), API = 'https://api.coingecko.com/api/v3';
-const H = 3600e3, D = 86400e3, KEEP_H = 120 * D, KEEP_D = 3000 * D;
+const H = 900e3, D = 86400e3, KEEP_H = 30 * D, KEEP_D = 3000 * D;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function getJSON(url) {

@@ -53,7 +53,7 @@ function sanDiscord(a) { // Discord: webhook del canal #vortex, invitación al s
   return {url, invite: inv, on: {move: o.move !== false, price: o.price !== false, ind: o.ind !== false, s1h: o.s1h !== false, s4h: o.s4h !== false}, sent: {s1h: t(sn.s1h), s4h: t(sn.s4h)}};
 }
 const CTYPES = [['candles', 'Velas', 'c_candles'], ['hollow', 'Velas huecas', 'c_hollow'], ['ha', 'Heikin Ashi', 'c_ha'], ['bars', 'Barras OHLC', 'c_bars'], ['hlc', 'Barras HLC', 'c_hlc'], ['line', 'Línea', 'c_line'], ['area', 'Área', 'c_area'], ['step', 'Línea escalonada', 'c_step']];
-const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', okx: 'OKX Spot', coinbase: 'Coinbase', bingx: 'BingX'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
+const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', okx: 'OKX Spot', coinbase: 'Coinbase', bingx: 'BingX', dom: 'Dominancia USDT/BTC'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
 const CHART_DEF = {bg: '#0d1019', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1};
 function sanChartStyle(c) {
   const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
@@ -196,10 +196,10 @@ const save = () => { state.rev = Math.max(Date.now(), (+state.rev || 0) + 1); tr
 /* ───────── Utilidades ───────── */
 const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','A'],UNI:['Uniswap','U'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
 const QUOTES = ['USDT', 'USDC', 'FDUSD', 'USD', 'BTC', 'ETH', 'BNB', 'EUR', 'TRY', 'BRL']; // monedas de cotización admitidas (ETHBTC = ETH/BTC)
-const splitSym = s0 => { const s = window.CCTMarkets ? CCTMarkets.norm(CCTMarkets.symOf(s0)) : s0; for (const q of QUOTES) if (s.length > q.length + 1 && s.endsWith(q)) return [s.slice(0, -q.length), q]; return [s, 'USDT']; };
+const splitSym = s0 => { if (window.CCTMarkets && CCTMarkets.srcOf(s0) === 'dom') return [CCTMarkets.symOf(s0), '']; const s = window.CCTMarkets ? CCTMarkets.norm(CCTMarkets.symOf(s0)) : s0; for (const q of QUOTES) if (s.length > q.length + 1 && s.endsWith(q)) return [s.slice(0, -q.length), q]; return [s, 'USDT']; };
 const srcOf = k => window.CCTMarkets ? CCTMarkets.srcOf(k) : 'binance', symOf = k => window.CCTMarkets ? CCTMarkets.symOf(k) : k, exName = k => (window.CCTMarkets ? CCTMarkets.EXCH[srcOf(k)] : 'Binance') || 'Binance';
-const baseOnly = s => splitSym(s)[0], quoteOf = s => splitSym(s)[1], pairLbl = s => `${baseOnly(s)}/${quoteOf(s)}`;
-const base = s => { const [b, q] = splitSym(s); return q === 'USDT' ? b : b + '/' + q; };
+const baseOnly = s => splitSym(s)[0], quoteOf = s => splitSym(s)[1], pairLbl = s => quoteOf(s) ? `${baseOnly(s)}/${quoteOf(s)}` : baseOnly(s);
+const base = s => { const [b, q] = splitSym(s); return q === 'USDT' || !q ? b : b + '/' + q; };
 const meta = s => catalog[baseOnly(s)] || [base(s), baseOnly(s).slice(0, 1)];
 const fmt = n => !Number.isFinite(n) ? '—' : n >= 1000 ? n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : n >= 1 ? n.toFixed(2) : n.toFixed(n < .01 ? 8 : 4);
 const pct = n => !Number.isFinite(n) ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
@@ -267,15 +267,16 @@ function coinBadge(s) {
    El último punto se sustituye por el precio en vivo del ticker. Verde si la moneda sube en 24 h, rojo si baja (el mismo signo que el % de la fila). Sin datos no se dibuja nada inventado. */
 const SPARK_TTL = 300000, SPARK_RETRY = 60000, spark = {}; let sparkBusy = false;
 const sparkStale = s => { const e = spark[s]; return !e || Date.now() - e.ts > (e.v ? SPARK_TTL : SPARK_RETRY); };
+async function sparkOne(s) {
+  try { const sr = srcOf(s), f = SRC_FETCH[sr], k = sr === 'binance' ? (await getJSON(`${API}/klines?symbol=${s}&interval=30m&limit=48`)).map(bnRow) : await (f && f.ok('30m') ? f.get(symOf(s), '30m', 48) : f.get(symOf(s), '1h', 24)).then(a => a.slice(-48)), v = [k[0].o, ...k.map(x => x.c)].filter(x => Number.isFinite(x) && x > 0); spark[s] = {ts: Date.now(), v: v.length >= 8 ? v : null}; }
+  catch { spark[s] = {ts: Date.now(), v: null}; }
+}
 async function loadSparks() {
   if (sparkBusy) return; const todo = state.symbols.filter(sparkStale).slice(0, 60); if (!todo.length) return;
   sparkBusy = true;
   try {
     for (let i = 0; i < todo.length; i += 8) { // en lotes de 8 para no saturar la API
-      await Promise.all(todo.slice(i, i + 8).map(async s => {
-        try { const sr = srcOf(s), f = SRC_FETCH[sr], k = sr === 'binance' ? (await getJSON(`${API}/klines?symbol=${s}&interval=30m&limit=48`)).map(bnRow) : await (f && f.ok('30m') ? f.get(symOf(s), '30m', 48) : f.get(symOf(s), '1h', 24)).then(a => a.slice(-48)), v = [k[0].o, ...k.map(x => x.c)].filter(x => Number.isFinite(x) && x > 0); spark[s] = {ts: Date.now(), v: v.length >= 8 ? v : null}; }
-        catch { spark[s] = {ts: Date.now(), v: null}; }
-      }));
+      await Promise.all(todo.slice(i, i + 8).map(sparkOne));
       renderWatch();
     }
   } finally { sparkBusy = false; }
@@ -798,7 +799,7 @@ function updateChartHeader() {
   const last = candles.length ? candles[candles.length - 1].c : Number(t?.lastPrice);
   const ch = Number(t?.priceChangePercent);
   $('#coinIcon').textContent = meta(state.symbol)[1];
-  $('#coinTitle').textContent = `${baseOnly(state.symbol)} / ${quoteOf(state.symbol)}`; { const sl = $('#srcLabel'); if (sl) sl.textContent = (SOURCES[dataSrc || srcOf(state.symbol)] || 'Binance Spot').toUpperCase() + ' ▾'; }
+  $('#coinTitle').textContent = pairLbl(state.symbol).replace('/', ' / '); { const sl = $('#srcLabel'); if (sl) sl.textContent = (SOURCES[dataSrc || srcOf(state.symbol)] || 'Binance Spot').toUpperCase() + ' ▾'; }
   $('#chartLabel').textContent = symOf(state.symbol);
   $('#intervalLabel').textContent = state.interval;
   $('#lastPrice').textContent = fmt(last);
@@ -840,10 +841,12 @@ const SRC_FETCH = {
   bybit: {ok: tf => !!BY_IV[tf], get: (sym, tf, limit, sig) => fetchKlinesBybit(sym, tf, limit, null, sig)},
   okx: {ok: tf => !!OKX_BAR[tf], get: fetchOkx},
   coinbase: {ok: tf => !!CB_GRAN[tf], get: fetchCoinbase},
-  bingx: {ok: tf => !!(window.CCTMarkets && CCTMarkets.BX_IV[tf]), get: (sym, tf, limit) => CCTMarkets.klinesBingx(dashPair(sym), tf, limit)}
+  bingx: {ok: tf => !!(window.CCTMarkets && CCTMarkets.BX_IV[tf]), get: (sym, tf, limit) => CCTMarkets.klinesBingx(dashPair(sym), tf, limit)},
+  dom: {ok: () => true, get: (sym, tf, limit) => CCTMarkets.klinesDom(sym, tf, limit)}
 };
 async function fetchKlinesAny(key, tf, signal, limit = 1000) { // el exchange va en la clave del activo; si no tiene el par o la temporalidad, se usa Binance Spot
   const sym = symOf(key), src = srcOf(key), f = SRC_FETCH[src];
+  if (src === 'dom') return {cs: await f.get(sym, tf, limit, signal), src};
   if (f && f.ok(tf)) { try { return {cs: await f.get(sym, tf, limit, signal), src}; } catch (e) { if (e.name === 'AbortError') throw e; } }
   const data = await getJSON(`${API}/klines?symbol=${CCTMarkets.norm(sym)}&interval=${tf}&limit=${Math.min(1000, limit)}`, signal);
   return {cs: data.map(bnRow), src: 'binance'};
@@ -862,6 +865,7 @@ async function loadCandles(silent = false) {
     setFeedback(''); updateChartHeader(); render(); connectWS();
   } catch (e) {
     if (e.name === 'AbortError') return;
+    if (!silent && srcOf(sym) === 'dom') { setFeedback(e.message || 'Sin datos de dominancia'); render(); return; }
     if (!silent) { setFeedback(`No se pudieron cargar las velas de ${SOURCES[srcOf(sym)] || 'Binance'}${srcOf(sym) !== 'binance' ? ' ni de Binance Spot' : ''}. No se muestran datos simulados.`); render(); }
   }
 }
@@ -871,6 +875,7 @@ function connectWS() {
   closeWS();
   if (typeof WebSocket === 'undefined') return;
   const gen = wsGen, sym = symOf(state.symbol), tf = state.interval, src = dataSrc || 'binance';
+  if (src === 'dom') { setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH.dom.get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 60000); return; }
   if (src === 'coinbase' || src === 'bingx') { // Coinbase y BingX no ofrecen velas por WebSocket público sencillo: se consulta cada 8 s
     setLive(true); wsPing = setInterval(async () => { if (gen !== wsGen || document.hidden) return; try { const cs = await SRC_FETCH[src].get(sym, tf, 3); if (gen === wsGen) cs.forEach(applyKline); } catch {} }, 8000); return;
   }
@@ -1153,6 +1158,7 @@ document.addEventListener('click', e => {
 
 /* ───────── Hojas inferiores (activo / añadir / dibujar / indicadores) ───────── */
 function openSheet(mode = 'select') {
+  if (mode === 'select' || mode === 'add') { sheetMode = mode; openSym(mode); return; }
   sheetMode = mode;
   $('#sheetTitle').textContent = {add: 'Añadir a seguimiento', tools: 'Herramientas de dibujo', indicators: 'Indicadores', select: 'Seleccionar criptomoneda', script: 'Código del script', paste: 'Pegar script de Pine', pine: 'Convertir script de Pine', pineSet: 'Script de Pine', novaSet: 'Nova Nexus'}[mode];
   $('#sheetSearch').style.display = ['tools', 'indicators', 'script', 'paste', 'pine', 'pineSet', 'novaSet'].includes(mode) ? 'none' : 'block';
@@ -1160,7 +1166,7 @@ function openSheet(mode = 'select') {
   $('#sheetBackdrop').classList.add('open'); $('#sheet').classList.add('open');
   renderSheet(); if (['add', 'select'].includes(mode)) loadSheetUniverse();
 }
-function closeSheet() { $('#sheetBackdrop').classList.remove('open'); $('#sheet').classList.remove('open'); }
+function closeSheet() { $('#sheetBackdrop').classList.remove('open'); $('#sheet').classList.remove('open'); closeSym(); }
 /* ───────── Catálogo de herramientas de dibujo (estilo TradingView) ─────────
    Cada grupo = un botón en la barra izquierda (escritorio) y una sección en la hoja «Dibujar» (móvil).
    Herramienta: [clave, nombre, ayuda, icono SVG] */
@@ -1370,7 +1376,118 @@ function renderSheet() {
   });
 }
 const sheetLoad = {};
-function loadSheetUniverse() { if (!window.CCTMarkets) return; CCTMarkets.ORDER.forEach(x => { if (sheetLoad[x]) return; sheetLoad[x] = 'busy'; CCTMarkets.universe(x).then(() => { sheetLoad[x] = 'done'; if ($('#sheet').classList.contains('open') && ['add', 'select'].includes(sheetMode)) renderSheet(); }); }); }
+function loadSheetUniverse() { if (!window.CCTMarkets) return; CCTMarkets.ORDER.forEach(x => { if (sheetLoad[x]) return; sheetLoad[x] = 'busy'; CCTMarkets.universe(x).then(() => { sheetLoad[x] = 'done'; if (symOpen) renderSym(); }); }); }
+
+/* ───────── Buscador de activos visual (estilo openmarket / TradingView) ─────────
+   Categorías arriba, filtros a la izquierda, lista de activos con mini gráfico en el centro y, a la derecha, el mismo activo en cada exchange.
+   Elegir un exchange abre ese par; en «Añadir» lo guarda en Mi seguimiento. En celular el panel de exchanges ocupa la pantalla y tiene botón «Volver». */
+let symOpen = false, symMode = 'select', symTab = 'all', symExp = 'vol', symSel = '', symF = {src: '', quote: '', prod: ''}, symAssets = [], symCur = 0;
+const SYM_TABS = [['all', 'Todos'], ['crypto', 'Cripto'], ['dom', 'Dominancia'], ['fav', 'Mi seguimiento']];
+const SYM_EXP = [['vol', 'Más volumen'], ['up', 'Suben hoy'], ['down', 'Bajan hoy']];
+const symName = b => (catalog[b] || [(window.CCTMarkets && CCTMarkets.DOM_NAMES[b]) || ''])[0];
+const symIcon = b => `<span class="coin-icon ${b === 'ETH' ? 'eth' : b === 'SOL' ? 'sol' : b === 'BNB' ? 'bnb' : b === 'XRP' ? 'xrp' : b === 'BTC' ? '' : 'other'}">${esc(b.endsWith('.D') ? 'D' : (catalog[b] || [0, b.slice(0, 1)])[1])}</span>`;
+const symPx = r => Number.isFinite(r.last) ? fmt(r.last) + (r.src === 'dom' ? '%' : '') : '—';
+const symChg = r => Number.isFinite(r.chg) ? `<small class="${r.chg >= 0 ? 'positive' : 'negative'}">${r.chg >= 0 ? '▲' : '▼'} ${Math.abs(r.chg).toFixed(2)}%</small>` : '<small>—</small>';
+function symBuild() {
+  const M = window.CCTMarkets; if (!M) return [];
+  const q = $('#symInput').value.trim().toUpperCase().replace(/[^A-Z0-9.]/g, '');
+  let rows = M.search(q, {names: symName, limit: 6000});
+  rows = rows.filter(r => {
+    if (symTab === 'dom' && r.src !== 'dom') return false;
+    if (symTab === 'crypto' && r.src === 'dom') return false;
+    if (symTab === 'fav' && !state.symbols.includes(r.key)) return false;
+    if (symF.src && r.src !== symF.src) return false;
+    if (symF.quote && r.quote !== symF.quote) return false;
+    if (symF.prod === 'spot' && (r.src === 'binancef' || r.src === 'dom')) return false;
+    if (symF.prod === 'perp' && r.src !== 'binancef') return false;
+    return true;
+  });
+  const g = new Map();
+  for (const r of rows) { const k = r.base; if (!g.has(k)) g.set(k, {base: k, name: symName(k), rows: [], rank: g.size}); g.get(k).rows.push(r); }
+  const out = [...g.values()];
+  for (const a of out) { // fila «principal»: la de más volumen con precio, preferiblemente en dólares
+    const pr = a.rows.filter(r => Number.isFinite(r.last)), pool = pr.length ? pr : a.rows;
+    a.best = pool.slice().sort((x, y) => ((y.quote === 'USDT' || y.quote === 'USD' || y.src === 'dom') - (x.quote === 'USDT' || x.quote === 'USD' || x.src === 'dom')) || y.vol - x.vol)[0];
+    a.vol = Math.max(...a.rows.map(r => r.vol || 0));
+  }
+  if (!q) { // sin texto: orden según «Explorar»
+    if (symExp === 'up') out.sort((a, b) => (b.best.chg || -1e9) - (a.best.chg || -1e9));
+    else if (symExp === 'down') out.sort((a, b) => (a.best.chg || 1e9) - (b.best.chg || 1e9));
+    else out.sort((a, b) => (b.best.src === 'dom') - (a.best.src === 'dom') || b.vol - a.vol);
+    if (symExp !== 'vol') return out.filter(a => Number.isFinite(a.best.chg) && a.vol > 5e6).slice(0, 60);
+  }
+  return out.slice(0, 60);
+}
+function symSparkCell(r) { return `<span class="sym-sp" data-sp="${esc(r.key)}">${sparkSVG(r.key, r.chg)}</span>`; }
+async function symSparks(keys) {
+  const todo = keys.filter(sparkStale).slice(0, 40);
+  for (let i = 0; i < todo.length && symOpen; i += 8) {
+    await Promise.all(todo.slice(i, i + 8).map(sparkOne));
+    $$('#symModal [data-sp]').forEach(el => { const k = el.dataset.sp; if (spark[k] && spark[k].v) { const r = symAllRows.get(k); el.innerHTML = sparkSVG(k, r ? r.chg : NaN); } });
+  }
+}
+let symAllRows = new Map();
+function renderSym() {
+  if (!symOpen) return;
+  const M = window.CCTMarkets, loading = M && !M.ORDER.every(x => sheetLoad[x] === 'done');
+  $('#symTabs').innerHTML = SYM_TABS.map(([k, n]) => `<button class="${symTab === k ? 'on' : ''}" data-symtab="${k}" type="button">${n}</button>`).join('');
+  const quotes = ['USDT', 'USDC', 'USD', 'BTC', 'EUR'], srcs = M ? M.ORDER.filter(x => x !== 'dom') : [];
+  const sel = (id, lab, cur, opts) => `<label class="sym-sel"><small>${lab}</small><select id="${id}"><option value="">Todos</option>${opts.map(([v, n]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>`;
+  $('#symSide').innerHTML = `<h6>Explorar</h6>${SYM_EXP.map(([k, n]) => `<button class="sym-nav ${symExp === k ? 'on' : ''}" data-symexp="${k}" type="button">${n}${symExp === k ? '<i>✓</i>' : ''}</button>`).join('')}
+    <h6>Refinar</h6>${sel('symFSrc', 'Exchange', symF.src, srcs.map(x => [x, M.EXCH[x]]))}${sel('symFQuote', 'Cotización', symF.quote, quotes.map(x => [x, x]))}
+    <h6>Producto</h6><div class="sym-chips">${[['spot', 'Spot'], ['perp', 'Perpetuos']].map(([k, n]) => `<button class="${symF.prod === k ? 'on' : ''}" data-symprod="${k}" type="button">${n}</button>`).join('')}</div>`;
+  symAssets = symBuild(); symAllRows = new Map(); symAssets.forEach(a => a.rows.forEach(r => symAllRows.set(r.key, r)));
+  if (!symAssets.some(a => a.base === symSel)) symSel = symAssets[0] ? symAssets[0].base : '';
+  symCur = Math.max(0, symAssets.findIndex(a => a.base === symSel));
+  $('#symAssets').innerHTML = `<div class="sym-head"><b>Activos</b><small>${symAssets.length}${symAssets.length >= 60 ? '+' : ''} resultados</small></div>` + (symAssets.map(a => `<button class="sym-row ${a.base === symSel ? 'on' : ''}" data-symbase="${esc(a.base)}" type="button">${symIcon(a.base)}<span class="sym-nm"><strong>${esc(a.base)}</strong><small>${esc(a.name || (a.rows.length + (a.rows.length === 1 ? ' mercado' : ' mercados')))}</small></span>${symSparkCell(a.best)}<span class="sym-px"><strong>${symPx(a.best)}</strong>${symChg(a.best)}</span></button>`).join('') || `<p class="small-note">${loading ? 'Buscando en los exchanges…' : 'No se encontraron activos. Prueba otro texto o quita filtros.'}</p>`);
+  renderSymEx();
+  symSparks(symAssets.slice(0, 24).map(a => a.best.key));
+}
+function renderSymEx() {
+  const a = symAssets.find(x => x.base === symSel), box = $('#symEx');
+  if (!a) { box.innerHTML = ''; return; }
+  const rows = a.rows.slice().sort((x, y) => (y.vol || 0) - (x.vol || 0) || M_ORDER(x) - M_ORDER(y)).slice(0, 40);
+  box.innerHTML = `<div class="sym-head"><button class="sym-back" id="symBack" type="button">‹ Volver</button>${symIcon(a.base)}<b>${esc(a.base)}</b><small>${esc(a.name)}</small><span class="sym-count">${a.rows.length} ${a.rows.length === 1 ? 'mercado' : 'mercados'}</span></div>` +
+    rows.map(r => `<button class="sym-row ex" data-sympick="${esc(r.key)}" type="button"><span class="ex-tag ex-${r.src}">${esc(CCTMarkets.SHORT[r.src])}</span><span class="sym-nm"><strong>${esc(r.quote ? r.base + '/' + r.quote : r.base)}</strong><small>${r.src === 'binancef' ? 'Perpetuo' : r.src === 'dom' ? 'Índice' : 'Spot'}</small></span>${symSparkCell(r)}<span class="sym-px"><strong>${symPx(r)}</strong>${symChg(r)}</span><span class="sym-go">${state.symbols.includes(r.key) ? '✓' : '＋'}</span></button>`).join('');
+  symSparks(rows.map(r => r.key));
+}
+const M_ORDER = r => CCTMarkets.ORDER.indexOf(r.src);
+function symPick(key) {
+  if (symMode === 'add') { if (!state.symbols.includes(key)) { state.symbols.push(key); save(); renderWatch(); fetchTicker(); toast(`${base(key)} añadido (${exName(key)})`); } closeSym(); return; }
+  if (!state.symbols.includes(key)) { state.symbols.push(key); save(); renderWatch(); fetchTicker(); }
+  selectSymbol(key);
+}
+function openSym(mode) {
+  symMode = mode; symOpen = true; symTab = 'all'; symExp = 'vol'; symSel = ''; symF = {src: '', quote: '', prod: ''};
+  $('#symInput').value = ''; $('#symTitle').textContent = mode === 'add' ? 'Añadir a Mi seguimiento' : 'Buscar activo';
+  $('#symBackdrop').classList.add('open'); $('#symModal').classList.remove('ex-open');
+  renderSym(); loadSheetUniverse(); setTimeout(() => { try { $('#symInput').focus(); } catch {} }, 60);
+}
+function closeSym() { if (!symOpen) return; symOpen = false; $('#symBackdrop').classList.remove('open'); }
+{
+  const modal = $('#symModal');
+  $('#symInput').addEventListener('input', () => { symSel = ''; renderSym(); });
+  $('#symClose').onclick = closeSym;
+  $('#symBackdrop').addEventListener('mousedown', e => { if (e.target.id === 'symBackdrop') closeSym(); });
+  modal.addEventListener('click', e => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.symtab) { symTab = t.dataset.symtab; symSel = ''; renderSym(); }
+    else if (t.dataset.symexp) { symExp = t.dataset.symexp; symSel = ''; renderSym(); }
+    else if (t.dataset.symprod) { symF.prod = symF.prod === t.dataset.symprod ? '' : t.dataset.symprod; symSel = ''; renderSym(); }
+    else if (t.dataset.symbase) { symSel = t.dataset.symbase; $$('#symAssets .sym-row').forEach(b => b.classList.toggle('on', b.dataset.symbase === symSel)); renderSymEx(); modal.classList.add('ex-open'); }
+    else if (t.dataset.sympick) symPick(t.dataset.sympick);
+    else if (t.id === 'symBack') modal.classList.remove('ex-open');
+  });
+  modal.addEventListener('dblclick', e => { const t = e.target.closest('[data-symbase]'); if (t) { const a = symAssets.find(x => x.base === t.dataset.symbase); if (a) symPick(a.best.key); } });
+  modal.addEventListener('change', e => { if (e.target.id === 'symFSrc') symF.src = e.target.value; else if (e.target.id === 'symFQuote') symF.quote = e.target.value; else return; symSel = ''; renderSym(); });
+  document.addEventListener('keydown', e => {
+    if (!symOpen) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeSym(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!symAssets.length) return; symCur = clamp(symCur + (e.key === 'ArrowDown' ? 1 : -1), 0, symAssets.length - 1); symSel = symAssets[symCur].base; $$('#symAssets .sym-row').forEach(b => b.classList.toggle('on', b.dataset.symbase === symSel)); const on = $('#symAssets .sym-row.on'); if (on) on.scrollIntoView({block: 'nearest'}); renderSymEx(); }
+    else if (e.key === 'Enter') { const a = symAssets.find(x => x.base === symSel); if (a) { e.preventDefault(); symPick(a.best.key); } }
+  });
+}
+
 $('#closeSheet').onclick = closeSheet; $('#sheetBackdrop').onclick = closeSheet; $('#sheetSearch').oninput = renderSheet;
 $('#symbolButton').onclick = () => openSheet(); $('#addAsset').onclick = () => openSheet('add'); $('#searchCoins').oninput = renderWatch;
 $$('[data-panel]').forEach(b => b.onclick = () => openSheet(b.dataset.panel === 'tools' ? 'tools' : 'indicators'));

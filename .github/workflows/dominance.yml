@@ -1,7 +1,7 @@
 name: Actualizar dominancia
-# Guarda la dominancia de USDT y BTC (USDT.D, BTC.D) en dominance-data.json cada hora, para el buscador y el gráfico de VORTEX.
+# Guarda la dominancia de USDT y BTC (USDT.D, BTC.D) en dominance-data.json cada 15 minutos, para el buscador y el gráfico de VORTEX.
 on:
-  schedule: [{cron: '7 * * * *'}]
+  schedule: [{cron: '*/15 * * * *'}]
   workflow_dispatch:
 permissions:
   contents: write
