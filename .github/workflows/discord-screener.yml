@@ -1,0 +1,23 @@
+name: Screener a Discord
+# Manda a Discord las señales del Screener cada hora (1h) y cada 4 horas UTC (4h), sin necesitar la app abierta.
+# Requiere el secreto del repositorio DISCORD_WEBHOOK (URL del webhook del canal #vortex).
+on:
+  schedule: [{cron: '2 * * * *'}]
+  workflow_dispatch:
+    inputs:
+      tf: {description: 'Temporalidades a enviar (1h, 4h o 1h,4h). Vacío = según la hora', required: false, default: ''}
+permissions:
+  contents: read
+concurrency: {group: discord-screener, cancel-in-progress: false}
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: node scripts/discord-screener.js
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          TF: ${{ github.event.inputs.tf }}

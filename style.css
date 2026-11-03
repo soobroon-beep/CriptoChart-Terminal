@@ -596,3 +596,7 @@ body.pane .favbar{display:none}
 #discordView .dc-st{font-size:12px;margin-top:8px}
 #discordView .dc-st.ok{color:var(--green)}#discordView .dc-st.err{color:var(--red)}
 .rr-btn.dc-on svg{color:#8b95ff}
+#discordView .dc-back{display:none;margin:0 0 6px;padding:6px 10px;border:0;background:none;color:var(--accent);font-size:13px;cursor:pointer}
+@media(max-width:1023px){#discordView .dc-back{display:inline-block}}
+#discordView .dc-card small{display:block;margin-top:8px}
+@media(min-width:1024px){#dcSettingRow{display:none}}
