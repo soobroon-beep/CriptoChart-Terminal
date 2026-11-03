@@ -3093,10 +3093,25 @@ area.addEventListener('pointerdown', e => { stopMotion();
     const d = getDrawings().find(x => x.id === selectedId);
     const hnd = d && handlesOf(d).find(hh => Math.hypot(hh.x - pt.x, hh.y - pt.y) < 24);
     if (hnd) { gest.mode = 'handle'; gest.handle = hnd.key; }
+    else if (d && !d.lock && !DOPT.lock && !DOPT.hide && !d.hide && distToDrawing(d, pt) < 18) startDMove(d, pt);
   }
+  if (gest.mode === 'pending' && !drawTool && !selectedId) { const h0 = hitTest(pt); if (h0 && !h0.lock) { selectedId = h0.id; startDMove(h0, pt); gest.picked = true; } } // arrastrar un dibujo (aunque no esté seleccionado) lo selecciona y lo mueve, sin mover el gráfico
   if (gest.mode === 'pending' && !drawTool)
     gest.timer = setTimeout(() => { if (gest && !gest.moved && gest.mode === 'pending') { gest.mode = 'cross'; cross = pt; navigator.vibrate?.(8); scheduleRender(); } }, 380);
 });
+function startDMove(d, pt) {
+  gest.mode = 'dmove'; gest.dm = {id: d.id, orig: JSON.parse(JSON.stringify(d)), i0: IDX(pt.x), p0: PRICE(pt.y), snap: false};
+}
+function applyDMove(d, pt) {
+  const m = gest.dm, o = m.orig, di = IDX(pt.x) - m.i0, dp = PRICE(pt.y) - m.p0;
+  const mv = q => Array.isArray(q) ? [Math.round(timeOfIdx(idxOfTime(q[0]) + di)), q[1] + dp] : {t: Math.round(timeOfIdx(idxOfTime(q.t) + di)), p: q.p + dp};
+  const mt = q => Array.isArray(q) ? [Math.round(timeOfIdx(idxOfTime(q[0]) + di)), q[1]] : {...q, t: Math.round(timeOfIdx(idxOfTime(q.t) + di))};
+  const mp = q => Array.isArray(q) ? [q[0], q[1] + dp] : {...q, p: q.p + dp};
+  const f = o.type === 'horizontal' ? mp : o.type === 'vertical' ? mt : mv;
+  for (const k of ['a', 'b', 'c']) if (o[k]) d[k] = f(o[k]);
+  if (o.pts) { d.pts = o.pts.map(f); if (MULTI[o.type] || o.type === 'brush') d.a = o.type === 'brush' ? {t: d.pts[0][0], p: d.pts[0][1]} : d.pts[0]; }
+  if (Number.isFinite(o.sp)) d.sp = o.sp + dp;
+}
 area.addEventListener('pointermove', e => {
   if (!ptrs.has(e.pointerId)) return;
   ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
@@ -3111,6 +3126,11 @@ area.addEventListener('pointermove', e => {
     scheduleRender(); return;
   }
   if (gest.mode === 'cross') { cross = pt; scheduleRender(); }
+  else if (gest.mode === 'dmove') {
+    if (!gest.moved) return; const d = getDrawings().find(x => x.id === gest.dm.id); if (!d) return;
+    if (!gest.dm.snap) { gest.dm.snap = true; const arr = getDrawings(); drawHist.u.push(JSON.stringify(arr.map(x => x.id === d.id ? gest.dm.orig : x))); if (drawHist.u.length > 60) drawHist.u.shift(); drawHist.r.length = 0; } // deshacer vuelve a la posición anterior
+    applyDMove(d, pt); updateDrawUI(); scheduleRender();
+  }
   else if (gest.mode === 'handle') {
     const arr = getDrawings(), d = arr.find(x => x.id === selectedId); if (!d) return;
     const s = snapPoint(pt);
@@ -3146,6 +3166,7 @@ function endPointer(e, cancelled) {
   if (cancelled) { cross = null; preview = null; scheduleRender(); return; }
   if (gs.mode === 'cross') { cross = null; scheduleRender(); return; }
   if (gs.mode === 'handle') { save(); render(); return; }
+  if (gs.mode === 'dmove') { if (gs.moved) { save(); updateDrawUI(); render(); return; } selectedId = gs.picked ? gs.dm.id : (distToDrawing(getDrawings().find(x => x.id === gs.dm.id) || {}, local(e)) < 13 ? selectedId : null); updateDrawUI(); render(); return; }
   if (gs.mode === 'scaleP') { if (!gs.moved) { const now = Date.now(); if (now - lastAxisTap < 320) { lastAxisTap = 0; delete paneMan[gs.pane.key]; render(); } else lastAxisTap = now; } return; } // doble toque = escala automática
   if (gs.mode === 'scaleY' || gs.mode === 'scaleX') {
     if (!gs.moved) { const now = Date.now(); if (now - lastAxisTap < 320) { lastAxisTap = 0; if (gs.mode === 'scaleY') { priceMan = null; updateAutoBtn(); } else visible = defaultVisible(); render(); } else lastAxisTap = now; }
@@ -3983,7 +4004,7 @@ if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud(); if (!PANE) refreshPop();
 
 /* Solo para pruebas automáticas: se activa añadiendo ?cct_debug=1 a la dirección */
-if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, save, setDrawings, pickTool, get FB() { return FB; }, get FAVS() { return FAVS; }, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, toggleFav, handlesOf, get view() { return {pan, visible}; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
+if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, save, setDrawings, pickTool, get FB() { return FB; }, get FAVS() { return FAVS; }, get state() { return state; }, get drawTool() { return drawTool; }, get geo() { return geo; }, toggleFav, handlesOf, cancelTool, select: id => { selectedId = id; updateDrawUI(); render(); }, get view() { return {pan, visible}; }, getDrawings, hitTest, groupOf, TOOL_GROUPS, ONEPT, THREEPT, MULTI, DOPT};
 
 /* ───────── Puente para el Screener (screener.js) ───────── */
 window.CCT_host = {
