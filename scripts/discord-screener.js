@@ -52,7 +52,7 @@ async function main() {
   if (!url) { console.log('Falta el secreto DISCORD_WEBHOOK (Settings → Secrets and variables → Actions). No se envía nada.'); return; }
   if (!HOOK.test(url)) throw new Error('DISCORD_WEBHOOK no parece un webhook de Discord');
   const tfs = timeframes(new Date(), process.env.TF), top = await topSymbols(TOP_N);
-  for (const tf of tfs) { const rows = await scan(tf, top); console.log(`${tf}: ${rows.length} señales`); await post(url, F.signalEmbeds(tf, rows)); await sleep(1200); }
+  for (const tf of tfs) { const rows = await scan(tf, top); console.log(`${tf}: ${rows.length} señales`); await post(url, F.signalEmbeds(tf, rows, top.map(t => t.symbol))); await sleep(1200); }
 }
 if (require.main === module) main().catch(e => { console.error('Error:', e.message); process.exit(1); });
 module.exports = {signalOf, timeframes, topSymbols, scan, post, candles};

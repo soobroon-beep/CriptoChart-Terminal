@@ -11,7 +11,9 @@ test('temporalidades: cada hora 1h y cada 4 h UTC también 4h; se puede forzar',
 test('formato: LONG / SHORT / RANGO y mensaje vacío', () => {
   const em = F.signalEmbeds('1h', [{symbol: 'SOLUSDT', price: 171.2, sg: {side: 'buy', range: false, div: true, score: 4, age: 1}}, {symbol: 'DOGEUSDT', price: .1823, sg: {side: 'sell', range: false, div: false, score: 2, age: 3}}, {symbol: 'XRPUSDT', price: 2.1, sg: {side: 'buy', range: true, div: false, score: 1, age: 5}}]);
   assert.equal(em.length, 3); assert.match(em[0].title, /LONG \(1\)/); assert.match(em[0].description, /SOL\*\* · 171.2 · ★★★★☆ · divergencia · vela 1\/5/);
-  assert.match(em[1].title, /SHORT/); assert.match(em[2].title, /RANGO/); assert.match(em[2].footer.text, /3 señales/);
+  assert.match(em[1].title, /SHORT/); assert.match(em[2].title, /RANGO/); assert.match(em[2].footer.text, /3 con señal de 3/);
+  const all = F.signalEmbeds('1h', [{symbol: 'SOLUSDT', price: 1, sg: {side: 'buy', range: false, div: false, score: 3, age: 2}}], ['SOLUSDT', 'BTCUSDT', 'ETHUSDT']);
+  assert.match(all[all.length - 1].title, /Sin señal \(2\)/); assert.match(all[all.length - 1].description, /BTC · ETH/); assert.match(all[all.length - 1].footer.text, /1 con señal de 3/);
   const v = F.signalEmbeds('4h', []); assert.equal(v.length, 1); assert.match(v[0].title, /sin señales/);
 });
 test('flujo completo con Binance y Discord simulados', async () => {

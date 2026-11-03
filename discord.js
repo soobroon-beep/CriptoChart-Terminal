@@ -42,12 +42,12 @@
     const top = await h.top(50), out = []; let k = 0;
     const worker = async () => { while (k < top.length) { const t = top[k++]; try { const sg = S.signalOf(await h.klines(t.symbol, tf)); if (sg) out.push({symbol: t.symbol, price: t.price, sg}); } catch {} } };
     await Promise.all(Array.from({length: 6}, worker));
-    return out.sort((a, b) => (a.sg.ago - b.sg.ago) || (b.sg.score - a.sg.score));
+    out.sort((a, b) => (a.sg.ago - b.sg.ago) || (b.sg.score - a.sg.score)); out.analyzed = top.map(t => t.symbol); return out;
   }
   const signalEmbeds = FM.signalEmbeds;
   async function sendSignals(tf) {
     const rows = await scanSignals(tf); if (!rows) return {ok: false, why: 'El Screener aún no está listo'};
-    return send(signalEmbeds(tf, rows));
+    return send(signalEmbeds(tf, rows, rows.analyzed));
   }
 
   /* Panel */
