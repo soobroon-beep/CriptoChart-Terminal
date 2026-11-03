@@ -9,10 +9,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function getJSON(url) {
   let err;
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 5; i++) {
     try {
       const r = await fetch(url, {headers: {accept: 'application/json', 'user-agent': 'VORTEX-Dominance/1.0'}});
-      if (r.status === 429) { await sleep(8000 * (i + 1)); continue; }
+      if (r.status === 429) { err = new Error('HTTP 429 (límite de CoinGecko)'); await sleep(20000 * (i + 1)); continue; }
       if (!r.ok) throw new Error(`HTTP ${r.status} en ${url.replace(API, '')}`);
       return await r.json();
     } catch (e) { err = e; await sleep(1500); }
@@ -46,7 +46,7 @@ async function backfill(realTotal) {
       for (const [t, v] of j.market_caps || []) if (v > 0) m.set(Math.floor(t / D) * D, v);
       if (m.size >= 360) series[id] = m; else console.log('omitida (poco historial):', id, m.size);
     } catch (e) { console.warn('omitida', id, e.message); }
-    await sleep(6500);
+    await sleep(9000);
   }
   if (!series.tether || Object.keys(series).length < 15) { console.warn('Muy pocas monedas con historial:', Object.keys(series).length); return null; }
   const days = [...series.tether.keys()].sort((a, b) => a - b), sums = days.map(d => Object.values(series).reduce((a, m) => a + (m.get(d) || 0), 0));
