@@ -2194,7 +2194,7 @@ function legLabel(text, x, y, act, dim) {
   legN++; if (!legOpen) return; const f = g.font; g.font = LEG_FONT;
   const css = getComputedStyle(document.documentElement), muted = css.getPropertyValue('--muted').trim().toLowerCase(), fg = css.getPropertyValue('--text').trim();
   if (fg) { // nombres más legibles: activos casi blancos (los que traen su propio color no se tocan) y ocultos atenuados pero claros
-    if (dim) { g.fillStyle = fg; g.globalAlpha = .6; }
+    if (dim) { g.fillStyle = muted; g.globalAlpha = .5; }
     else if (String(g.fillStyle).toLowerCase() === muted) g.fillStyle = fg;
   }
   g.fillText(text, x, y); legAt(text, x, y, act, dim); g.font = f;
@@ -2579,7 +2579,7 @@ function renderCore() {
   // leyenda de indicadores
   let ly2 = plotTop + 54; g.font = '12px system-ui'; const LS = legStep();
   // Cada indicador conserva SIEMPRE su lugar en la leyenda: al ocultarlo con el ojito queda en la misma fila (atenuado, «oculto») y no salta al final.
-  const dimRow = (tx, act) => { g.globalAlpha = .5; g.fillStyle = text; legLabel(tx + ' (oculto)', left + 8, ly2, act, true); g.globalAlpha = 1; ly2 += LS; };
+  const dimRow = (tx, act) => { g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, act, true); g.globalAlpha = 1; ly2 += LS; };
   const isHid = k => !!(state.indicators[k] && state.stdHide && state.stdHide[k]);
   const ovBy = {}; for (const o of overlays) if (o[4]) ovBy[o[4]] = o;
   const SLOTS = ['ema20', 'ema50', 'sma200', 'wma20', 'vwap', 'bollinger', 'donchian', 'keltner', 'ichimoku', 'psar', 'volume', 'patterns', 'dchan', 'liqmap', 'vpvr'], PLAIN = {psar: 'Parabolic SAR', volume: 'Volumen', patterns: 'Patrones', dchan: 'Canales dinámicos', liqmap: 'Liquidaciones', vpvr: 'VPVR'};
@@ -2598,7 +2598,7 @@ function renderCore() {
     if (paneOf({p, r}) !== 'main') continue;
     const id = 'm:p:' + p.sid;
     addLeg(id, () => {
-      if (p.hide) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)}`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx + ' (oculto)', left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main', mid: id}, true); g.globalAlpha = 1; ly2 += LS; }
+      if (p.hide) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)}`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main', mid: id}, true); g.globalAlpha = 1; ly2 += LS; }
       else { g.fillStyle = text; const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main', mid: id}); ly2 += LS; }
     });
   }
