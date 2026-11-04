@@ -114,7 +114,7 @@ function sanUi(u) {
   const sanPanes = c => { const r = {}; if (c && typeof c === 'object') { if (c.paneH && typeof c.paneH === 'object' && !Array.isArray(c.paneH)) { const h = {}; for (const [k, v] of Object.entries(c.paneH).slice(0, 24)) if (/^[A-Za-z0-9:_-]{1,40}$/.test(k) && Number.isFinite(v) && v >= 20 && v <= 3000) h[k] = Math.round(v); r.paneH = h; } if (Number.isFinite(c.paneScale) && c.paneScale >= .6 && c.paneScale <= 3) r.paneScale = c.paneScale; if (Array.isArray(c.order)) r.order = c.order.filter(k => typeof k === 'string' && /^[A-Za-z0-9:_-]{1,40}$/.test(k)).slice(0, 64); } return r; };
   if (q.panes && typeof q.panes === 'object') { o.panes = {}; for (const k of ['pc', 'movil']) if (q.panes[k]) o.panes[k] = sanPanes(q.panes[k]); } // tamaño de paneles: uno para PC y otro para móvil
   if (q.dopt && typeof q.dopt === 'object' && !Array.isArray(q.dopt)) { const d = {}; for (const k of ['magnet', 'stay', 'lock', 'hide']) if (typeof q.dopt[k] === 'boolean') d[k] = q.dopt[k]; o.dopt = d; }
-  if (typeof q.icon === 'string' && /^[a-z]{3,12}$/.test(q.icon)) o.icon = q.icon;
+  if (typeof q.icon === 'string' && /^[a-z][a-z0-9]{2,11}$/.test(q.icon)) o.icon = q.icon;
   if (q.favBar && typeof q.favBar === 'object') { const f = q.favBar, c01 = v => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null; o.favBar = {show: f.show !== false, x: c01(f.x), y: c01(f.y)}; }
   if (Array.isArray(q.favs)) o.favs = q.favs.filter(x => typeof x === 'string' && /^[a-zA-Z0-9]{2,24}$/.test(x)).slice(0, 24);
   return o;
