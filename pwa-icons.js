@@ -2,15 +2,18 @@
 (() => {
   'use strict';
   const variants = [
-    ['i01', '01 Negro violeta'],
-    ['i02', '02 Azul océano'],
-    ['i03', '03 Magenta'],
-    ['i04', '04 Verde esmeralda'],
-    ['i05', '05 Azul noche'],
-    ['i06', '06 Blanco violeta'],
-    ['i07', '07 Crema dorado'],
-    ['i08', '08 Azul eléctrico'],
-    ['i09', '09 Rojo rubí'], ['i10', '10 Violeta profundo']
+    ['i01', '01 Neón violeta'], ['i02', '02 Negro plata'], ['i03', '03 Blanco violeta'],
+    ['i04', '04 Grafito'], ['i05', '05 Perla'], ['i06', '06 Holográfico'],
+    ['i07', '07 Atardecer retro'], ['i08', '08 Galaxia'], ['i09', '09 Nebulosa'],
+    ['i10', '10 Cerezo'], ['i11', '11 Nubes'], ['i12', '12 Circuito verde'],
+    ['i13', '13 Rayos azules'], ['i14', '14 Fuego'], ['i15', '15 Cristal'],
+    ['i16', '16 Arcoíris'], ['i17', '17 Cromo'], ['i18', '18 Oro'],
+    ['i19', '19 Madera'], ['i20', '20 Camuflaje'], ['i21', '21 Circuito turquesa'],
+    ['i22', '22 Aurora'], ['i23', '23 Nube rosa'], ['i24', '24 Blanco puro'],
+    ['i25', '25 Planeta ámbar'], ['i26', '26 Lavanda y montañas'], ['i27', '27 Planeta azul'],
+    ['i28', '28 Hexágonos'], ['i29', '29 Atardecer'], ['i30', '30 Velas trading'],
+    ['i31', '31 Olas azules'], ['i32', '32 Llamas rojas'], ['i33', '33 Ópalo'],
+    ['i34', '34 Camuflaje dorado']
   ];
   const key = 'cct_app_icon_v1', valid = id => variants.some(v => v[0] === id);
   const query = new URLSearchParams(location.search).get('appIcon');

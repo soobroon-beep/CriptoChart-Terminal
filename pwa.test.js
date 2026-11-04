@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const root = path.join(__dirname, '..');
 const base = 'https://example.com/CriptoChart-Terminal/';
-test('all 10 installation choices identify one app and use valid PNG sizes within its scope', () => {
+test('all 34 installation choices identify one app and use valid PNG sizes within its scope', () => {
   const files = fs.readdirSync(path.join(root,'manifests')).filter(f=>f.endsWith('.webmanifest'));
-  assert.equal(files.length,10);
+  assert.equal(files.length,34);
   for(const file of files){
     const url = new URL(`manifests/${file}`,base), m = JSON.parse(fs.readFileSync(path.join(root,'manifests',file)));
     assert.equal(new URL(m.id,url).href,base); assert.equal(new URL(m.scope,url).href,base);

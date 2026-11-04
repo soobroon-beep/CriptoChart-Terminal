@@ -12,7 +12,7 @@ function load(query='',saved=null,installed=false,blocked=false){
 (async()=>{
  const d=load(), w=d.window, q=s=>w.document.querySelector(s);
  assert.equal(q('#appManifest').href,'https://example.com/CriptoChart-Terminal/manifests/i01.webmanifest');
- assert.equal(w.document.querySelectorAll('.pwa-icon-option').length,10);
+ assert.equal(w.document.querySelectorAll('.pwa-icon-option').length,34);
  let prompted=false; const event=new w.Event('beforeinstallprompt',{cancelable:true});event.prompt=async()=>{prompted=true};event.userChoice=Promise.resolve({outcome:'accepted'});w.dispatchEvent(event);
  assert.ok(event.defaultPrevented);assert.equal(q('#installApp').textContent,'Instalar aplicación');q('#installApp').click();await new Promise(r=>setImmediate(r));assert.ok(prompted);
  q('[data-icon="i05"]').click();assert.equal(w.localStorage.getItem('cct_app_icon_v1'),'i05');assert.ok(q('#appManifest').href.endsWith('/i05.webmanifest'));assert.ok(q('#appTouchIcon').href.endsWith('/i05-180.png'));assert.equal(q('[data-icon="i05"]').getAttribute('aria-pressed'),'true');assert.equal(q('#installApp').textContent,'Preparar instalación');
@@ -20,5 +20,5 @@ function load(query='',saved=null,installed=false,blocked=false){
  Object.defineProperty(w.navigator,'onLine',{value:false,configurable:true});w.dispatchEvent(new w.Event('offline'));assert.equal(q('#pwaOffline').hidden,false);
  Object.defineProperty(w.navigator,'onLine',{value:true,configurable:true});w.dispatchEvent(new w.Event('online'));assert.equal(q('#pwaOffline').hidden,true);
  for(const [query,saved,installed,blocked,expected] of [['?appIcon=../../bad',null,false,false,'i01'],['','i10',false,false,'i10'],['?appIcon=i01','i09',true,false,'i09'],['?appIcon=bosque',null,false,true,'i07']]){const tmp=load(query,saved,installed,blocked);assert.equal(tmp.window.CCTAppIcons.selected,expected);tmp.window.close();}
- d.window.close();next.window.close();console.log('PASS: 10 choices, persistence, manifest/Apple icon, install prompt flow, help, offline banner, invalid input, standalone preference and disabled storage.');
+ d.window.close();next.window.close();console.log('PASS: 34 choices, persistence, manifest/Apple icon, install prompt flow, help, offline banner, invalid input, standalone preference and disabled storage.');
 })().catch(e=>{console.error(e);process.exit(1)});
