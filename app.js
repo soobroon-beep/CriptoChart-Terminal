@@ -115,7 +115,7 @@ function sanUi(u) {
   if (q.panes && typeof q.panes === 'object') { o.panes = {}; for (const k of ['pc', 'movil']) if (q.panes[k]) o.panes[k] = sanPanes(q.panes[k]); } // tamaño de paneles: uno para PC y otro para móvil
   if (q.dopt && typeof q.dopt === 'object' && !Array.isArray(q.dopt)) { const d = {}; for (const k of ['magnet', 'stay', 'lock', 'hide']) if (typeof q.dopt[k] === 'boolean') d[k] = q.dopt[k]; o.dopt = d; }
   if (typeof q.icon === 'string' && /^[a-z][a-z0-9]{2,11}$/.test(q.icon)) o.icon = q.icon;
-  if (q.favBar && typeof q.favBar === 'object') { const f = q.favBar, c01 = v => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null; o.favBar = {show: f.show !== false, x: c01(f.x), y: c01(f.y)}; }
+  if (q.favBar && typeof q.favBar === 'object') { const f = q.favBar, c01 = v => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null; o.favBar = {show: f.show !== false, x: c01(f.x), y: c01(f.y), mx: c01(f.mx), my: c01(f.my)}; }
   if (Array.isArray(q.favs)) o.favs = q.favs.filter(x => typeof x === 'string' && /^[a-zA-Z0-9]{2,24}$/.test(x)).slice(0, 24);
   return o;
 }
@@ -1351,7 +1351,7 @@ const TOOL_GROUPS = [
 /* Favoritos: la estrella de cada herramienta la sube a la sección «Favoritos» (arriba de la barra y de la hoja del celular) */
 const FAV_KEY = 'cct_favtools_v1';
 let FAVS = ['brush']; try { const f = JSON.parse(lsGet(FAV_KEY) || 'null'); if (Array.isArray(f)) FAVS = f.filter(x => typeof x === 'string').slice(0, 24); } catch {}
-let FB = Object.assign({show: true, x: null, y: null}, (state.ui && state.ui.favBar) || {}); // barra flotante de favoritos: visible y posición (fracciones del gráfico)
+let FB = Object.assign({show: true, x: null, y: null, mx: null, my: null}, (state.ui && state.ui.favBar) || {}); // (mx,my: posición del botón estrella en celular) barra flotante de favoritos: visible y posición (fracciones del gráfico)
 if (state.ui && Array.isArray(state.ui.favs)) FAVS = state.ui.favs.slice(0, 24);
 const favTools = () => FAVS.map(k => toolOf(k)).filter(Boolean);
 function toggleFav(k) {
@@ -1861,20 +1861,50 @@ function cancelTool() { drawTool = ''; pending = null; pending2 = null; multi = 
    para mostrarla otra vez, clic derecho sobre el gráfico. Posición, visibilidad y favoritas se guardan en tu cuenta. Solo en computadora. */
 function placeFavBar() {
   const bar = $('#favBar'), ar = $('#chartArea'); if (!bar || !ar) return;
-  if (!deskMQ.matches) { bar.style.left = bar.style.top = bar.style.bottom = bar.style.transform = ''; return; } // celular: lo coloca el CSS junto al botón estrella
+  if (!deskMQ.matches) { placeFab(); return; } // celular: el botón estrella se mueve libremente y la barra se abre a su lado
   if (FB.x == null || FB.y == null) { bar.style.left = '50%'; bar.style.top = 'auto'; bar.style.bottom = '50px'; bar.style.transform = 'translateX(-50%)'; return; }
   const aw = ar.clientWidth, ah = ar.clientHeight, bw = bar.offsetWidth, bh = bar.offsetHeight;
   bar.style.transform = 'none'; bar.style.bottom = 'auto';
   bar.style.left = clamp(FB.x * Math.max(0, aw - bw), 0, Math.max(0, aw - bw)) + 'px'; bar.style.top = clamp(FB.y * Math.max(0, ah - bh), 0, Math.max(0, ah - bh)) + 'px';
 }
+const FAB = 44, FAB_GAP = 8;
+function placeFab() { // coloca el botón estrella (fracciones mx,my) y abre la barra al lado donde cabe
+  const bar = $('#favBar'), fab = $('#favFab'), ar = $('#chartArea'); if (!bar || !fab || !ar) return;
+  const aw = ar.clientWidth, ah = ar.clientHeight, mw = Math.max(0, aw - FAB), mh = Math.max(0, ah - FAB);
+  const fx = FB.mx == null ? 10 : clamp(FB.mx * mw, 0, mw), fy = FB.my == null ? Math.max(0, ah - FAB - 84) : clamp(FB.my * mh, 0, mh);
+  fab.style.left = fx + 'px'; fab.style.top = fy + 'px'; fab.style.bottom = 'auto';
+  const bw = bar.offsetWidth, bh = bar.offsetHeight || 44; let bx, by = clamp(fy + (FAB - bh) / 2, 8, Math.max(8, ah - bh - 8)), origin = 'left center';
+  if (fx + FAB + FAB_GAP + bw <= aw - 8) bx = fx + FAB + FAB_GAP;
+  else if (fx - FAB_GAP - bw >= 8) { bx = fx - FAB_GAP - bw; origin = 'right center'; }
+  else { bx = clamp(fx + FAB / 2 - bw / 2, 8, Math.max(8, aw - bw - 8)); by = fy > ah / 2 ? fy - bh - FAB_GAP : fy + FAB + FAB_GAP; origin = fy > ah / 2 ? 'center bottom' : 'center top'; }
+  bar.style.left = bx + 'px'; bar.style.top = by + 'px'; bar.style.bottom = 'auto'; bar.style.transformOrigin = origin;
+  bar.style.setProperty('--fb-from', origin.startsWith('right') ? '14px' : origin.startsWith('left') ? '-14px' : '0px');
+}
 let fbOpen = false; // celular: la barra va plegada tras un botón flotante con una estrella
 function setFbOpen(v) { fbOpen = !!v; const b = $('#favBar'), f = $('#favFab'); if (b) { b.classList.toggle('open', fbOpen); b.inert = !fbOpen; } if (f) { f.classList.toggle('open', fbOpen); f.setAttribute('aria-expanded', String(fbOpen)); } }
+function wireFab(fab) { // mantener presionado = el botón se "agarra" y se puede mover · toque corto = abrir/cerrar
+  let st = null;
+  const arm = () => { if (!st || st.moved) return; st.armed = true; fab.classList.add('drag'); if (fbOpen) setFbOpen(false); navigator.vibrate?.(10); };
+  fab.addEventListener('pointerdown', e => { if (e.button) return; const ar = $('#chartArea'), r = fab.getBoundingClientRect(), a = ar.getBoundingClientRect(); st = {x: e.clientX, y: e.clientY, ox: e.clientX - r.left, oy: e.clientY - r.top, a, armed: false, moved: false, id: e.pointerId, t: setTimeout(arm, 350)}; try { fab.setPointerCapture(e.pointerId); } catch {} });
+  fab.addEventListener('pointermove', e => {
+    if (!st || e.pointerId !== st.id) return;
+    if (!st.armed) { if (Math.hypot(e.clientX - st.x, e.clientY - st.y) > 10) { clearTimeout(st.t); st.cancel = true; } return; } // se movió antes de tiempo: no es mantener presionado
+    st.moved = true;
+    const ar = $('#chartArea'), mw = ar.clientWidth - FAB, mh = ar.clientHeight - FAB;
+    FB.mx = mw > 0 ? clamp((e.clientX - st.a.left - st.ox) / mw, 0, 1) : 0; FB.my = mh > 0 ? clamp((e.clientY - st.a.top - st.oy) / mh, 0, 1) : 0; placeFab();
+  });
+  const end = e => { if (!st || e.pointerId !== st.id) return; clearTimeout(st.t); const s0 = st; st = null; fab.classList.remove('drag'); try { fab.releasePointerCapture(e.pointerId); } catch {}
+    if (s0.moved) syncUi(); else if (!s0.armed && !s0.cancel && e.type === 'pointerup') { setFbOpen(!fbOpen); placeFab(); } };
+  fab.addEventListener('pointerup', end); fab.addEventListener('pointercancel', end);
+  fab.addEventListener('contextmenu', e => e.preventDefault());
+  fab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFbOpen(!fbOpen); placeFab(); } });
+}
 function renderFavBar() {
   const ar = $('#chartArea'); if (!ar) return; let bar = $('#favBar'), fab = $('#favFab');
   const on = !PANE && FB.show, mob = !deskMQ.matches;
   if (!on) { if (bar) bar.remove(); if (fab) fab.remove(); return; }
   if (!bar) { bar = document.createElement('div'); bar.id = 'favBar'; bar.className = 'favbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Herramientas favoritas'); ar.appendChild(bar); }
-  if (mob && !fab) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 22); fab.addEventListener('click', () => setFbOpen(!fbOpen)); ar.appendChild(fab); }
+  if (mob && !fab) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 22); ar.appendChild(fab); wireFab(fab); }
   if (!mob && fab) { fab.remove(); fab = null; }
   bar.classList.toggle('fb-mobile', mob);
   const tools = favTools();
@@ -2189,7 +2219,7 @@ function applyUi() { // al recibir el estado de la cuenta: aplica sus preferenci
   if (u.dopt) { Object.assign(DOPT, u.dopt); try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} }
   if (u.icon && window.CCTAppIcons && window.CCTAppIcons.selected !== u.icon) window.CCTAppIcons.apply(u.icon);
   if (Array.isArray(u.favs)) { FAVS = u.favs.slice(0, 24); try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch {} if (typeof buildRail === 'function') buildRail(); }
-  if (u.favBar) FB = Object.assign({show: true, x: null, y: null}, u.favBar);
+  if (u.favBar) FB = Object.assign({show: true, x: null, y: null, mx: null, my: null}, u.favBar);
   if (typeof renderFavBar === 'function') renderFavBar();
 }
 window.addEventListener('cct-theme', () => { const id = window.CCTAppIcons && window.CCTAppIcons.selected; if (id && (state.ui || {}).icon !== id && typeof save === 'function') syncUi(); });
