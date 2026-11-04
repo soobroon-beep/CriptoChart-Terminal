@@ -188,25 +188,20 @@
       <div class="section-label">CUENTA</div>
       <div id="accountBox"></div>
       <div class="section-label">APARIENCIA</div>
-      <div class="setting-row">
-        <div><b>Tema</b><small>Interfaz clara u oscura</small></div>
-        <button id="themeSetting" class="small-button">Cambiar</button>
+      <div class="setting-row compact">
+        <div><b>Tema</b></div>
+        <button id="themeSetting" class="theme-ico" type="button" aria-label="Cambiar tema" title="Cambiar tema">
+          <svg class="ti-sun" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></svg>
+          <svg class="ti-moon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+        </button>
       </div>
       <div class="setting-row" id="dcSettingRow">
         <div><b>Discord · Nova Nexus</b><small>Únete al servidor y recibe las señales y avisos</small></div>
         <button id="dcOpenFromSettings" class="small-button" type="button">Abrir</button>
       </div>
-      <div class="setting-row">
-        <div><b>Barra de herramientas favoritas</b><small>Barra flotante sobre el gráfico. Mantén presionada su asa para ocultarla o moverla</small></div>
-        <button id="favBarSetting" class="small-button">Mostrar/ocultar</button>
-      </div>
-      <div class="setting-row">
-        <div><b>Aspecto del gráfico</b><small>Colores, cuadrícula y cursor. En computadora también con clic derecho sobre el gráfico</small></div>
-        <button id="chartStyleSetting" class="small-button">Abrir</button>
-      </div>
-      <div class="setting-row">
+      <div class="setting-row acct-row">
         <div><b>Saldo de la cuenta</b><small id="acctSub">Sin configurar</small><div class="ab-h" data-acct-bar><span class="ab-fill"></span></div></div>
-        <button class="small-button" data-acct-open type="button">Editar</button>
+        <button class="acct-btn" data-acct-open type="button" aria-label="Editar saldo de la cuenta"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><path d="M4 7.5V17a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H6.5A2.5 2.5 0 0 1 4 7.5z"/><circle cx="16" cy="13.5" r="1.1" fill="currentColor" stroke="none"/></svg><span>Editar</span></button>
       </div>
       <div id="appInstall"></div>
       <div class="section-label">DATOS Y SEGUIMIENTO</div>

@@ -38,6 +38,7 @@
   function render() {
     icons.apply(icons.selected);
     grid.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.icon === icons.selected)));
+    { const cur = grid.querySelector('[aria-pressed=true]'); if (cur && grid.clientWidth) grid.scrollLeft = cur.offsetLeft - (grid.clientWidth - cur.offsetWidth) / 2; } // deja a la vista el ícono elegido
     root.querySelector('#appIconName').textContent = icons.variants.find(v => v[0] === icons.selected)[1];
     button.textContent = icons.selected !== icons.initial ? 'Preparar instalación' : standalone() ? 'Ver instrucciones de instalación' : promptEvent ? 'Instalar aplicación' : ios ? 'Ver pasos para iPhone / iPad' : 'Ver cómo instalar';
   }

@@ -2369,8 +2369,6 @@ function openChartStyle() {
     state.chartStyle = sanChartStyle(o); save(); scheduleRender(); toast(v.reset ? 'Aspecto restablecido' : 'Aspecto aplicado');
   }});
 }
-{ const b = $('#chartStyleSetting'); if (b) b.onclick = openChartStyle; }
-{ const b = $('#favBarSetting'); if (b) b.onclick = () => setFavBar(!FB.show); }
 function ctypeLabel() { const c = CTYPES.find(x => x[0] === state.ctype) || CTYPES[0]; return I(c[2], 16) + ' ' + c[1]; }
 function syncCtypeBtn() { const b = $('#ctypeBtn'); if (b) b.innerHTML = ctypeLabel(); }
 $('#ctypeBtn').onclick = e => {
