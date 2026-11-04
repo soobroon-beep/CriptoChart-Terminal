@@ -111,7 +111,7 @@ const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle |
 /* Preferencias de interfaz que también viajan a la cuenta: altura de paneles, tamaño de paneles, opciones del dibujo (imán, bloquear…) y color/ícono de la app */
 function sanUi(u) {
   const q = u && typeof u === 'object' && !Array.isArray(u) ? u : {}, o = {};
-  const sanPanes = c => { const r = {}; if (c && typeof c === 'object') { if (c.paneH && typeof c.paneH === 'object' && !Array.isArray(c.paneH)) { const h = {}; for (const [k, v] of Object.entries(c.paneH).slice(0, 24)) if (/^[A-Za-z0-9:_-]{1,40}$/.test(k) && Number.isFinite(v) && v >= 20 && v <= 3000) h[k] = Math.round(v); r.paneH = h; } if (Number.isFinite(c.paneScale) && c.paneScale >= .6 && c.paneScale <= 3) r.paneScale = c.paneScale; } return r; };
+  const sanPanes = c => { const r = {}; if (c && typeof c === 'object') { if (c.paneH && typeof c.paneH === 'object' && !Array.isArray(c.paneH)) { const h = {}; for (const [k, v] of Object.entries(c.paneH).slice(0, 24)) if (/^[A-Za-z0-9:_-]{1,40}$/.test(k) && Number.isFinite(v) && v >= 20 && v <= 3000) h[k] = Math.round(v); r.paneH = h; } if (Number.isFinite(c.paneScale) && c.paneScale >= .6 && c.paneScale <= 3) r.paneScale = c.paneScale; if (Array.isArray(c.order)) r.order = c.order.filter(k => typeof k === 'string' && /^[A-Za-z0-9:_-]{1,40}$/.test(k)).slice(0, 24); } return r; };
   if (q.panes && typeof q.panes === 'object') { o.panes = {}; for (const k of ['pc', 'movil']) if (q.panes[k]) o.panes[k] = sanPanes(q.panes[k]); } // tamaño de paneles: uno para PC y otro para móvil
   if (q.dopt && typeof q.dopt === 'object' && !Array.isArray(q.dopt)) { const d = {}; for (const k of ['magnet', 'stay', 'lock', 'hide']) if (typeof q.dopt[k] === 'boolean') d[k] = q.dopt[k]; o.dopt = d; }
   if (typeof q.icon === 'string' && /^[a-z]{3,12}$/.test(q.icon)) o.icon = q.icon;
@@ -2155,18 +2155,23 @@ function timeLabel(t, prev) {
 }
 let legRows = [], legSig = '', legStruct = '', grips = [], gripDrag = false;
 let paneH = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneH_v1') || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; } })();
+let paneOrder = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneOrder_v1') || '[]'); return Array.isArray(o) ? o.filter(k => typeof k === 'string').slice(0, 24) : []; } catch { return []; } })(); // orden elegido por el usuario para los paneles (RSI, MACD…)
+let paneLayout = {bot: [], top: []}; // paneles de abajo y de arriba tal como se dibujaron: [{key, h}], para poder arrastrarlos
+const orderPanes = keys => { const ix = k => { const i = paneOrder.indexOf(k); return i < 0 ? 1e6 : i; }; return keys.map((k, i) => [k, i]).sort((a, b) => ix(a[0]) - ix(b[0]) || a[1] - b[1]).map(x => x[0]); };
+const savePaneOrder = () => { try { localStorage.setItem('cct_paneOrder_v1', JSON.stringify(paneOrder)); } catch {} if (typeof syncUi === 'function') syncUi(); };
 const savePaneH = () => { try { localStorage.setItem('cct_paneH_v1', JSON.stringify(paneH)); } catch {} if (typeof syncUi === 'function') syncUi(); };
 const paneScale0 = () => { try { const v = parseFloat(localStorage.getItem('cct_paneScale')); return v >= .6 && v <= 3 ? v : 1.25; } catch { return 1.25; } };
 let paneScale = paneScale0();
 const devClass = () => (window.matchMedia && matchMedia('(min-width: 1024px)').matches ? 'pc' : 'movil');
 function syncUi() { // vuelca las preferencias de interfaz al estado (que se guarda en el dispositivo y en la cuenta)
-  const panes = Object.assign({}, (state.ui || {}).panes); panes[devClass()] = {paneH, paneScale}; // cada tipo de dispositivo guarda su propio tamaño
+  const panes = Object.assign({}, (state.ui || {}).panes); panes[devClass()] = {paneH, paneScale, order: paneOrder}; // cada tipo de dispositivo guarda su propio tamaño
   state.ui = sanUi({panes, dopt: DOPT, favBar: FB, favs: FAVS, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
 }
 function applyUi() { // al recibir el estado de la cuenta: aplica sus preferencias de interfaz en este dispositivo
   const u = state.ui || {};
   const pn = (u.panes || {})[devClass()] || {}; // solo se aplica el tamaño guardado para este tipo de dispositivo
   if (pn.paneH) { paneH = {...pn.paneH}; try { localStorage.setItem('cct_paneH_v1', JSON.stringify(paneH)); } catch {} }
+  if (Array.isArray(pn.order)) { paneOrder = pn.order.slice(0, 24); try { localStorage.setItem('cct_paneOrder_v1', JSON.stringify(paneOrder)); } catch {} }
   if (pn.paneScale) { paneScale = pn.paneScale; try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} }
   if (u.dopt) { Object.assign(DOPT, u.dopt); try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} }
   if (u.icon && window.CCTAppIcons && window.CCTAppIcons.selected !== u.icon) window.CCTAppIcons.apply(u.icon);
@@ -2178,7 +2183,10 @@ window.addEventListener('cct-theme', () => { const id = window.CCTAppIcons && wi
 const LEG_FONT = '600 13px system-ui';
 const legBtnH = () => (window.matchMedia && matchMedia('(max-width:760px)').matches ? 26 : 22);
 const legStep = () => legBtnH() + 4; // separación vertical entre filas con botones
-function legAt(text, x, y, act, dim) { legRows.push({x: x + g.measureText(text).width + 8, y: y - Math.round(legBtnH() / 2 + 5), act, dim: !!dim}); }
+function legAt(text, x, y, act, dim) {
+  const tw = g.measureText(text).width, pk = act.t === 'std' ? act.key : act.t === 'pine' ? 'pine:' + act.sid : '', grp = pk && [paneLayout.bot, paneLayout.top].find(L => L.some(q => q.key === pk)); // solo los nombres de paneles (con otro panel con quien cambiar de lugar) se pueden arrastrar
+  legRows.push({x: x + tw + 8, y: y - Math.round(legBtnH() / 2 + 5), act, dim: !!dim, tw, hk: grp && grp.length > 1 ? pk : ''});
+}
 /* Leyenda de indicadores plegable: cerrada solo se ve «N indicadores»; abierta muestra nombres, valores y botones (ocultar, ajustes, eliminar) */
 let legOpen = lsGet('cct_legOpen_v1') === '1', legN = 0;
 function legLabel(text, x, y, act, dim) {
@@ -2200,20 +2208,20 @@ function syncLegToggle() {
   b.addEventListener('click', e => { e.stopPropagation(); legOpen = !legOpen; try { localStorage.setItem('cct_legOpen_v1', legOpen ? '1' : '0'); } catch {} legSig = ''; legStruct = ''; $('#legMenu')?.remove(); scheduleRender(); }); })();
 function syncLegend() {
   const box = $('#legendBox'); if (!box || gripDrag) return;
-  const sig = grips.map(q => q.key + ':' + Math.round(q.y)).join(',') + '#' + legRows.map(r => [Math.round(r.x), Math.round(r.y), r.act.t, r.act.sid || r.act.key || '', r.dim ? 1 : 0, r.act.pane || ''].join(':')).join('|');
+  const sig = grips.map(q => q.key + ':' + Math.round(q.y)).join(',') + '#' + legRows.map(r => [Math.round(r.x), Math.round(r.y), r.act.t, r.act.sid || r.act.key || '', r.dim ? 1 : 0, r.act.pane || '', r.hk || '', Math.round(r.tw)].join(':')).join('|');
   if (sig === legSig) return; legSig = sig;
   const gw = geo ? Math.max(40, geo.w - geo.left - geo.right + 2) : 100;
   // misma estructura (solo se movieron/cambió el texto): se recolocan los elementos existentes en vez de recrearlos,
   // así un clic en curso no pierde su botón por un tick de precio en vivo
-  const struct = grips.map(q => q.key + ':' + q.dir).join(',') + '#' + legRows.map(r => [r.act.t, r.act.sid || r.act.key || '', r.dim ? 1 : 0, r.act.pane || ''].join(':')).join('|');
+  const struct = grips.map(q => q.key + ':' + q.dir).join(',') + '#' + legRows.map(r => [r.act.t, r.act.sid || r.act.key || '', r.dim ? 1 : 0, r.act.pane || '', r.hk || ''].join(':')).join('|');
   if (struct === legStruct && box.children.length === grips.length + legRows.length) {
     grips.forEach((q, i) => { const el = box.children[i]; el.style.top = (Math.round(q.y) - 10) + 'px'; el.style.left = (geo ? geo.left : 6) + 'px'; el.style.width = gw + 'px'; el.dataset.gh = q.h; });
-    legRows.forEach((r, i) => { const el = box.children[grips.length + i]; el.style.left = Math.round(r.x) + 'px'; el.style.top = Math.round(r.y) + 'px'; });
+    legRows.forEach((r, i) => { const el = box.children[grips.length + i]; el.style.left = Math.round(r.x) + 'px'; el.style.top = Math.round(r.y) + 'px'; const hd = el.querySelector('.leg-handle'); if (hd) { hd.style.left = '-' + Math.round(r.tw + 8) + 'px'; hd.style.width = Math.round(r.tw) + 'px'; } });
     return;
   }
   legStruct = struct;
   box.innerHTML = grips.map(q => `<div class="pane-grip" data-gk="${esc(q.key)}" data-gd="${q.dir}" data-gh="${q.h}" style="top:${Math.round(q.y) - 10}px;left:${geo ? geo.left : 6}px;width:${gw}px" title="Arrastra para cambiar la altura (doble toque: automática)"></div>`).join('') + legRows.map(r => { const a = r.act, id = a.sid || a.key || '', d = `data-leg="${a.t}" data-id="${esc(id)}"`;
-    return `<div class="leg-row" style="left:${Math.round(r.x)}px;top:${Math.round(r.y)}px"><button ${d} data-do="eye" title="${r.dim ? 'Mostrar' : 'Ocultar'}" aria-label="${r.dim ? 'Mostrar' : 'Ocultar'}">${SV(r.dim ? IC.eyeoff : IC.eye, 15)}</button><button ${d} data-do="set" title="Ajustes" aria-label="Ajustes">${SV(IC.gear, 15)}</button>${a.t === 'pine' ? `<button ${d} data-do="move" title="Mover de panel" aria-label="Mover de panel">${SV(IC.swap, 15)}</button>` : ''}<button ${d} data-do="del" title="Eliminar del gráfico" aria-label="Eliminar">${SV(IC.close, 15)}</button></div>`; }).join('');
+    return `<div class="leg-row" style="left:${Math.round(r.x)}px;top:${Math.round(r.y)}px">${r.hk ? `<span class="leg-handle" data-hk="${esc(r.hk)}" title="Mantén pulsado el nombre y arrastra para subir o bajar este panel" style="left:-${Math.round(r.tw + 8)}px;width:${Math.round(r.tw)}px"></span>` : ''}<button ${d} data-do="eye" title="${r.dim ? 'Mostrar' : 'Ocultar'}" aria-label="${r.dim ? 'Mostrar' : 'Ocultar'}">${SV(r.dim ? IC.eyeoff : IC.eye, 15)}</button><button ${d} data-do="set" title="Ajustes" aria-label="Ajustes">${SV(IC.gear, 15)}</button>${a.t === 'pine' ? `<button ${d} data-do="move" title="Mover de panel" aria-label="Mover de panel">${SV(IC.swap, 15)}</button>` : ''}<button ${d} data-do="del" title="Eliminar del gráfico" aria-label="Eliminar">${SV(IC.close, 15)}</button></div>`; }).join('');
 }
 document.addEventListener('click', e => {
   const m = e.target.closest('[data-leg-pane]');
@@ -2244,6 +2252,38 @@ document.addEventListener('click', e => {
   }
 });
 function render() { renderCore(); syncLegend(); syncLegToggle(); }
+/* Reordenar paneles: mantén pulsado el NOMBRE de un indicador (RSI, MACD, un script en panel…) y arrástralo hacia arriba o abajo; al soltar queda guardado.
+   Solo se mueve el nombre/panel elegido; los botones y el resto de la leyenda no cambian. */
+(() => {
+  const box = $('#legendBox'); if (!box) return;
+  box.addEventListener('contextmenu', e => { if (e.target.closest('.leg-handle')) e.preventDefault(); });
+  box.addEventListener('pointerdown', e => {
+    const hd = e.target.closest('.leg-handle'); if (!hd || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const key = hd.dataset.hk, o = {x: e.clientX, y: e.clientY}; let active = false, changed = false, list = null, base = 0;
+    const timer = setTimeout(() => {
+      const L = paneLayout.bot.some(q => q.key === key) ? 'bot' : paneLayout.top.some(q => q.key === key) ? 'top' : ''; if (!L) { cleanup(); return; }
+      if (!geo) { cleanup(); return; }
+      list = paneLayout[L].map(q => ({...q})); base = L === 'bot' ? geo.extraTop : 6; // donde empieza la pila de paneles de abajo (o la de arriba)
+      active = true; gripDrag = true; box.classList.add('dragging'); if (navigator.vibrate) try { navigator.vibrate(15); } catch {}
+    }, 350);
+    const move = ev => {
+      if (!active) { if (Math.hypot(ev.clientX - o.x, ev.clientY - o.y) > 8) cleanup(); return; }
+      ev.preventDefault();
+      const y = ev.clientY - box.getBoundingClientRect().top, mids = () => { let t = base; return list.map(q => { const m = t + q.h / 2; t += q.h; return m; }); };
+      let i = list.findIndex(q => q.key === key), moved = false;
+      for (let guard = 0; guard < 24; guard++) {
+        const m = mids();
+        if (i > 0 && y < m[i - 1]) { [list[i - 1], list[i]] = [list[i], list[i - 1]]; i--; moved = true; }
+        else if (i < list.length - 1 && y > m[i + 1]) { [list[i + 1], list[i]] = [list[i], list[i + 1]]; i++; moved = true; }
+        else break;
+      }
+      if (moved) { changed = true; const ks = list.map(q => q.key); paneOrder = [...ks, ...paneOrder.filter(k => !ks.includes(k))].slice(0, 24); scheduleRender(); }
+    };
+    const end = () => { const was = active; cleanup(); if (was) { box.classList.remove('dragging'); gripDrag = false; if (changed) savePaneOrder(); legSig = ''; legStruct = ''; scheduleRender(); } };
+    function cleanup() { clearTimeout(timer); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end); if (active) { active = false; box.classList.remove('dragging'); gripDrag = false; } }
+    window.addEventListener('pointermove', move, {passive: false}); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+  });
+})();
 (() => {
   const box = $('#legendBox'); if (!box) return; let drag = null;
   box.addEventListener('pointerdown', e => {
@@ -2397,15 +2437,21 @@ function renderCore() {
   const range = Math.max(max - min, Math.abs(max) * 1e-5), pad = range * (stdOn('patterns') && ind.pat && ind.pat.list.length ? .15 : .08); // con patrones, más aire arriba y abajo para las etiquetas min -= pad; max += pad;
   if (priceMan) { min = priceMan.min; max = priceMan.max; }
   { const lb = document.querySelector('.chart-label'); if (lb) lb.style.top = (topH + 8) + 'px'; } // la leyenda del precio baja si hay paneles arriba
-  geo = {w, h, left, right, gutter, vpOn, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: plotTop + plotH + volH, extraTop: plotTop + plotH + volH + rsiH};
+  // Orden de los paneles: los de abajo (RSI + resto) y los de arriba se apilan según lo que el usuario arrastró; sin orden guardado, queda el de siempre
+  const hMap = {}; if (rsiH) hMap.rsi = rsiH; panelKeys.forEach((k, i) => { hMap[k] = hBot[i]; }); pTop.forEach((x, i) => { hMap['pine:' + x.p.sid] = hTop[i]; });
+  const botOrd = orderPanes([...(rsiH ? ['rsi'] : []), ...panelKeys]), topOrd = orderPanes(pTop.map(x => 'pine:' + x.p.sid));
+  const posOf = (ord, base) => { const m = {}; let yy = base; for (const k of ord) { m[k] = yy; yy += hMap[k]; } return m; };
+  const botY = posOf(botOrd, plotTop + plotH + volH), topY = posOf(topOrd, top0);
+  paneLayout = {bot: botOrd.map(k => ({key: k, h: hMap[k]})), top: topOrd.map(k => ({key: k, h: hMap[k]}))};
+  geo = {w, h, left, right, gutter, vpOn, axisH, plotTop, plotH, plotW, count, start, end, step, min, max, volTop: plotTop + plotH, rsiTop: rsiH ? botY.rsi : plotTop + plotH + volH, extraTop: plotTop + plotH + volH};
   { const bf = document.querySelector('.brand-fab'); if (bf && volH > 0) { bf.style.bottom = 'auto'; bf.style.top = Math.max(plotTop, plotTop + plotH + volH - 40) + 'px'; } else if (bf) { bf.style.bottom = 'auto'; bf.style.top = (plotTop + plotH - 42) + 'px'; } } // logo abajo a la izquierda, a la altura del panel de volumen
 
   // VPVR: perfil de volumen de las velas que se ven ahora mismo (índices cuyo centro cae dentro del área de precios); se recalcula en cada dibujo, así sigue al desplazar y al hacer zoom
   const vpvr = stdOn('vpvr') && window.CCTIndicators ? CCTIndicators.visibleRangeProfile(candles, Math.ceil(start - .5), Math.floor(end - .5 + (vpOn ? 0 : gutter) / step), {rows: sp('vpvr', 'rows'), valueArea: sp('vpvr', 'va')}) : null;
   if (volH) grips.push({key: 'vol', y: geo.volTop, dir: 'up', h: volH});
   if (rsiH) grips.push({key: 'rsi', y: geo.rsiTop, dir: 'up', h: rsiH});
-  panelKeys.forEach((k, i) => grips.push({key: k, y: geo.extraTop + oBot[i], dir: 'up', h: hBot[i]}));
-  pTop.forEach((x, i) => grips.push({key: 'pine:' + x.p.sid, y: top0 + oTop[i] + hTop[i], dir: 'down', h: hTop[i]}));
+  panelKeys.forEach((k, i) => grips.push({key: k, y: botY[k], dir: 'up', h: hBot[i]}));
+  pTop.forEach((x, i) => grips.push({key: 'pine:' + x.p.sid, y: topY['pine:' + x.p.sid] + hTop[i], dir: 'down', h: hTop[i]}));
   // cuadrícula y escala de precios
   g.font = '10px system-ui'; g.textAlign = 'left'; g.lineWidth = .6;
   for (let i = 0; i <= 4; i++) {
@@ -2572,8 +2618,8 @@ function renderCore() {
     for (let i = lo; i < hi; i++) { const v = ind.rsi[i]; if (v == null) { on = false; continue; } const yy = top + (100 - v) / 100 * height; if (!on) { g.moveTo(X(i), yy); on = true; } else g.lineTo(X(i), yy); }
     g.stroke();
   }
-  panelKeys.forEach((k, idx) => k.startsWith('pine:') ? drawPinePane(pr.find(x => 'pine:' + x.p.sid === k), geo.extraTop + oBot[idx], hBot[idx], lo, hi, {left, w, right, line, text, step, plotW}) : drawSubPanel(k, geo.extraTop + oBot[idx], hBot[idx], lo, hi, {left, w, right, line, text}));
-  pTop.forEach((x, idx) => drawPinePane(x, top0 + oTop[idx], hTop[idx], lo, hi, {left, w, right, line, text, step, plotW}));
+  panelKeys.forEach((k, idx) => k.startsWith('pine:') ? drawPinePane(pr.find(x => 'pine:' + x.p.sid === k), botY[k], hBot[idx], lo, hi, {left, w, right, line, text, step, plotW}) : drawSubPanel(k, botY[k], hBot[idx], lo, hi, {left, w, right, line, text}));
+  pTop.forEach((x, idx) => drawPinePane(x, topY['pine:' + x.p.sid], hTop[idx], lo, hi, {left, w, right, line, text, step, plotW}));
   if (pTop.length) { g.strokeStyle = line; g.lineWidth = .6; g.setLineDash([]); g.beginPath(); g.moveTo(left, plotTop); g.lineTo(w - right + 2, plotTop); g.stroke(); }
   if (vpOn) drawNovaVP(ind.vp, fg);
   if (state.indicators.nnLiq && ind.liq) drawNovaLiqTable(fg);

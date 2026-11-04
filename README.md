@@ -87,6 +87,7 @@ Arrastra el borde entre *Seguimiento* y el gráfico, o entre el gráfico y *Indi
 - La corrida de `request.security` ahora recorta el script a lo que dependen sus argumentos (más rápido con muchos símbolos).
 - Estrategias Mobile / Cloud / SMC: ahora se eligen en las entradas del Nova Nexus completo (⚙ → grupo «ESTRATEGIAS»).
 - Leyenda sobre el gráfico: junto a cada indicador, 👁 ocultar/mostrar (Pine) o apagar (nativos), ⚙ ajustes, ⇅ mover (sobre el gráfico / panel arriba / panel abajo, solo Pine) y ✕ quitar. Botones ▤− / ▤+ de la barra del gráfico cambian la altura de los paneles (se recuerda).
+- **Reordenar paneles:** con la leyenda abierta («N indicadores»), mantén pulsado el *nombre* de un panel (RSI, MACD, ATR, un script Pine en panel…) y arrástralo hacia arriba o abajo. Solo se mueve ese nombre/panel; el orden se guarda por dispositivo (PC / móvil) y viaja a tu cuenta. Prueba: `node tests/e2e/reorder-panes.js`.
 
 ## Paneles redimensionables y aspecto del gráfico
 - Cada panel (volumen, RSI, MACD…, paneles de Pine) tiene un **asa en su borde** (una pastilla gris): arrástrala con el dedo o el ratón para agrandar o achicar ese panel; doble toque/clic = altura automática. Las alturas se recuerdan en el dispositivo. ▤− / ▤+ siguen escalando los paneles automáticos.

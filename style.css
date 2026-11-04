@@ -650,3 +650,6 @@ body.pane .favbar{display:none}
 .watch-row .tag-dot::after{width:11px;height:11px;background:var(--bg);opacity:.9;box-shadow:0 0 0 2px var(--bg)}
 .watch-row .tag-dot.has::after{background:var(--tag);opacity:1}
 .chart-view .watch-row .tag-dot{display:none}
+
+.leg-handle{position:absolute;top:0;height:100%;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.legend-box.dragging{cursor:grabbing}
