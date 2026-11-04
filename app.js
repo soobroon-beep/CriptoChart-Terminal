@@ -111,7 +111,7 @@ const cstyle = () => { const o = Object.assign({}, CHART_DEF, state.chartStyle |
 /* Preferencias de interfaz que también viajan a la cuenta: altura de paneles, tamaño de paneles, opciones del dibujo (imán, bloquear…) y color/ícono de la app */
 function sanUi(u) {
   const q = u && typeof u === 'object' && !Array.isArray(u) ? u : {}, o = {};
-  const sanPanes = c => { const r = {}; if (c && typeof c === 'object') { if (c.paneH && typeof c.paneH === 'object' && !Array.isArray(c.paneH)) { const h = {}; for (const [k, v] of Object.entries(c.paneH).slice(0, 24)) if (/^[A-Za-z0-9:_-]{1,40}$/.test(k) && Number.isFinite(v) && v >= 20 && v <= 3000) h[k] = Math.round(v); r.paneH = h; } if (Number.isFinite(c.paneScale) && c.paneScale >= .6 && c.paneScale <= 3) r.paneScale = c.paneScale; if (Array.isArray(c.order)) r.order = c.order.filter(k => typeof k === 'string' && /^[A-Za-z0-9:_-]{1,40}$/.test(k)).slice(0, 24); } return r; };
+  const sanPanes = c => { const r = {}; if (c && typeof c === 'object') { if (c.paneH && typeof c.paneH === 'object' && !Array.isArray(c.paneH)) { const h = {}; for (const [k, v] of Object.entries(c.paneH).slice(0, 24)) if (/^[A-Za-z0-9:_-]{1,40}$/.test(k) && Number.isFinite(v) && v >= 20 && v <= 3000) h[k] = Math.round(v); r.paneH = h; } if (Number.isFinite(c.paneScale) && c.paneScale >= .6 && c.paneScale <= 3) r.paneScale = c.paneScale; if (Array.isArray(c.order)) r.order = c.order.filter(k => typeof k === 'string' && /^[A-Za-z0-9:_-]{1,40}$/.test(k)).slice(0, 64); } return r; };
   if (q.panes && typeof q.panes === 'object') { o.panes = {}; for (const k of ['pc', 'movil']) if (q.panes[k]) o.panes[k] = sanPanes(q.panes[k]); } // tamaño de paneles: uno para PC y otro para móvil
   if (q.dopt && typeof q.dopt === 'object' && !Array.isArray(q.dopt)) { const d = {}; for (const k of ['magnet', 'stay', 'lock', 'hide']) if (typeof q.dopt[k] === 'boolean') d[k] = q.dopt[k]; o.dopt = d; }
   if (typeof q.icon === 'string' && /^[a-z]{3,12}$/.test(q.icon)) o.icon = q.icon;
@@ -2156,8 +2156,8 @@ function timeLabel(t, prev) {
 }
 let legRows = [], legSig = '', legStruct = '', grips = [], gripDrag = false;
 let paneH = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneH_v1') || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; } })();
-let paneOrder = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneOrder_v1') || '[]'); return Array.isArray(o) ? o.filter(k => typeof k === 'string').slice(0, 24) : []; } catch { return []; } })(); // orden elegido por el usuario para los paneles (RSI, MACD…)
-let paneLayout = {bot: [], top: []}; // paneles de abajo y de arriba tal como se dibujaron: [{key, h}], para poder arrastrarlos
+let paneOrder = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneOrder_v1') || '[]'); return Array.isArray(o) ? o.filter(k => typeof k === 'string').slice(0, 64) : []; } catch { return []; } })(); // orden elegido por el usuario para los paneles (RSI, MACD…)
+let paneLayout = {bot: [], top: [], main: [], mainBase: 0}, mainCount = 0; // paneles de abajo y de arriba tal como se dibujaron: [{key, h}], para poder arrastrarlos
 const orderPanes = keys => { const ix = k => { const i = paneOrder.indexOf(k); return i < 0 ? 1e6 : i; }; return keys.map((k, i) => [k, i]).sort((a, b) => ix(a[0]) - ix(b[0]) || a[1] - b[1]).map(x => x[0]); };
 const savePaneOrder = () => { try { localStorage.setItem('cct_paneOrder_v1', JSON.stringify(paneOrder)); } catch {} if (typeof syncUi === 'function') syncUi(); };
 const savePaneH = () => { try { localStorage.setItem('cct_paneH_v1', JSON.stringify(paneH)); } catch {} if (typeof syncUi === 'function') syncUi(); };
@@ -2172,7 +2172,7 @@ function applyUi() { // al recibir el estado de la cuenta: aplica sus preferenci
   const u = state.ui || {};
   const pn = (u.panes || {})[devClass()] || {}; // solo se aplica el tamaño guardado para este tipo de dispositivo
   if (pn.paneH) { paneH = {...pn.paneH}; try { localStorage.setItem('cct_paneH_v1', JSON.stringify(paneH)); } catch {} }
-  if (Array.isArray(pn.order)) { paneOrder = pn.order.slice(0, 24); try { localStorage.setItem('cct_paneOrder_v1', JSON.stringify(paneOrder)); } catch {} }
+  if (Array.isArray(pn.order)) { paneOrder = pn.order.slice(0, 64); try { localStorage.setItem('cct_paneOrder_v1', JSON.stringify(paneOrder)); } catch {} }
   if (pn.paneScale) { paneScale = pn.paneScale; try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} }
   if (u.dopt) { Object.assign(DOPT, u.dopt); try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} }
   if (u.icon && window.CCTAppIcons && window.CCTAppIcons.selected !== u.icon) window.CCTAppIcons.apply(u.icon);
@@ -2185,7 +2185,7 @@ const LEG_FONT = '600 13px system-ui';
 const legBtnH = () => (window.matchMedia && matchMedia('(max-width:760px)').matches ? 26 : 22);
 const legStep = () => legBtnH() + 4; // separación vertical entre filas con botones
 function legAt(text, x, y, act, dim) {
-  const tw = g.measureText(text).width, pk = act.t === 'std' ? act.key : act.t === 'pine' ? 'pine:' + act.sid : '', grp = pk && [paneLayout.bot, paneLayout.top].find(L => L.some(q => q.key === pk)); // solo los nombres de paneles (con otro panel con quien cambiar de lugar) se pueden arrastrar
+  const tw = g.measureText(text).width, pk = act.mid || (act.t === 'std' ? act.key : act.t === 'pine' ? 'pine:' + act.sid : ''), grp = act.mid ? (mainCount > 1 ? [0, 0] : null) : pk && [paneLayout.bot, paneLayout.top].find(L => L.some(q => q.key === pk)); // solo los nombres de paneles (con otro panel con quien cambiar de lugar) se pueden arrastrar
   legRows.push({x: x + tw + 8, y: y - Math.round(legBtnH() / 2 + 5), act, dim: !!dim, tw, hk: grp && grp.length > 1 ? pk : ''});
 }
 /* Leyenda de indicadores plegable: cerrada solo se ve «N indicadores»; abierta muestra nombres, valores y botones (ocultar, ajustes, eliminar) */
@@ -2222,7 +2222,7 @@ function syncLegend() {
   }
   legStruct = struct;
   box.innerHTML = grips.map(q => `<div class="pane-grip" data-gk="${esc(q.key)}" data-gd="${q.dir}" data-gh="${q.h}" style="top:${Math.round(q.y) - 10}px;left:${geo ? geo.left : 6}px;width:${gw}px" title="Arrastra para cambiar la altura (doble toque: automática)"></div>`).join('') + legRows.map(r => { const a = r.act, id = a.sid || a.key || '', d = `data-leg="${a.t}" data-id="${esc(id)}"`;
-    return `<div class="leg-row" style="left:${Math.round(r.x)}px;top:${Math.round(r.y)}px">${r.hk ? `<span class="leg-handle" data-hk="${esc(r.hk)}" title="Mantén pulsado el nombre y arrastra para subir o bajar este panel" style="left:-${Math.round(r.tw + 8)}px;width:${Math.round(r.tw)}px"></span>` : ''}<button ${d} data-do="eye" title="${r.dim ? 'Mostrar' : 'Ocultar'}" aria-label="${r.dim ? 'Mostrar' : 'Ocultar'}">${SV(r.dim ? IC.eyeoff : IC.eye, 15)}</button><button ${d} data-do="set" title="Ajustes" aria-label="Ajustes">${SV(IC.gear, 15)}</button>${a.t === 'pine' ? `<button ${d} data-do="move" title="Mover de panel" aria-label="Mover de panel">${SV(IC.swap, 15)}</button>` : ''}<button ${d} data-do="del" title="Eliminar del gráfico" aria-label="Eliminar">${SV(IC.close, 15)}</button></div>`; }).join('');
+    return `<div class="leg-row" style="left:${Math.round(r.x)}px;top:${Math.round(r.y)}px">${r.hk ? `<span class="leg-handle" data-hk="${esc(r.hk)}" title="Mantén pulsado el nombre y arrastra para subirlo o bajarlo" style="left:-${Math.round(r.tw + 8)}px;width:${Math.round(r.tw)}px"></span>` : ''}<button ${d} data-do="eye" title="${r.dim ? 'Mostrar' : 'Ocultar'}" aria-label="${r.dim ? 'Mostrar' : 'Ocultar'}">${SV(r.dim ? IC.eyeoff : IC.eye, 15)}</button><button ${d} data-do="set" title="Ajustes" aria-label="Ajustes">${SV(IC.gear, 15)}</button>${a.t === 'pine' ? `<button ${d} data-do="move" title="Mover de panel" aria-label="Mover de panel">${SV(IC.swap, 15)}</button>` : ''}<button ${d} data-do="del" title="Eliminar del gráfico" aria-label="Eliminar">${SV(IC.close, 15)}</button></div>`; }).join('');
 }
 document.addEventListener('click', e => {
   const m = e.target.closest('[data-leg-pane]');
@@ -2262,9 +2262,9 @@ function render() { renderCore(); syncLegend(); syncLegToggle(); }
     const hd = e.target.closest('.leg-handle'); if (!hd || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const key = hd.dataset.hk, o = {x: e.clientX, y: e.clientY}; let active = false, changed = false, list = null, base = 0;
     const timer = setTimeout(() => {
-      const L = paneLayout.bot.some(q => q.key === key) ? 'bot' : paneLayout.top.some(q => q.key === key) ? 'top' : ''; if (!L) { cleanup(); return; }
+      const L = paneLayout.bot.some(q => q.key === key) ? 'bot' : paneLayout.top.some(q => q.key === key) ? 'top' : paneLayout.main.some(q => q.key === key) ? 'main' : ''; if (!L) { cleanup(); return; }
       if (!geo) { cleanup(); return; }
-      list = paneLayout[L].map(q => ({...q})); base = L === 'bot' ? geo.extraTop : 6; // donde empieza la pila de paneles de abajo (o la de arriba)
+      list = paneLayout[L].map(q => ({...q})); base = L === 'bot' ? geo.extraTop : L === 'main' ? paneLayout.mainBase : 6; // donde empieza la pila de paneles de abajo (o la de arriba)
       active = true; gripDrag = true; box.classList.add('dragging'); if (navigator.vibrate) try { navigator.vibrate(15); } catch {}
     }, 350);
     const move = ev => {
@@ -2278,7 +2278,7 @@ function render() { renderCore(); syncLegend(); syncLegToggle(); }
         else if (i < list.length - 1 && y > m[i + 1]) { [list[i + 1], list[i]] = [list[i], list[i + 1]]; i++; moved = true; }
         else break;
       }
-      if (moved) { changed = true; const ks = list.map(q => q.key); paneOrder = [...ks, ...paneOrder.filter(k => !ks.includes(k))].slice(0, 24); scheduleRender(); }
+      if (moved) { changed = true; const ks = list.map(q => q.key); paneOrder = [...ks, ...paneOrder.filter(k => !ks.includes(k))].slice(0, 64); scheduleRender(); }
     };
     const end = () => { const was = active; cleanup(); if (was) { box.classList.remove('dragging'); gripDrag = false; if (changed) savePaneOrder(); legSig = ''; legStruct = ''; scheduleRender(); } };
     function cleanup() { clearTimeout(timer); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end); if (active) { active = false; box.classList.remove('dragging'); gripDrag = false; } }
@@ -2583,20 +2583,36 @@ function renderCore() {
   const isHid = k => !!(state.indicators[k] && state.stdHide && state.stdHide[k]);
   const ovBy = {}; for (const o of overlays) if (o[4]) ovBy[o[4]] = o;
   const SLOTS = ['ema20', 'ema50', 'sma200', 'wma20', 'vwap', 'bollinger', 'donchian', 'keltner', 'ichimoku', 'psar', 'volume', 'patterns', 'dchan', 'liqmap', 'vpvr'], PLAIN = {psar: 'Parabolic SAR', volume: 'Volumen', patterns: 'Patrones', dchan: 'Canales dinámicos', liqmap: 'Liquidaciones', vpvr: 'VPVR'};
+  const legItems = [], addLeg = (id, fn) => legItems.push({id, fn});
   for (const k of SLOTS) {
     if (!state.indicators[k]) continue;
-    if (isHid(k)) { dimRow(stdName(k), {t: 'std', key: k}); continue; }
-    if (ovBy[k]) { const [name, , col] = ovBy[k]; g.fillStyle = col; legLabel(name.replace('BB sup', 'Bollinger'), left + 8, ly2, {t: 'std', key: k}); ly2 += LS; }
-    else if (PLAIN[k] && (k !== 'volume' || candles.length)) { g.fillStyle = text; legLabel(PLAIN[k], left + 8, ly2, {t: 'std', key: k}); ly2 += LS; }
+    const id = 'm:' + k; // el nombre de cada indicador de la leyenda se puede mover: se ordenan por lo que el usuario arrastró
+    if (!isHid(k) && !ovBy[k] && !(PLAIN[k] && (k !== 'volume' || candles.length))) continue;
+    addLeg(id, () => {
+      if (isHid(k)) { dimRow(stdName(k), {t: 'std', key: k, mid: id}); return; }
+      if (ovBy[k]) { const [name, , col] = ovBy[k]; g.fillStyle = col; legLabel(name.replace('BB sup', 'Bollinger'), left + 8, ly2, {t: 'std', key: k, mid: id}); ly2 += LS; }
+      else if (PLAIN[k] && (k !== 'volume' || candles.length)) { g.fillStyle = text; legLabel(PLAIN[k], left + 8, ly2, {t: 'std', key: k, mid: id}); ly2 += LS; }
+    });
   }
   for (const {p, r} of prAll) {
     if (paneOf({p, r}) !== 'main') continue;
-    if (p.hide) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)}`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx + ' (oculto)', left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}, true); g.globalAlpha = 1; ly2 += LS; }
-    else { g.fillStyle = text; const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main'}); ly2 += LS; }
+    const id = 'm:p:' + p.sid;
+    addLeg(id, () => {
+      if (p.hide) { const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 24)}`; g.globalAlpha = .5; g.fillStyle = text; legLabel(tx + ' (oculto)', left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main', mid: id}, true); g.globalAlpha = 1; ly2 += LS; }
+      else { g.fillStyle = text; const tx = `ƒ ${(r.meta.short || r.meta.title || '').slice(0, 28)}`; legLabel(tx, left + 8, ly2, {t: 'pine', sid: p.sid, pane: 'main', mid: id}); ly2 += LS; }
+    });
   }
-  if (novaOn() && ind.nn) { const tx = 'Nova Nexus'; g.fillStyle = '#11cf77'; legLabel(tx, left + 8, ly2, {t: 'nova'}); ly2 += LS; }
-  if (isHid('supertrend')) dimRow(stdName('supertrend'), {t: 'std', key: 'supertrend'});
-  else if (stdOn('supertrend') && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#089981' : '#f23645'; { const tx = 'Supertrend'; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend'}); } ly2 += LS; } }
+  if (novaOn() && ind.nn) addLeg('m:nova', () => { const tx = 'Nova Nexus'; g.fillStyle = '#11cf77'; legLabel(tx, left + 8, ly2, {t: 'nova', mid: 'm:nova'}); ly2 += LS; });
+  if (isHid('supertrend') || (stdOn('supertrend') && ind.stDir && ind.stDir[ind.stDir.length - 1] != null)) addLeg('m:supertrend', () => {
+    if (isHid('supertrend')) dimRow(stdName('supertrend'), {t: 'std', key: 'supertrend', mid: 'm:supertrend'});
+    else if (stdOn('supertrend') && ind.stDir) { const j = ind.stDir.length - 1, dv = ind.stDir[j]; if (dv != null) { g.fillStyle = dv < 0 ? '#089981' : '#f23645'; { const tx = 'Supertrend'; legLabel(tx, left + 8, ly2, {t: 'std', key: 'supertrend', mid: 'm:supertrend'}); } ly2 += LS; } }
+  });
+  { // se dibujan en el orden elegido; sin orden guardado queda el de siempre. paneLayout.main guarda el alto de cada fila para poder arrastrarlas
+    const ids = orderPanes(legItems.map(x => x.id)), by = new Map(legItems.map(x => [x.id, x])), lay = [];
+    mainCount = legItems.length; paneLayout.mainBase = ly2 - Math.round(LS * .75);
+    for (const id of ids) { const t0 = ly2; by.get(id).fn(); if (ly2 > t0) lay.push({key: id, h: ly2 - t0}); }
+    paneLayout.main = lay;
+  }
 
   // volumen
   if (volH) {
