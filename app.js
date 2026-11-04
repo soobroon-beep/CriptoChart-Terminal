@@ -25,7 +25,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, dchan:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  groups: [], symGroup: {}, symColor: {}, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
+  groups: [], symGroup: {}, symColor: {}, listRev: 0, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -168,7 +168,7 @@ function merge(s) {
     o.groups = gs; const sg = {}; if (o.symGroup && typeof o.symGroup === 'object' && !Array.isArray(o.symGroup)) for (const [k, v] of Object.entries(o.symGroup)) if (o.symbols.includes(k) && gs.some(y => y.id === v)) sg[k] = v;
     o.symGroup = sg;
     const sc = {}; if (o.symColor && typeof o.symColor === 'object' && !Array.isArray(o.symColor)) for (const [k, v] of Object.entries(o.symColor)) if (o.symbols.includes(k) && TAGS.some(t => t[0] === v)) sc[k] = v;
-    o.symColor = sc;
+    o.symColor = sc; o.listRev = Number.isFinite(+o.listRev) && +o.listRev > 0 ? +o.listRev : 0;
   }
   o.layout = ['1', '2v', '2h', '3', '4', '5'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.stdHide = o.stdHide && typeof o.stdHide === 'object' && !Array.isArray(o.stdHide) ? Object.fromEntries(Object.keys(o.stdHide).filter(k => o.stdHide[k] === true && Object.prototype.hasOwnProperty.call(o.indicators, k) && !k.startsWith('nn') && o.indicators[k]).map(k => [k, true])) : {}; // «oculto» (ojito) ≠ «apagado»: sigue activo en Indicadores, solo no se dibuja
@@ -195,7 +195,11 @@ if (PANE) { document.body.classList.add('pane'); const q = new URLSearchParams(l
 const dirtyKey = () => uid ? `${STORE}_dirty_${uid}` : null;
 const persistLocal = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch {} };
 let remoteRev = 0; // versión (rev) más reciente que se sabe que hay en la nube
-const save = () => { state.rev = Math.max(Date.now(), (+state.rev || 0) + 1); try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
+/* listRev: cuándo se cambió por última vez la lista de seguimiento (orden de monedas y secciones, sección y color de cada una). Al mezclar con la nube gana la lista más reciente:
+   antes se usaba siempre el orden de la nube, y si otro dispositivo guardaba al mismo tiempo, el orden que acababas de arrastrar se deshacía. */
+const listSigOf = st => JSON.stringify([st.symbols, st.groups, st.symGroup, st.symColor]);
+let listSig = listSigOf(state);
+const save = () => { const ls = listSigOf(state); if (ls !== listSig) { listSig = ls; state.listRev = Date.now(); } state.rev = Math.max(Date.now(), (+state.rev || 0) + 1, (+remoteRev || 0) + 1); try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
 
 /* ───────── Utilidades ───────── */
 const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','A'],UNI:['Uniswap','U'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
@@ -4046,7 +4050,7 @@ function applyState(data, soft = false) {
   if (sameChart && (gest || pinch)) { clearTimeout(applyState.t); applyState.t = setTimeout(() => applyState(data, soft), 350); return; }
   const next = merge(withLocalLayout(data));
   if (sameChart && JSON.stringify(next) === JSON.stringify(state)) return;
-  const prevSource = state.source; state = next; applyUi(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource();
+  const prevSource = state.source; state = next; listSig = listSigOf(state); applyUi(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource();
   if (sameChart) { drawHist.u.length = drawHist.r.length = 0; updateDrawUI(); } else clearTransient(); // mismo gráfico: se conserva la escala manual, la retícula y lo que se esté dibujando
   if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader(); renderAcct(); renderMoveAlerts();
   if (!sameChart || prevSource !== state.source) { closeWS(); candles = []; ind = {}; loadCandles(); }
@@ -4121,7 +4125,13 @@ async function onUser(user) {
       let st; try { st = JSON.parse(str); } catch { return; }
       const rr = revOf(st, data); remoteRev = Math.max(remoteRev, rr);
       if (rr <= (+state.rev || 0)) return; // eco viejo o igual a lo que ya tengo: se ignora
-      lastRemote = str; try { applyState(st, true); persistLocal(); refreshPineAfterSync(); } catch {}
+      lastRemote = str;
+      try {
+        const dirty = (() => { try { return !!localStorage.getItem(dirtyKey()); } catch { return false; } })();
+        if (dirty) { const merged = reconcile(state, st); applyState(merged, true); persistLocal(); cloudPush(); } // lo que acabas de cambiar aquí todavía no se sube: se mezcla, no se pisa
+        else applyState(st, true);
+        persistLocal(); refreshPineAfterSync();
+      } catch {}
     }, () => {});
     const sref = db.doc(`users/${uid}/data/scripts`), ssnap = await sref.get();
     if (ssnap.exists && ssnap.data().items) { scriptsRemote = ssnap.data().items; try { scripts = withCatalog(JSON.parse(scriptsRemote)); localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); renderScripts(); } catch {} }
@@ -4162,10 +4172,20 @@ async function packState(str) { // → campos del documento (comprime si el esta
 function reconcile(local, remote) { // mezcla de dos dispositivos que cambiaron a la vez: base = la nube + lo que solo existe aquí
   const out = JSON.parse(JSON.stringify(remote));
   const L = local || {};
-  if (Array.isArray(L.symbols)) { out.symbols = Array.isArray(out.symbols) ? out.symbols : []; for (const k of L.symbols) if (!out.symbols.includes(k)) out.symbols.push(k); }
-  if (L.symGroup && typeof L.symGroup === 'object') { out.symGroup = {...L.symGroup, ...(out.symGroup || {})}; }
-  if (L.symColor && typeof L.symColor === 'object') { out.symColor = {...L.symColor, ...(out.symColor || {})}; }
-  if (Array.isArray(L.groups)) { out.groups = Array.isArray(out.groups) ? out.groups : []; for (const g of L.groups) if (!out.groups.some(x => x.id === g.id)) out.groups.push(g); }
+  const lNew = (+L.listRev || 0) >= (+remote.listRev || 0); // la lista más recientemente cambiada manda (orden de monedas y secciones, sección y color)
+  if (lNew && Array.isArray(L.symbols)) {
+    const rs = Array.isArray(remote.symbols) ? remote.symbols : [], rg = Array.isArray(remote.groups) ? remote.groups : [], lg = Array.isArray(L.groups) ? L.groups : [];
+    out.symbols = [...L.symbols, ...rs.filter(k => !L.symbols.includes(k))];
+    out.groups = [...lg, ...rg.filter(g => g && !lg.some(x => x.id === g.id))];
+    out.symGroup = {}; out.symColor = {};
+    for (const k of out.symbols) { const inL = L.symbols.includes(k), src = inL ? L : remote; if (src.symGroup && src.symGroup[k]) out.symGroup[k] = src.symGroup[k]; if (src.symColor && src.symColor[k]) out.symColor[k] = src.symColor[k]; }
+    out.listRev = +L.listRev || 0;
+  } else {
+    if (Array.isArray(L.symbols)) { out.symbols = Array.isArray(out.symbols) ? out.symbols : []; for (const k of L.symbols) if (!out.symbols.includes(k)) out.symbols.push(k); }
+    if (L.symGroup && typeof L.symGroup === 'object') { out.symGroup = {...L.symGroup, ...(out.symGroup || {})}; }
+    if (L.symColor && typeof L.symColor === 'object') { out.symColor = {...L.symColor, ...(out.symColor || {})}; }
+    if (Array.isArray(L.groups)) { out.groups = Array.isArray(out.groups) ? out.groups : []; for (const g of L.groups) if (!out.groups.some(x => x.id === g.id)) out.groups.push(g); }
+  }
   if (L.drawings && typeof L.drawings === 'object') { out.drawings = out.drawings && typeof out.drawings === 'object' ? out.drawings : {}; for (const [k, arr] of Object.entries(L.drawings)) { const cur = Array.isArray(out.drawings[k]) ? out.drawings[k] : []; const ids = new Set(cur.map(d => d && d.id)); const extra = (Array.isArray(arr) ? arr : []).filter(d => d && !ids.has(d.id)); if (extra.length) out.drawings[k] = [...cur, ...extra].slice(-300); } }
   if (Array.isArray(L.alerts)) { out.alerts = Array.isArray(out.alerts) ? out.alerts : []; for (const a of L.alerts) if (a && !out.alerts.some(x => x.id === a.id)) out.alerts.push(a); }
   out.rev = Math.max(Date.now(), (+L.rev || 0), (+remote.rev || 0)) + 1;
