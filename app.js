@@ -317,7 +317,7 @@ function watchRow(s) {
     const opts = `<option value="">Sin sección</option>` + state.groups.map(g => `<option value="${g.id}" ${grpOf(s) === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
     return `<div class="watch-row editing${tgA}" data-symbol="${esc(s)}"><span class="drag-h" aria-hidden="true">⠿</span>${main}<span class="row-edit"><button type="button" class="tag-btn ${tg ? 'has' : ''}" data-color="${esc(s)}" ${tg ? `style="--tag:${tg}"` : ''} aria-label="Color de ${esc(base(s))}" title="Color"></button>${state.groups.length ? `<select class="sec-pick" data-assign="${esc(s)}" aria-label="Sección de ${esc(base(s))}">${opts}</select>` : ''}<button data-remove="${esc(s)}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
   }
-  return `<button class="watch-row${tgA}" data-symbol="${esc(s)}">${main}${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
+  return `<button class="watch-row${tgA}" data-symbol="${esc(s)}">${main}<span class="tag-dot ${tg ? 'has' : ''}" role="button" data-color="${esc(s)}" ${tg ? `style="--tag:${tg}"` : ''} aria-label="Color de ${esc(base(s))}" title="Color"></span>${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
 }
 function renderWatch() {
   const q = $('#searchCoins').value.trim().toUpperCase();
@@ -362,7 +362,7 @@ $('#watchRows').addEventListener('change', e => { const sel = e.target.closest('
   const clear = () => { if (!st) return; clearTimeout(st.timer); if (st.ghost) st.ghost.remove(); box.classList.remove('wl-dragging'); $$('#watchRows .dragging, #watchRows .drop-before, #watchRows .drop-after, #watchRows .drop-on').forEach(x => x.classList.remove('dragging', 'drop-before', 'drop-after', 'drop-on')); st = null; };
   const target = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest ? el.closest('.watch-row[data-symbol]:not(.pop-row), .wl-sec') : null; };
   box.addEventListener('pointerdown', e => {
-    if (e.button > 0 || e.target.closest('button:not(.watch-row):not(.wl-sec-t), select, input, .wl-sec-ed')) return;
+    if (e.button > 0 || e.target.closest('button:not(.watch-row):not(.wl-sec-t), select, input, .wl-sec-ed, .tag-dot')) return;
     const el = e.target.closest('.watch-row[data-symbol]:not(.pop-row), .wl-sec'); if (!el) return;
     clear(); st = {el, x: e.clientX, y: e.clientY, id: e.pointerId, on: false, sec: el.classList.contains('wl-sec'), key: el.dataset.symbol || el.dataset.sec};
     st.timer = setTimeout(() => {
@@ -377,6 +377,15 @@ $('#watchRows').addEventListener('change', e => { const sel = e.target.closest('
     if (!st.on) { if (Math.hypot(e.clientX - st.x, e.clientY - st.y) > 9) clear(); return; } // se movió antes del tiempo: era un desplazamiento
     e.preventDefault(); st.ghost.style.top = (e.clientY - st.dy) + 'px';
     $$('#watchRows .drop-before, #watchRows .drop-after, #watchRows .drop-on').forEach(x => x.classList.remove('drop-before', 'drop-after', 'drop-on'));
+    if (st.sec) { // una sección se suelta en cualquier parte de otra (encabezado o monedas): se coloca antes o después de ese bloque completo
+      const kids = [...box.children], blocks = []; let cur = null;
+      for (const k of kids) { const r0 = k.getBoundingClientRect(); if (k.classList.contains('wl-sec')) { cur = {head: k, top: r0.top, bottom: r0.bottom}; blocks.push(cur); } else if (cur) cur.bottom = r0.bottom; }
+      const others = blocks.filter(b => b.head !== st.el), idx = others.filter(b => e.clientY > (b.top + b.bottom) / 2).length;
+      st.drop = {sec: true, idx, others: others.map(b => b.head.dataset.sec)};
+      if (idx < others.length) others[idx].head.classList.add('drop-before'); else if (others.length) { const last = others[others.length - 1].head, lk = kids.filter(k => k !== st.el); const tail = lk[lk.length - 1]; (tail || last).classList.add('drop-after'); }
+      const sc2 = box.closest('.view'); if (sc2) { const vr = sc2.getBoundingClientRect(); if (e.clientY < vr.top + 50) sc2.scrollTop -= 10; else if (e.clientY > vr.bottom - 50) sc2.scrollTop += 10; }
+      return;
+    }
     const t = target(e.clientX, e.clientY); if (!t || t === st.el) { st.drop = null; return; }
     const r = t.getBoundingClientRect();
     if (t.classList.contains('wl-sec')) { if (st.sec) { st.drop = {t, after: e.clientY > r.top + r.height / 2}; t.classList.add(st.drop.after ? 'drop-after' : 'drop-before'); } else { st.drop = {t, into: true}; t.classList.add('drop-on'); } }
@@ -389,7 +398,12 @@ $('#watchRows').addEventListener('change', e => { const sel = e.target.closest('
     const s0 = st, d = s0.on ? s0.drop : null; clear();
     if (s0.on) { suppressClick = Date.now(); }
     if (!d) { if (s0.on) renderWatch(); return; }
-    if (s0.sec) { const from = state.groups.findIndex(x => x.id === s0.key), tid = d.t.dataset.sec; if (from < 0 || !tid || tid === s0.key) return renderWatch(); const [g1] = state.groups.splice(from, 1); let to = state.groups.findIndex(x => x.id === tid); if (d.after) to++; state.groups.splice(to, 0, g1); }
+    if (s0.sec) {
+      const from = state.groups.findIndex(x => x.id === s0.key); if (from < 0 || !d.sec) return renderWatch();
+      const [g1] = state.groups.splice(from, 1); let to = state.groups.length;
+      if (d.idx < d.others.length) to = state.groups.findIndex(x => x.id === d.others[d.idx]); else if (d.others.length) to = state.groups.findIndex(x => x.id === d.others[d.others.length - 1]) + 1;
+      state.groups.splice(to < 0 ? state.groups.length : to, 0, g1);
+    }
     else {
       const k = s0.key; state.symbols = state.symbols.filter(x => x !== k);
       if (d.t.classList.contains('wl-sec')) { const id = d.t.dataset.sec, first = state.symbols.findIndex(x => grpOf(x) === id); if (first < 0) state.symbols.push(k); else state.symbols.splice(first, 0, k); state.symGroup[k] = id; }

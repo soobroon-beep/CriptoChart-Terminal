@@ -640,3 +640,13 @@ body.pane .favbar{display:none}
 .tag-grid button{width:30px;height:30px;border-radius:50%;border:2px solid transparent;background:var(--c);padding:0}.tag-grid button.on{border-color:var(--text);box-shadow:0 0 0 2px var(--raised) inset}.tag-grid button:hover{transform:scale(1.1)}
 .tag-none{width:100%;margin-top:9px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:12px}
 .wl-sec-ed button{width:30px}
+
+.tag-dot{flex:none;width:28px;height:28px;display:grid;place-items:center;border-radius:50%;cursor:pointer;position:relative;margin:0 -2px}
+.tag-dot::after{content:'';width:12px;height:12px;border-radius:50%;border:2px solid var(--muted);opacity:.5;transition:opacity .15s,transform .15s}
+.tag-dot.has::after{background:var(--tag);border-color:var(--tag);opacity:1}.tag-dot:hover::after{opacity:1;transform:scale(1.2)}
+/* el selector de color va como insignia en la esquina del icono de la moneda: no le quita ancho al nombre */
+.watch-row{position:relative}
+.watch-row .tag-dot{position:absolute;left:26px;top:6px;width:24px;height:24px;margin:0}
+.watch-row .tag-dot::after{width:11px;height:11px;background:var(--bg);opacity:.9;box-shadow:0 0 0 2px var(--bg)}
+.watch-row .tag-dot.has::after{background:var(--tag);opacity:1}
+.chart-view .watch-row .tag-dot{display:none}
