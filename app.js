@@ -1861,25 +1861,33 @@ function cancelTool() { drawTool = ''; pending = null; pending2 = null; multi = 
    para mostrarla otra vez, clic derecho sobre el gráfico. Posición, visibilidad y favoritas se guardan en tu cuenta. Solo en computadora. */
 function placeFavBar() {
   const bar = $('#favBar'), ar = $('#chartArea'); if (!bar || !ar) return;
+  if (!deskMQ.matches) { bar.style.left = bar.style.top = bar.style.bottom = bar.style.transform = ''; return; } // celular: lo coloca el CSS junto al botón estrella
   if (FB.x == null || FB.y == null) { bar.style.left = '50%'; bar.style.top = 'auto'; bar.style.bottom = '50px'; bar.style.transform = 'translateX(-50%)'; return; }
   const aw = ar.clientWidth, ah = ar.clientHeight, bw = bar.offsetWidth, bh = bar.offsetHeight;
   bar.style.transform = 'none'; bar.style.bottom = 'auto';
   bar.style.left = clamp(FB.x * Math.max(0, aw - bw), 0, Math.max(0, aw - bw)) + 'px'; bar.style.top = clamp(FB.y * Math.max(0, ah - bh), 0, Math.max(0, ah - bh)) + 'px';
 }
+let fbOpen = false; // celular: la barra va plegada tras un botón flotante con una estrella
+function setFbOpen(v) { fbOpen = !!v; const b = $('#favBar'), f = $('#favFab'); if (b) { b.classList.toggle('open', fbOpen); b.inert = !fbOpen; } if (f) { f.classList.toggle('open', fbOpen); f.setAttribute('aria-expanded', String(fbOpen)); } }
 function renderFavBar() {
-  const ar = $('#chartArea'); if (!ar) return; let bar = $('#favBar');
-  const on = !PANE && FB.show;
-  if (!on) { if (bar) bar.remove(); return; }
+  const ar = $('#chartArea'); if (!ar) return; let bar = $('#favBar'), fab = $('#favFab');
+  const on = !PANE && FB.show, mob = !deskMQ.matches;
+  if (!on) { if (bar) bar.remove(); if (fab) fab.remove(); return; }
   if (!bar) { bar = document.createElement('div'); bar.id = 'favBar'; bar.className = 'favbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Herramientas favoritas'); ar.appendChild(bar); }
+  if (mob && !fab) { fab = document.createElement('button'); fab.id = 'favFab'; fab.type = 'button'; fab.className = 'fav-fab'; fab.title = 'Herramientas favoritas'; fab.setAttribute('aria-label', 'Herramientas favoritas'); fab.setAttribute('aria-expanded', 'false'); fab.innerHTML = I('star', 22); fab.addEventListener('click', () => setFbOpen(!fbOpen)); ar.appendChild(fab); }
+  if (!mob && fab) { fab.remove(); fab = null; }
+  bar.classList.toggle('fb-mobile', mob);
   const tools = favTools();
-  bar.innerHTML = '<span class="fb-grip" title="Arrastra para mover · clic derecho: ocultar" aria-label="Mover barra"><svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></g></svg></span>'
+  bar.innerHTML = (mob ? '' : '<span class="fb-grip" title="Arrastra para mover · clic derecho: ocultar" aria-label="Mover barra"><svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></g></svg></span>')
     + (tools.length ? tools.map(t => `<button type="button" class="fb-btn${drawTool === t[0] ? ' on' : ''}" data-fav-tool="${t[0]}" title="${esc(t[1])}" aria-label="${esc(t[1])}">${SV(t[3], 22)}</button>`).join('') : '<span class="fb-empty">Marca ★ en las herramientas para tenerlas aquí</span>');
+  if (mob) { setFbOpen(fbOpen); if (fab) fab.classList.toggle('active', !!drawTool); } else { bar.classList.remove('open'); bar.inert = false; }
   placeFavBar();
 }
 function setFavBar(show) { FB.show = !!show; syncUi(); renderFavBar(); toast(FB.show ? 'Barra de favoritos visible' : 'Barra de favoritos oculta · clic derecho sobre el gráfico para mostrarla'); }
 {
   const ar = $('#chartArea');
-  ar.addEventListener('click', e => { const b = e.target.closest('[data-fav-tool]'); if (!b) return; const k = b.dataset.favTool; if (drawTool === k) cancelTool(); else pickTool(k); });
+  ar.addEventListener('click', e => { const b = e.target.closest('[data-fav-tool]'); if (!b) return; const k = b.dataset.favTool; if (!deskMQ.matches) setFbOpen(false); if (drawTool === k) cancelTool(); else pickTool(k); });
+  ar.addEventListener('pointerdown', e => { if (fbOpen && !deskMQ.matches && !e.target.closest('#favBar, #favFab')) setFbOpen(false); }, true); // tocar el gráfico pliega la barra
   ar.addEventListener('pointerdown', e => {
     if (e.button !== 0) return; const gr = e.target.closest('.fb-grip'); if (!gr) return; const bar = $('#favBar'); if (!bar) return; e.preventDefault();
     const r = ar.getBoundingClientRect(), br = bar.getBoundingClientRect(), ox = e.clientX - br.left, oy = e.clientY - br.top;
@@ -3328,7 +3336,7 @@ const area = $('#chartArea'), ptrs = new Map();
 let gest = null, pinch = null, lastTap = null, brushLive = null;
 const local = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
 area.addEventListener('pointerdown', e => { stopMotion();
-  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.pbar,.pbar-pop,.pbar-hidden,.leg-toggle,.favbar')) return;
+  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.pbar,.pbar-pop,.pbar-hidden,.leg-toggle,.favbar,.fav-fab')) return;
   try { area.setPointerCapture(e.pointerId); } catch {} ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   if (!geo) return;
   if (ptrs.size === 2) { startPinch(); return; }

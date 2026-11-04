@@ -175,3 +175,24 @@ button,.watch-row,.sheet-item,.setting-row,.small-button{position:relative;overf
 .light .pbar,.light .pbar-pop,.light .pbar-hidden{background:rgba(255,255,255,.98);color:#182234;border-color:rgba(20,40,80,.16)}
 .light .pbar button:hover,.light .pbar button.open,.light .pp-item:hover{background:rgba(20,40,80,.08)}
 .light .pp-input{background:#f4f7fc;color:#182234;border-color:rgba(20,40,80,.2)}
+
+/* Favoritos en celular: botón flotante con estrella que despliega la barra (se pliega al usar una herramienta) */
+.fav-fab{position:absolute;left:10px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:8;display:grid;place-items:center;width:44px;height:44px;padding:0;border-radius:50%;color:#f1d27a;cursor:pointer;
+  background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.04)),rgba(19,23,34,.55);border:1px solid rgba(255,255,255,.2);
+  -webkit-backdrop-filter:blur(14px) saturate(160%);backdrop-filter:blur(14px) saturate(160%);
+  box-shadow:0 8px 22px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.28),0 0 14px rgba(241,210,122,.15);
+  transition:transform .25s cubic-bezier(.3,1.4,.5,1),box-shadow .25s,color .2s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.fav-fab svg{transition:transform .35s cubic-bezier(.3,1.4,.5,1);fill:rgba(241,210,122,.25)}
+.fav-fab:active{transform:scale(.92)}
+.fav-fab.open{box-shadow:0 8px 22px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.28),0 0 18px rgba(241,210,122,.45)}
+.fav-fab.open svg{transform:rotate(72deg) scale(1.08);fill:rgba(241,210,122,.55)}
+.fav-fab.active:not(.open){color:var(--accent)}
+.favbar.fb-mobile{left:62px!important;right:auto;top:auto!important;bottom:calc(84px + env(safe-area-inset-bottom,0px))!important;transform-origin:left center;height:44px;padding:4px 8px;border-radius:22px;max-width:calc(100% - 74px);z-index:8;
+  background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(255,255,255,.03)),rgba(19,23,34,.58);border:1px solid rgba(255,255,255,.2);
+  -webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);box-shadow:0 10px 28px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.25);
+  opacity:0;transform:translateX(-14px) scale(.7);pointer-events:none;visibility:hidden;
+  transition:opacity .2s ease,transform .28s cubic-bezier(.3,1.3,.5,1),visibility 0s .28s}
+.favbar.fb-mobile.open{opacity:1;transform:none;pointer-events:auto;visibility:visible;transition:opacity .2s ease,transform .28s cubic-bezier(.3,1.3,.5,1),visibility 0s}
+.favbar.fb-mobile .fb-btn{width:38px;height:36px;border-radius:50%}
+.favbar.fb-mobile .fb-btn.on{background:rgba(84,143,255,.28);box-shadow:0 0 10px rgba(84,143,255,.35)}
+@media (prefers-reduced-motion:reduce){.fav-fab,.fav-fab svg,.favbar.fb-mobile{transition:none!important}}
