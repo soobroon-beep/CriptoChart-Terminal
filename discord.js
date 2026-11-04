@@ -47,7 +47,8 @@
   const signalEmbeds = FM.signalEmbeds;
   async function sendSignals(tf) {
     const rows = await scanSignals(tf); if (!rows) return {ok: false, why: 'El Screener aún no está listo'};
-    return send(signalEmbeds(tf, rows, rows.analyzed));
+    const em = signalEmbeds(tf, rows, rows.analyzed); if (!em.length) return {ok: true, none: true};
+    return send(em);
   }
 
   /* Panel */
@@ -76,7 +77,7 @@
       store().set({url}); flash(url ? 'Guardado · usa «Enviar prueba»' : 'Guardado', 'ok');
     } else if (id === 'dcTest') { flash('Enviando…', ''); const r = await send([{title: '✅ VORTEX conectado', description: 'Aquí llegarán tus movimientos bruscos, alertas y señales del Screener.', color: COL.info, timestamp: new Date().toISOString(), footer: {text: 'Nova Nexus · VORTEX'}}]); if (r.ok) flash('Prueba enviada: revisa #vortex', 'ok'); }
     else if (id === 'dcDel') { store().set({url: ''}); flash('Desconectado', ''); }
-    else if (id === 'dcNow1' || id === 'dcNow4') { const tf = id === 'dcNow1' ? '1h' : '4h'; flash(`Calculando señales ${tf}… (unos segundos)`, ''); const r = await sendSignals(tf); if (r && r.ok) flash(`Señales ${tf} enviadas`, 'ok'); }
+    else if (id === 'dcNow1' || id === 'dcNow4') { const tf = id === 'dcNow1' ? '1h' : '4h'; flash(`Calculando señales ${tf}… (unos segundos)`, ''); const r = await sendSignals(tf); if (r && r.ok) flash(r.none ? `Ahora no hay señales ${tf}: no se envió nada` : `Señales ${tf} enviadas`, 'ok'); }
     else if (id === 'dcBack') { if (window.CCT_switchView) CCT_switchView('settingsView'); }
     else if (e.target.closest('#dcOpenFromSettings')) { if (window.CCT_switchView) CCT_switchView('discordView'); paint(); }
   });

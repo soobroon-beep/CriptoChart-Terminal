@@ -1,13 +1,15 @@
 name: Screener a Discord
 # Manda a Discord las señales del Screener cada hora (1h) y cada 4 horas UTC (4h), sin necesitar la app abierta.
+# GitHub no garantiza la hora de las ejecuciones programadas (a veces se salta alguna): por eso corre cada ~10 min y el script envía cada franja una sola vez
+# (guardando la última en discord-state.json); si una corrida se pierde, la siguiente la recupera. Solo se envían las criptos con señal.
 # Requiere el secreto del repositorio DISCORD_WEBHOOK (URL del webhook del canal #vortex).
 on:
-  schedule: [{cron: '2 * * * *'}]
+  schedule: [{cron: '3,13,23,33,43,53 * * * *'}]
   workflow_dispatch:
     inputs:
-      tf: {description: 'Temporalidades a enviar (1h, 4h o 1h,4h). Vacío = según la hora', required: false, default: ''}
+      tf: {description: 'Forzar temporalidades (1h, 4h o 1h,4h). Vacío = solo lo pendiente de esta hora', required: false, default: ''}
 permissions:
-  contents: read
+  contents: write
 concurrency: {group: discord-screener, cancel-in-progress: false}
 jobs:
   send:
@@ -21,3 +23,9 @@ jobs:
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           TF: ${{ github.event.inputs.tf }}
+      - name: Guardar la franja enviada
+        if: always()
+        run: |
+          git config user.name "screener-bot"; git config user.email "screener-bot@users.noreply.github.com"
+          if [ -f discord-state.json ]; then git add discord-state.json; fi
+          git diff --cached --quiet || (git commit -m "chore: franja del screener" && git pull --rebase -q && git push)

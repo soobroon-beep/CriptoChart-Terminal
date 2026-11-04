@@ -1,7 +1,8 @@
 // Envía a Discord las señales del Screener de Nova Nexus (top 50 de Binance Spot por volumen). Lo ejecuta .github/workflows/discord-screener.yml
-// cada hora (1h) y, además, cada 4 horas UTC (4h), aunque no haya ningún dispositivo con VORTEX abierto.
+// cada hora (1h) y cada 4 horas UTC (4h), aunque no haya ningún dispositivo con VORTEX abierto. Solo manda las criptos CON señal (si no hay ninguna, no manda nada).
 // Variables: DISCORD_WEBHOOK (secreto del repositorio, nunca en el código) · TF opcional: «1h», «4h» o «1h,4h» para forzar.
-const F = require('../discord-format.js');
+const fs = require('fs'), path = require('path'), F = require('../discord-format.js');
+const STATE = path.join(__dirname, '..', 'discord-state.json');
 require('../nova-nexus.js'); const NN = globalThis.NovaNexus;
 const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com', 'https://api1.binance.com'];
 const STABLE = new Set(['USDC', 'FDUSD', 'TUSD', 'USDP', 'DAI', 'BUSD', 'USDE', 'USDS', 'USD1', 'XUSD', 'PYUSD', 'BFUSD', 'EUR', 'AEUR', 'EURI', 'UST', 'USTC']);
@@ -47,12 +48,27 @@ function timeframes(now = new Date(), force = '') {
   const f = String(force || '').split(',').map(s => s.trim()).filter(s => s === '1h' || s === '4h'); if (f.length) return f;
   return now.getUTCHours() % 4 === 0 ? ['1h', '4h'] : ['1h'];
 }
+/* GitHub no garantiza la hora de las ejecuciones programadas (a veces se salta alguna), así que el flujo corre cada ~10 min y envía
+   cada temporalidad UNA vez por franja: 1h = cada hora UTC, 4h = cada 4 horas UTC (00, 04, 08, 12, 16, 20). Si una corrida se pierde, la siguiente la recupera.
+   La última franja enviada vive en discord-state.json (la guarda el propio flujo). */
+const SLOT_MS = {'1h': 36e5, '4h': 144e5};
+const slotOf = (tf, now = Date.now()) => Math.floor(now / SLOT_MS[tf]);
+function dueTfs(now = Date.now(), state = {}) { return ['1h', '4h'].filter(tf => !(slotOf(tf, now) <= (+state[tf] || 0))); }
+function readState() { try { const j = JSON.parse(fs.readFileSync(STATE, 'utf8')); return j && typeof j === 'object' ? j : {}; } catch { return {}; } }
 async function main() {
   const url = String(process.env.DISCORD_WEBHOOK || '').trim();
   if (!url) { console.log('Falta el secreto DISCORD_WEBHOOK (Settings → Secrets and variables → Actions). No se envía nada.'); return; }
   if (!HOOK.test(url)) throw new Error('DISCORD_WEBHOOK no parece un webhook de Discord');
-  const tfs = timeframes(new Date(), process.env.TF), top = await topSymbols(TOP_N);
-  for (const tf of tfs) { const rows = await scan(tf, top); console.log(`${tf}: ${rows.length} señales`); await post(url, F.signalEmbeds(tf, rows, top.map(t => t.symbol))); await sleep(1200); }
+  const forced = String(process.env.TF || '').trim(), state = readState(), now = Date.now();
+  const tfs = forced ? timeframes(new Date(now), forced) : dueTfs(now, state);
+  if (!tfs.length) { console.log('Nada pendiente: ya se envió la franja actual (1h y 4h).'); return; }
+  const top = await topSymbols(TOP_N);
+  for (const tf of tfs) {
+    const rows = await scan(tf, top); console.log(`${tf}: ${rows.length} señales`);
+    const em = F.signalEmbeds(tf, rows, top.map(t => t.symbol));
+    if (em.length) { await post(url, em); await sleep(1200); } else console.log(`${tf}: sin señales, no se envía nada`);
+    if (!forced) { state[tf] = slotOf(tf, now); state.updated = new Date().toISOString(); fs.writeFileSync(STATE, JSON.stringify(state)); }
+  }
 }
 if (require.main === module) main().catch(e => { console.error('Error:', e.message); process.exit(1); });
-module.exports = {signalOf, timeframes, topSymbols, scan, post, candles};
+module.exports = {signalOf, timeframes, dueTfs, slotOf, topSymbols, scan, post, candles};
