@@ -630,3 +630,13 @@ body.pane .favbar{display:none}
 .ex-dom{color:#20bf9f}
 
 .sym-top,.sym-tabs,.sym-search,.sym-foot{flex:0 0 auto}.sym-tabs{min-height:46px;align-items:center}
+
+/* Colores de clasificación en Mi seguimiento */
+.watch-row.tagged{box-shadow:inset 4px 0 0 var(--tag);background:linear-gradient(90deg,color-mix(in srgb,var(--tag) 16%,transparent),transparent 65%)}
+.watch-row .tag-btn,.row-edit .tag-btn{width:30px;height:32px;border-radius:10px;border:1px solid var(--line);background:var(--surface);position:relative}
+.tag-btn::after{content:'';position:absolute;inset:9px;border-radius:50%;border:2px solid var(--muted)}.tag-btn.has::after{background:var(--tag);border-color:var(--tag)}
+.tag-pop{position:fixed;z-index:400;background:var(--raised);border:1px solid var(--line);border-radius:12px;padding:10px;box-shadow:0 14px 40px rgba(0,0,0,.5);min-width:170px}
+.tag-pop small{display:block;color:var(--muted);font-size:11px;margin:0 2px 8px}.tag-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tag-grid button{width:30px;height:30px;border-radius:50%;border:2px solid transparent;background:var(--c);padding:0}.tag-grid button.on{border-color:var(--text);box-shadow:0 0 0 2px var(--raised) inset}.tag-grid button:hover{transform:scale(1.1)}
+.tag-none{width:100%;margin-top:9px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:12px}
+.wl-sec-ed button{width:30px}

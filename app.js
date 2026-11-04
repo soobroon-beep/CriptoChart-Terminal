@@ -25,7 +25,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, dchan:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  groups: [], symGroup: {}, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
+  groups: [], symGroup: {}, symColor: {}, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -167,6 +167,8 @@ function merge(s) {
     const gs = []; if (Array.isArray(o.groups)) for (const x of o.groups.slice(0, 30)) if (x && typeof x.id === 'string' && /^[\w-]{1,24}$/.test(x.id) && typeof x.name === 'string' && !gs.some(y => y.id === x.id)) gs.push({id: x.id, name: x.name.slice(0, 40), collapsed: !!x.collapsed});
     o.groups = gs; const sg = {}; if (o.symGroup && typeof o.symGroup === 'object' && !Array.isArray(o.symGroup)) for (const [k, v] of Object.entries(o.symGroup)) if (o.symbols.includes(k) && gs.some(y => y.id === v)) sg[k] = v;
     o.symGroup = sg;
+    const sc = {}; if (o.symColor && typeof o.symColor === 'object' && !Array.isArray(o.symColor)) for (const [k, v] of Object.entries(o.symColor)) if (o.symbols.includes(k) && TAGS.some(t => t[0] === v)) sc[k] = v;
+    o.symColor = sc;
   }
   o.layout = ['1', '2v', '2h', '3', '4', '5'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.stdHide = o.stdHide && typeof o.stdHide === 'object' && !Array.isArray(o.stdHide) ? Object.fromEntries(Object.keys(o.stdHide).filter(k => o.stdHide[k] === true && Object.prototype.hasOwnProperty.call(o.indicators, k) && !k.startsWith('nn') && o.indicators[k]).map(k => [k, true])) : {}; // «oculto» (ojito) ≠ «apagado»: sigue activo en Indicadores, solo no se dibuja
@@ -289,6 +291,20 @@ function sparkSVG(s, change) {
   const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(''), rising = Number.isFinite(change) ? change >= 0 : v[n - 1] >= v[0], end = pts[n - 1];
   return `<svg class="spark ${rising ? 'positive' : 'negative'}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${rising ? 'Subiendo' : 'Bajando'} en las últimas 24 horas"><path d="${d}L${W} ${H}L0 ${H}Z" fill="currentColor" fill-opacity=".13"/><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${end[0]}" cy="${end[1]}" r="2.2" fill="currentColor"/></svg>`;
 }
+/* Colores para clasificar monedas (en vez de banderitas): se guardan por activo en la cuenta */
+const TAGS = [['#f23645', 'Rojo'], ['#ff9800', 'Naranja'], ['#fbc02d', 'Amarillo'], ['#089981', 'Verde'], ['#00bcd4', 'Cian'], ['#2962ff', 'Azul'], ['#9c27b0', 'Morado'], ['#e91e63', 'Rosa']];
+const tagOf = k => (state.symColor && state.symColor[k]) || '';
+function setTag(k, c) { if (!state.symColor) state.symColor = {}; if (c) state.symColor[k] = c; else delete state.symColor[k]; save(); renderWatch(); }
+function openTagPop(k, x, y) {
+  $$('.tag-pop').forEach(m => m.remove());
+  const m = document.createElement('div'); m.className = 'tag-pop'; m.setAttribute('role', 'menu');
+  m.innerHTML = `<small>Color de ${esc(base(k))}</small><div class="tag-grid">${TAGS.map(([c, n]) => `<button type="button" data-tagc="${c}" style="--c:${c}" class="${tagOf(k) === c ? 'on' : ''}" aria-label="${n}" title="${n}"></button>`).join('')}</div><button type="button" class="tag-none" data-tagc="">Sin color</button>`;
+  document.body.appendChild(m);
+  const w = m.offsetWidth, h = m.offsetHeight; m.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + 'px'; m.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + 'px';
+  const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', onKey, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, onKey = ev => { if (ev.key === 'Escape') close(); };
+  m.addEventListener('click', ev => { const b = ev.target.closest('[data-tagc]'); if (!b) return; close(); setTag(k, b.dataset.tagc); });
+  setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', onKey, true); });
+}
 const grpOf = k => (state.symGroup && state.symGroup[k]) || '';
 function watchRow(s) {
   const t = tickers[s], change = Number(t?.priceChangePercent), price = Number(t?.lastPrice);
@@ -296,11 +312,12 @@ function watchRow(s) {
   if (Number.isFinite(price) && lastShown[s] != null && price !== lastShown[s]) flash = price > lastShown[s] ? ' flash-up' : ' flash-down';
   if (Number.isFinite(price)) lastShown[s] = price;
   const main = `${coinBadge(s)}<span class="row-main"><strong>${esc(base(s))}</strong><small><span class="nm">${esc(meta(s)[0])}</span>${srcOf(s) !== 'binance' ? `<em class="ex-tag ex-${srcOf(s)}">${esc(CCTMarkets.SHORT[srcOf(s)])}</em>` : ''}</small></span>`;
+  const tg = tagOf(s), tgA = tg ? ` tagged" style="--tag:${tg}` : '';
   if (editMode) {
     const opts = `<option value="">Sin sección</option>` + state.groups.map(g => `<option value="${g.id}" ${grpOf(s) === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
-    return `<div class="watch-row editing" data-symbol="${esc(s)}"><span class="drag-h" aria-hidden="true">⠿</span>${main}<span class="row-edit">${state.groups.length ? `<select class="sec-pick" data-assign="${esc(s)}" aria-label="Sección de ${esc(base(s))}">${opts}</select>` : ''}<button data-remove="${esc(s)}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
+    return `<div class="watch-row editing${tgA}" data-symbol="${esc(s)}"><span class="drag-h" aria-hidden="true">⠿</span>${main}<span class="row-edit"><button type="button" class="tag-btn ${tg ? 'has' : ''}" data-color="${esc(s)}" ${tg ? `style="--tag:${tg}"` : ''} aria-label="Color de ${esc(base(s))}" title="Color"></button>${state.groups.length ? `<select class="sec-pick" data-assign="${esc(s)}" aria-label="Sección de ${esc(base(s))}">${opts}</select>` : ''}<button data-remove="${esc(s)}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
   }
-  return `<button class="watch-row" data-symbol="${esc(s)}">${main}${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
+  return `<button class="watch-row${tgA}" data-symbol="${esc(s)}">${main}${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
 }
 function renderWatch() {
   const q = $('#searchCoins').value.trim().toUpperCase();
@@ -309,7 +326,7 @@ function renderWatch() {
   state.groups.forEach((g, gi) => {
     const items = list.filter(s => grpOf(s) === g.id), open = q || !g.collapsed;
     if (!items.length && q) return;
-    html.push(`<div class="wl-sec ${g.collapsed ? 'closed' : ''}" data-sec="${g.id}"><button class="wl-sec-t" data-tog="${g.id}" aria-expanded="${!g.collapsed}"><span class="wl-car">▾</span><span class="wl-nm">${esc(g.name)}</span><small>${items.length}</small></button>${editMode ? `<span class="wl-sec-ed"><button data-secren="${g.id}" aria-label="Renombrar sección">✎</button><button data-secdel="${g.id}" class="danger" aria-label="Eliminar sección">✕</button></span>` : ''}</div>`);
+    html.push(`<div class="wl-sec ${g.collapsed ? 'closed' : ''}" data-sec="${g.id}"><button class="wl-sec-t" data-tog="${g.id}" aria-expanded="${!g.collapsed}"><span class="wl-car">▾</span><span class="wl-nm">${esc(g.name)}</span><small>${items.length}</small></button>${editMode ? `<span class="wl-sec-ed"><button data-secmv="-1" data-sid="${g.id}" aria-label="Subir sección" ${gi === 0 ? 'disabled' : ''}>▲</button><button data-secmv="1" data-sid="${g.id}" aria-label="Bajar sección" ${gi === state.groups.length - 1 ? 'disabled' : ''}>▼</button><button data-secren="${g.id}" aria-label="Renombrar sección">✎</button><button data-secdel="${g.id}" class="danger" aria-label="Eliminar sección">✕</button></span>` : ''}</div>`);
     if (open) html.push(items.map(watchRow).join('') || (editMode ? '<p class="small-note wl-empty">Sección vacía: arrastra aquí o elige la sección en cada activo.</p>' : ''));
   });
   $('#watchRows').innerHTML = html.join('') || '<p class="small-note">No hay activos con ese nombre.</p>';
@@ -325,12 +342,15 @@ let dragKey = null;
 $('#watchRows').addEventListener('click', e => {
   const rm = e.target.closest('[data-remove]'), row = e.target.closest('.watch-row'), tog = e.target.closest('[data-tog]');
   const sren = e.target.closest('[data-secren]'), sdel = e.target.closest('[data-secdel]');
+  const mv = e.target.closest('[data-secmv]'), col = e.target.closest('[data-color]');
+  if (mv) { const i = state.groups.findIndex(x => x.id === mv.dataset.sid), j = i + Number(mv.dataset.secmv); if (i >= 0 && j >= 0 && j < state.groups.length) { [state.groups[i], state.groups[j]] = [state.groups[j], state.groups[i]]; save(); renderWatch(); } return; }
+  if (col) { const r = col.getBoundingClientRect(); openTagPop(col.dataset.color, r.left, r.bottom + 6); return; }
   if (tog && Date.now() - suppressClick < 400) return;
   if (tog) { const g = state.groups.find(x => x.id === tog.dataset.tog); if (g) { g.collapsed = !g.collapsed; save(); renderWatch(); } return; }
   if (sren) { const g = state.groups.find(x => x.id === sren.dataset.secren), n = g && prompt('Nombre de la sección', g.name); if (n && n.trim()) { g.name = n.trim().slice(0, 40); save(); renderWatch(); } return; }
   if (sdel) { const id = sdel.dataset.secdel; state.groups = state.groups.filter(x => x.id !== id); for (const k of Object.keys(state.symGroup)) if (state.symGroup[k] === id) delete state.symGroup[k]; save(); renderWatch(); return; }
-  if (rm) { const k = rm.dataset.remove; state.symbols = state.symbols.filter(s => s !== k); delete state.symGroup[k]; if (!state.symbols.length) editMode = false; save(); renderWatch(); return; }
-  if (e.target.closest('.sec-pick, .drag-h')) return;
+  if (rm) { const k = rm.dataset.remove; state.symbols = state.symbols.filter(s => s !== k); delete state.symGroup[k]; delete (state.symColor || {})[k]; if (!state.symbols.length) editMode = false; save(); renderWatch(); return; }
+  if (e.target.closest('.sec-pick, .drag-h, .tag-btn')) return;
   if (Date.now() - suppressClick < 400) return;
   if (row && !editMode) selectSymbol(row.dataset.symbol);
 });
@@ -381,6 +401,7 @@ $('#watchRows').addEventListener('change', e => { const sel = e.target.closest('
   document.addEventListener('contextmenu', e => { if (st && st.on) e.preventDefault(); });
 })();
 let suppressClick = 0;
+$('#watchRows').addEventListener('contextmenu', e => { const r = e.target.closest('.watch-row[data-symbol]'); if (!r || e.pointerType === 'touch' || $('#watchRows').classList.contains('wl-dragging')) return; e.preventDefault(); openTagPop(r.dataset.symbol, e.clientX, e.clientY); });
 $('#addSection').onclick = () => { const n = prompt('Nombre de la sección (por ejemplo: BingX)'); if (!n || !n.trim()) return; state.groups.push({id: newSecId(), name: n.trim().slice(0, 40), collapsed: false}); save(); renderWatch(); };
 $('#editWatch').onclick = () => { editMode = !editMode; renderWatch(); };
 
@@ -4066,6 +4087,7 @@ function reconcile(local, remote) { // mezcla de dos dispositivos que cambiaron 
   const L = local || {};
   if (Array.isArray(L.symbols)) { out.symbols = Array.isArray(out.symbols) ? out.symbols : []; for (const k of L.symbols) if (!out.symbols.includes(k)) out.symbols.push(k); }
   if (L.symGroup && typeof L.symGroup === 'object') { out.symGroup = {...L.symGroup, ...(out.symGroup || {})}; }
+  if (L.symColor && typeof L.symColor === 'object') { out.symColor = {...L.symColor, ...(out.symColor || {})}; }
   if (Array.isArray(L.groups)) { out.groups = Array.isArray(out.groups) ? out.groups : []; for (const g of L.groups) if (!out.groups.some(x => x.id === g.id)) out.groups.push(g); }
   if (L.drawings && typeof L.drawings === 'object') { out.drawings = out.drawings && typeof out.drawings === 'object' ? out.drawings : {}; for (const [k, arr] of Object.entries(L.drawings)) { const cur = Array.isArray(out.drawings[k]) ? out.drawings[k] : []; const ids = new Set(cur.map(d => d && d.id)); const extra = (Array.isArray(arr) ? arr : []).filter(d => d && !ids.has(d.id)); if (extra.length) out.drawings[k] = [...cur, ...extra].slice(-300); } }
   if (Array.isArray(L.alerts)) { out.alerts = Array.isArray(out.alerts) ? out.alerts : []; for (const a of L.alerts) if (a && !out.alerts.some(x => x.id === a.id)) out.alerts.push(a); }
