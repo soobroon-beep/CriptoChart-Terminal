@@ -183,6 +183,8 @@ const CFG = window.CCT_FIREBASE, cloudEnabled = !!(CFG && CFG.apiKey && CFG.proj
 const LASTUID = 'cct_last_uid', CLOUD_DOC = u => `users/${u}/data/cct_mobile`;
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 let uid = cloudEnabled ? lsGet(LASTUID) : null, fbUser = null, auth = null, db = null, unsubCloud = null, unsubScripts = null, pushTimer = 0, lastRemote = '', syncStatus = '';
+/* Colores de clasificación (se define aquí arriba: el estado guardado se limpia al arrancar y necesita esta lista) */
+const TAGS = [['#f23645', 'Rojo'], ['#ff9800', 'Naranja'], ['#fbc02d', 'Amarillo'], ['#089981', 'Verde'], ['#00bcd4', 'Cian'], ['#2962ff', 'Azul'], ['#9c27b0', 'Morado'], ['#e91e63', 'Rosa']];
 const storeKey = () => uid ? `${STORE}_${uid}` : STORE;
 const readLocal = key => { try { return JSON.parse(lsGet(key) || '{}'); } catch { return {}; } };
 const LAY_KEY = 'cct_layout_pref_v1', LAY_OK = ['1', '2v', '2h', '3', '4', '5']; // el diseño (1 a 5 gráficos) depende de la pantalla de cada dispositivo: se guarda aquí y no lo pisa la nube
@@ -292,7 +294,6 @@ function sparkSVG(s, change) {
   return `<svg class="spark ${rising ? 'positive' : 'negative'}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${rising ? 'Subiendo' : 'Bajando'} en las últimas 24 horas"><path d="${d}L${W} ${H}L0 ${H}Z" fill="currentColor" fill-opacity=".13"/><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${end[0]}" cy="${end[1]}" r="2.2" fill="currentColor"/></svg>`;
 }
 /* Colores para clasificar monedas (en vez de banderitas): se guardan por activo en la cuenta */
-const TAGS = [['#f23645', 'Rojo'], ['#ff9800', 'Naranja'], ['#fbc02d', 'Amarillo'], ['#089981', 'Verde'], ['#00bcd4', 'Cian'], ['#2962ff', 'Azul'], ['#9c27b0', 'Morado'], ['#e91e63', 'Rosa']];
 const tagOf = k => (state.symColor && state.symColor[k]) || '';
 function setTag(k, c) { if (!state.symColor) state.symColor = {}; if (c) state.symColor[k] = c; else delete state.symColor[k]; save(); renderWatch(); }
 function openTagPop(k, x, y) {
