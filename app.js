@@ -3349,7 +3349,6 @@ area.addEventListener('pointerdown', e => { stopMotion();
     if (hnd) { gest.mode = 'handle'; gest.handle = hnd.key; }
     else if (d && !d.lock && !DOPT.lock && !DOPT.hide && !d.hide && distToDrawing(d, pt) < 18) startDMove(d, pt);
   }
-  if (gest.mode === 'pending' && !drawTool && !selectedId) { const h0 = hitTest(pt); if (h0 && !h0.lock) { selectedId = h0.id; startDMove(h0, pt); gest.picked = true; } } // arrastrar un dibujo (aunque no esté seleccionado) lo selecciona y lo mueve, sin mover el gráfico
   if (gest.mode === 'pending' && !drawTool)
     gest.timer = setTimeout(() => { if (gest && !gest.moved && gest.mode === 'pending') { gest.mode = 'cross'; cross = pt; navigator.vibrate?.(8); scheduleRender(); } }, 380);
 });
