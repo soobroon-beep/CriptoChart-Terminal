@@ -176,6 +176,8 @@ function merge(s) {
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
+  o.tabs = Array.isArray(o.tabs) ? o.tabs.filter(t => t && typeof t.s === 'string' && /^[\w.:\-/]{2,32}$/.test(t.s)).slice(0, 8).map((t, i) => ({id: /^[a-z0-9]{3,12}$/.test(t.id) ? t.id : 't' + i + Date.now().toString(36).slice(-4), s: t.s, i: INTERVALS.includes(t.i) ? t.i : '1h', c: CTYPES.some(x => x[0] === t.c) ? t.c : 'candles'})) : [];
+  o.tab = typeof o.tab === 'string' ? o.tab.slice(0, 12) : '';
   if (typeof o.symbol !== 'string') o.symbol = o.symbols[0];
   return o;
 }
@@ -201,7 +203,7 @@ let remoteRev = 0; // versión (rev) más reciente que se sabe que hay en la nub
    antes se usaba siempre el orden de la nube, y si otro dispositivo guardaba al mismo tiempo, el orden que acababas de arrastrar se deshacía. */
 const listSigOf = st => JSON.stringify([st.symbols, st.groups, st.symGroup, st.symColor]);
 let listSig = listSigOf(state);
-const save = () => { const ls = listSigOf(state); if (ls !== listSig) { listSig = ls; state.listRev = Date.now(); } state.rev = Math.max(Date.now(), (+state.rev || 0) + 1, (+remoteRev || 0) + 1); try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
+const save = () => { tabTouch(); const ls = listSigOf(state); if (ls !== listSig) { listSig = ls; state.listRev = Date.now(); } state.rev = Math.max(Date.now(), (+state.rev || 0) + 1, (+remoteRev || 0) + 1); try { localStorage.setItem(storeKey(), JSON.stringify(state)); const dk = dirtyKey(); if (dk) localStorage.setItem(dk, String(Date.now())); } catch {} cloudPush(); };
 
 /* ───────── Utilidades ───────── */
 const catalog = {BTC:['Bitcoin','₿'],ETH:['Ethereum','Ξ'],SOL:['Solana','◎'],BNB:['BNB','◆'],XRP:['XRP','✕'],DOGE:['Dogecoin','Ð'],ADA:['Cardano','₳'],AVAX:['Avalanche','▲'],LINK:['Chainlink','⬡'],DOT:['Polkadot','●'],LTC:['Litecoin','Ł'],TRX:['TRON','◈'],SUI:['Sui','≋'],NEAR:['NEAR','N'],ATOM:['Cosmos','A'],UNI:['Uniswap','U'],ARB:['Arbitrum','A'],OP:['Optimism','O'],APT:['Aptos','A'],PEPE:['Pepe','P']};
@@ -1542,6 +1544,69 @@ $('#goChart').onclick = () => switchView('chartView');
 function selectSymbol(s) {
   state.symbol = s; save(); closeSheet(); clearTransient(); closeWS(); candles = []; ind = {};
   updateChartHeader(); switchView('chartView'); loadCandles();
+}
+
+/* ───────── Pestañas de gráficos: varios gráficos abiertos, cada uno con su moneda, temporalidad y tipo de vela ───────── */
+const MAX_TABS = 8; let tabPrevEl = null;
+function tabEnsure() {
+  if (!Array.isArray(state.tabs)) state.tabs = [];
+  if (!state.tabs.length) { const id = 't' + Date.now().toString(36).slice(-6); state.tabs = [{id, s: state.symbol, i: state.interval, c: state.ctype || 'candles'}]; state.tab = id; }
+  if (!state.tabs.some(t => t.id === state.tab)) state.tab = state.tabs[0].id;
+}
+function tabTouch() { // la pestaña activa siempre refleja el gráfico que se está viendo
+  try {
+    if (typeof PANE !== 'undefined' && PANE) return; tabEnsure();
+    const t = state.tabs.find(x => x.id === state.tab); if (!t) return;
+    const c = state.ctype || 'candles';
+    if (t.s !== state.symbol || t.i !== state.interval || t.c !== c) { t.s = state.symbol; t.i = state.interval; t.c = c; if (typeof renderTabs === 'function') renderTabs(); }
+  } catch {}
+}
+function renderTabs() {
+  const bar = $('#chartTabs'); if (!bar) return;
+  if (PANE) { bar.hidden = true; return; } bar.hidden = false; tabEnsure();
+  const ct = c => (CTYPES.find(x => x[0] === c) || CTYPES[0]);
+  bar.innerHTML = state.tabs.map(t => `<div class="ctab${t.id === state.tab ? ' on' : ''}" role="tab" tabindex="0" aria-selected="${t.id === state.tab}" data-tab="${t.id}" title="${esc(base(t.s))} · ${t.i} · ${esc(ct(t.c)[1])}"><span class="ct-t">${esc(base(t.s).replace('/USDT', ''))}<small>${t.i}</small></span>${state.tabs.length > 1 ? `<button type="button" class="ct-x" data-tab-x="${t.id}" aria-label="Cerrar pestaña" tabindex="-1">&times;</button>` : ''}</div>`).join('')
+    + (state.tabs.length < MAX_TABS ? `<button type="button" class="ct-add" id="tabAdd" aria-label="Nueva pestaña" title="Nueva pestaña">${I('plus', 16)}</button>` : '');
+  const on = bar.querySelector('.ctab.on'); if (on && bar.scrollWidth > bar.clientWidth) on.scrollIntoView({inline: 'nearest', block: 'nearest'});
+}
+function loadTabChart() { clearTransient(); closeWS(); candles = []; ind = {}; updateChartHeader(); renderFrames(); syncCtypeBtn(); render(); loadCandles(); }
+function switchTab(id) {
+  const t = state.tabs.find(x => x.id === id); if (!t || id === state.tab) return;
+  tabTouch(); hideTabPrev(); state.tab = id; state.symbol = t.s; state.interval = t.i; state.ctype = t.c; save(); renderTabs(); loadTabChart();
+}
+function newTab() {
+  if (state.tabs.length >= MAX_TABS) { toast(`Máximo ${MAX_TABS} pestañas`); return; }
+  tabTouch(); const id = 't' + Date.now().toString(36).slice(-6); state.tabs.push({id, s: state.symbol, i: state.interval, c: state.ctype || 'candles'}); state.tab = id; save(); renderTabs(); openSheet(); // elige la moneda para la pestaña nueva
+}
+function closeTab(id) {
+  if (state.tabs.length < 2) return; const i = state.tabs.findIndex(x => x.id === id); if (i < 0) return; const wasOn = id === state.tab;
+  state.tabs.splice(i, 1);
+  if (wasOn) { const n = state.tabs[Math.min(i, state.tabs.length - 1)]; state.tab = n.id; state.symbol = n.s; state.interval = n.i; state.ctype = n.c; save(); renderTabs(); loadTabChart(); } else { save(); renderTabs(); }
+}
+function hideTabPrev() { if (tabPrevEl) { tabPrevEl.remove(); tabPrevEl = null; } }
+function showTabPrev(el) { // vista previa de la pestaña: moneda, temporalidad, tipo de vela, precio y mini gráfico de 24 h
+  const t = state.tabs.find(x => x.id === el.dataset.tab); if (!t) return; hideTabPrev();
+  const tk = tickers[t.s], chg = Number(tk && tk.priceChangePercent), px = Number(tk && tk.lastPrice), cty = (CTYPES.find(x => x[0] === t.c) || CTYPES[0])[1];
+  const m = document.createElement('div'); m.className = 'tab-prev'; tabPrevEl = m;
+  const paint = () => { m.innerHTML = `<div class="tp-h"><b>${esc(base(t.s))}</b><span>${t.i} · ${esc(cty)}</span></div><div class="tp-spark">${sparkSVG(t.s, chg)}</div><div class="tp-f"><span>${Number.isFinite(px) ? fmt(px) : '—'}</span><span class="${chg >= 0 ? 'positive' : 'negative'}">${Number.isFinite(chg) ? pct(chg) : ''}</span></div>`; };
+  paint(); document.body.appendChild(m);
+  const r = el.getBoundingClientRect(); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.top = (r.bottom + 6) + 'px';
+  if (sparkStale(t.s)) sparkOne(t.s).then(() => { if (tabPrevEl === m) paint(); });
+}
+{
+  const bar = $('#chartTabs'); let hov = 0, lp = 0, lpFired = false;
+  bar.addEventListener('click', e => {
+    if (lpFired) { lpFired = false; return; }
+    const x = e.target.closest('[data-tab-x]'); if (x) { e.stopPropagation(); closeTab(x.dataset.tabX); return; }
+    if (e.target.closest('#tabAdd')) { newTab(); return; }
+    const t = e.target.closest('[data-tab]'); if (t) switchTab(t.dataset.tab);
+  });
+  bar.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { const t = e.target.closest('[data-tab]'); if (t) { e.preventDefault(); switchTab(t.dataset.tab); } } });
+  bar.addEventListener('mouseover', e => { const t = e.target.closest('[data-tab]'); if (!t || e.target.closest('[data-tab-x]')) return; clearTimeout(hov); hov = setTimeout(() => showTabPrev(t), 350); });
+  bar.addEventListener('mouseout', () => { clearTimeout(hov); hideTabPrev(); });
+  bar.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch') return; const t = e.target.closest('[data-tab]'); if (!t) return; clearTimeout(lp); lpFired = false; lp = setTimeout(() => { lpFired = true; showTabPrev(t); navigator.vibrate?.(8); }, 450); });
+  ['pointerup', 'pointercancel', 'pointermove'].forEach(ev => bar.addEventListener(ev, e => { if (ev === 'pointermove' && Math.abs(e.movementX) + Math.abs(e.movementY) < 3) return; clearTimeout(lp); if (ev !== 'pointermove') setTimeout(hideTabPrev, 900); else hideTabPrev(); }));
+  bar.addEventListener('contextmenu', e => { if (e.target.closest('[data-tab]')) e.preventDefault(); });
 }
 
 /* ───────── Dibujos (anclados a tiempo y precio, guardados por activo) ───────── */
@@ -4145,7 +4210,7 @@ function applyState(data, soft = false) {
   if (sameChart && (gest || pinch)) { clearTimeout(applyState.t); applyState.t = setTimeout(() => applyState(data, soft), 350); return; }
   const next = merge(withLocalLayout(data));
   if (sameChart && JSON.stringify(next) === JSON.stringify(state)) return;
-  const prevSource = state.source; state = next; listSig = listSigOf(state); applyUi(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource();
+  const prevSource = state.source; state = next; listSig = listSigOf(state); applyUi(); if (typeof renderTabs === 'function') renderTabs(); if (data.ui === undefined) syncUi(); if (window.__paintSource) window.__paintSource();
   if (sameChart) { drawHist.u.length = drawHist.r.length = 0; updateDrawUI(); } else clearTransient(); // mismo gráfico: se conserva la escala manual, la retícula y lo que se esté dibujando
   if (typeof applyLayout === 'function') applyLayout(); syncCtypeBtn(); theme(); renderIndicators(); countIndicators(); renderFrames(); renderWatch(); updateChartHeader(); renderAcct(); renderMoveAlerts();
   if (!sameChart || prevSource !== state.source) { closeWS(); candles = []; ind = {}; loadCandles(); }
@@ -4372,7 +4437,7 @@ async function initCloud() {
 })();
 
 /* ───────── Arranque ───────── */
-renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); buildRail(); updateDrawUI(); renderFavBar(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
+renderFrames(); renderIndicators(); countIndicators(); renderWatch(); updateChartHeader(); buildRail(); updateDrawUI(); renderFavBar(); renderTabs(); theme(); syncFullscreenLabel(); renderScripts(); renderAlerts();
 if (isDesktop()) onLayoutChange();
 fetchTicker(); loadCandles(); initCloud(); if (!PANE) refreshPop();
 
