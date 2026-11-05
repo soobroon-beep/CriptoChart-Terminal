@@ -653,3 +653,5 @@ body.pane .favbar{display:none}
 
 .leg-handle{position:absolute;top:0;height:100%;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .legend-box.dragging{cursor:grabbing}
+.sec-grip{flex:none;display:grid;place-items:center;width:26px;height:30px;color:var(--muted);font-size:15px;cursor:grab;touch-action:none;opacity:.8}
+.sec-grip:active{cursor:grabbing;color:var(--accent)}

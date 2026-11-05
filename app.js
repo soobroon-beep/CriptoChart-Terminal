@@ -328,14 +328,16 @@ function watchRow(s) {
   }
   return `<button class="watch-row${tgA}" data-symbol="${esc(s)}">${main}<span class="tag-dot ${tg ? 'has' : ''}" role="button" data-color="${esc(s)}" ${tg ? `style="--tag:${tg}"` : ''} aria-label="Color de ${esc(base(s))}" title="Color"></span>${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
 }
+let wlDragOn = false, wlDragPend = false; // mientras arrastras no se repinta la lista (los precios en vivo la reconstruían a mitad del gesto)
 function renderWatch() {
+  if (wlDragOn) { wlDragPend = true; return; }
   const q = $('#searchCoins').value.trim().toUpperCase();
   const list = state.symbols.filter(s => s.toUpperCase().includes(q) || meta(s)[0].toUpperCase().includes(q));
   const none = list.filter(s => !grpOf(s)), html = [none.map(watchRow).join('')];
   state.groups.forEach((g, gi) => {
     const items = list.filter(s => grpOf(s) === g.id), open = q || !g.collapsed;
     if (!items.length && q) return;
-    html.push(`<div class="wl-sec ${g.collapsed ? 'closed' : ''}" data-sec="${g.id}"><button class="wl-sec-t" data-tog="${g.id}" aria-expanded="${!g.collapsed}"><span class="wl-car">▾</span><span class="wl-nm">${esc(g.name)}</span><small>${items.length}</small></button>${editMode ? `<span class="wl-sec-ed"><button data-secmv="-1" data-sid="${g.id}" aria-label="Subir sección" ${gi === 0 ? 'disabled' : ''}>▲</button><button data-secmv="1" data-sid="${g.id}" aria-label="Bajar sección" ${gi === state.groups.length - 1 ? 'disabled' : ''}>▼</button><button data-secren="${g.id}" aria-label="Renombrar sección">✎</button><button data-secdel="${g.id}" class="danger" aria-label="Eliminar sección">✕</button></span>` : ''}</div>`);
+    html.push(`<div class="wl-sec ${g.collapsed ? 'closed' : ''}" data-sec="${g.id}"><span class="sec-grip" title="Arrastra para mover la sección" aria-label="Mover sección">⠿</span><button class="wl-sec-t" data-tog="${g.id}" aria-expanded="${!g.collapsed}"><span class="wl-car">▾</span><span class="wl-nm">${esc(g.name)}</span><small>${items.length}</small></button>${editMode ? `<span class="wl-sec-ed"><button data-secmv="-1" data-sid="${g.id}" aria-label="Subir sección" ${gi === 0 ? 'disabled' : ''}>▲</button><button data-secmv="1" data-sid="${g.id}" aria-label="Bajar sección" ${gi === state.groups.length - 1 ? 'disabled' : ''}>▼</button><button data-secren="${g.id}" aria-label="Renombrar sección">✎</button><button data-secdel="${g.id}" class="danger" aria-label="Eliminar sección">✕</button></span>` : ''}</div>`);
     if (open) html.push(items.map(watchRow).join('') || (editMode ? '<p class="small-note wl-empty">Sección vacía: arrastra aquí o elige la sección en cada activo.</p>' : ''));
   });
   $('#watchRows').innerHTML = html.join('') || '<p class="small-note">No hay activos con ese nombre.</p>';
@@ -368,17 +370,19 @@ $('#watchRows').addEventListener('change', e => { const sel = e.target.closest('
    Sobre otra moneda = se coloca justo antes (o después) y entra a su sección; sobre el encabezado de una sección = al inicio de esa sección; un encabezado arrastrado se reordena entre secciones. */
 (() => {
   const box = $('#watchRows'); let st = null;
-  const clear = () => { if (!st) return; clearTimeout(st.timer); if (st.ghost) st.ghost.remove(); box.classList.remove('wl-dragging'); $$('#watchRows .dragging, #watchRows .drop-before, #watchRows .drop-after, #watchRows .drop-on').forEach(x => x.classList.remove('dragging', 'drop-before', 'drop-after', 'drop-on')); st = null; };
+  const clear = () => { wlDragOn = false; if (!st) { if (wlDragPend) { wlDragPend = false; renderWatch(); } return; } clearTimeout(st.timer); if (st.ghost) st.ghost.remove(); box.classList.remove('wl-dragging'); $$('#watchRows .dragging, #watchRows .drop-before, #watchRows .drop-after, #watchRows .drop-on').forEach(x => x.classList.remove('dragging', 'drop-before', 'drop-after', 'drop-on')); st = null; if (wlDragPend) { wlDragPend = false; renderWatch(); } };
   const target = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest ? el.closest('.watch-row[data-symbol]:not(.pop-row), .wl-sec') : null; };
   box.addEventListener('pointerdown', e => {
     if (e.button > 0 || e.target.closest('button:not(.watch-row):not(.wl-sec-t), select, input, .wl-sec-ed, .tag-dot')) return;
     const el = e.target.closest('.watch-row[data-symbol]:not(.pop-row), .wl-sec'); if (!el) return;
     clear(); st = {el, x: e.clientX, y: e.clientY, id: e.pointerId, on: false, sec: el.classList.contains('wl-sec'), key: el.dataset.symbol || el.dataset.sec};
-    st.timer = setTimeout(() => {
-      if (!st) return; st.on = true; el.classList.add('dragging'); box.classList.add('wl-dragging');
+    const arm = () => {
+      if (!st) return; st.on = true; wlDragOn = true; el.classList.add('dragging'); box.classList.add('wl-dragging');
       const r = el.getBoundingClientRect(), gh = el.cloneNode(true); gh.className += ' wl-ghost'; gh.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;pointer-events:none;z-index:300`; document.body.appendChild(gh); st.ghost = gh; st.dy = e.clientY - r.top;
       try { navigator.vibrate && navigator.vibrate(12); } catch {}
-    }, 400);
+    };
+    if (e.target.closest('.sec-grip')) { try { box.setPointerCapture(e.pointerId); } catch {} arm(); } // el asa de la sección agarra al instante (sin esperar ni arriesgar que la pantalla se desplace)
+    else st.timer = setTimeout(arm, 400);
   });
   box.addEventListener('touchmove', e => { if (st && st.on) e.preventDefault(); }, {passive: false});
   document.addEventListener('pointermove', e => {
@@ -3693,11 +3697,11 @@ function renderPrefs() {
   const onChange = e => { const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
   for (const r of [$('#settingsView'), $('#prefsPop')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
   // Campana: abre o cierra el panel de notificaciones y preferencias
-  const pop = $('#prefsPop'), btns = [$('#rrPrefs'), $('#prefsBtn')];
+  const pop = $('#prefsPop'), btns = [$('#setPrefs')];
   const setOpen = on => { pop.hidden = !on; btns.forEach(b => b && b.classList.toggle('active', on)); if (on) renderPrefs(); };
   btns.forEach(b => b && b.addEventListener('click', e => { e.stopPropagation(); setOpen(pop.hidden); }));
   pop.querySelector('[data-pp-close]').onclick = () => setOpen(false);
-  document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('#prefsPop, #rrPrefs, #prefsBtn')) setOpen(false); }, true);
+  document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('#prefsPop, #setPrefs')) setOpen(false); }, true);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pop.hidden) setOpen(false); });
 }
 function openNews() {
@@ -4284,11 +4288,16 @@ async function onUser(user) {
       const seq = ++snapSeq, data = sn.data(), str = await readRemote(data); if (seq !== snapSeq || !str || str === lastRemote) return;
       let st; try { st = JSON.parse(str); } catch { return; }
       const rr = revOf(st, data); remoteRev = Math.max(remoteRev, rr);
-      if (rr <= (+state.rev || 0)) return; // eco viejo o igual a lo que ya tengo: se ignora
+      const rl = +st.listRev || 0, ll = +state.listRev || 0;
+      if (rr <= (+state.rev || 0)) { // eco viejo o igual a lo que ya tengo: se ignora… salvo que traiga una lista (orden de monedas y secciones) más reciente que la mía
+        if (rl <= ll) return;
+        lastRemote = str; try { applyState({...state, symbols: st.symbols, groups: st.groups, symGroup: st.symGroup, symColor: st.symColor, listRev: rl}, true); persistLocal(); } catch {} return;
+      }
       lastRemote = str;
       try {
         const dirty = (() => { try { return !!localStorage.getItem(dirtyKey()); } catch { return false; } })();
         if (dirty) { const merged = reconcile(state, st); applyState(merged, true); persistLocal(); cloudPush(); } // lo que acabas de cambiar aquí todavía no se sube: se mezcla, no se pisa
+        else if (ll > rl) { applyState({...st, symbols: state.symbols, groups: state.groups, symGroup: state.symGroup, symColor: state.symColor, listRev: ll}, true); cloudPush(); } // mi lista es más nueva que la de la nube (otro dispositivo con cambios no relacionados): se conserva y se sube
         else applyState(st, true);
         persistLocal(); refreshPineAfterSync();
       } catch {}
