@@ -875,7 +875,7 @@ $('#timeframes').addEventListener('click', e => {
   const b = e.target.closest('[data-tf]'); if (!b) return;
   state.interval = b.dataset.tf; save(); renderFrames(); clearTransient(); loadCandles();
 });
-const symHeadH = () => { const e = $('#chartSymHead'); return e && e.offsetParent !== null ? e.offsetHeight : 0; };
+const symHeadH = () => { const e = $('#chartSymHead'); return e && e.offsetParent !== null ? e.offsetHeight + 4 : 0; }; // alto que ocupa el nombre/precio flotante: solo baja la leyenda, el gráfico llega hasta arriba
 function updateChartHeader() {
   const b = base(state.symbol), t = tickers[state.symbol];
   const last = candles.length ? candles[candles.length - 1].c : Number(t?.lastPrice);
@@ -2506,7 +2506,7 @@ function renderCore() {
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
   const SH = symHeadH(); document.getElementById('chartArea').style.setProperty('--sh', SH + 'px'); // la franja con el nombre y el precio de la moneda va arriba del gráfico
-  const left = 6, right = 64, axisH = 22, top0 = 6 + SH;
+  const left = 6, right = 64, axisH = 22, top0 = 6;
   const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH0 = stdOn('rsi') ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH0 = 0; // el volumen ya no tiene panel propio: se dibuja sobre las velas, abajo del gráfico
   const cap = Math.max(40, h - axisH - 80 - top0); let rsiH = rsiH0 && paneH.rsi ? clamp(paneH.rsi, 40, cap) : rsiH0, volH = volH0 && paneH.vol ? clamp(paneH.vol, 36, cap) : volH0;
   const panelKeys = [...PANELS.filter(k => stdOn(k) && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
@@ -2719,7 +2719,7 @@ function renderCore() {
   }
   if (vpvr) drawVPVRTags(vpvr); // etiquetas de POC / VAH / VAL en la escala de precios
   // leyenda de indicadores
-  let ly2 = plotTop + 54; g.font = '12px system-ui'; const LS = legStep();
+  let ly2 = plotTop + 54 + SH; g.font = '12px system-ui'; const LS = legStep();
   // Cada indicador conserva SIEMPRE su lugar en la leyenda: al ocultarlo con el ojito queda en la misma fila (atenuado, «oculto») y no salta al final.
   const dimRow = (tx, act) => { g.globalAlpha = .5; g.fillStyle = text; legLabel(tx, left + 8, ly2, act, true); g.globalAlpha = 1; ly2 += LS; };
   const isHid = k => !!(state.indicators[k] && state.stdHide && state.stdHide[k]);
