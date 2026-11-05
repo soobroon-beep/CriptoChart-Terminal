@@ -19,3 +19,13 @@ test('Screener: orden de más reciente a más vieja, luego puntaje, luego volume
   const rows = [r('E', 4, 5, 1), r('N', null, 0, 2), r('C', 1, 2, 3), r('A', 0, 2, 7), r('B', 0, 4, 9), r('D', 1, 2, 2), r('F', 2, 3, 4)];
   assert.deepEqual(S.sortRows(rows).map(x => x.symbol), ['B', 'A', 'D', 'C', 'F', 'E', 'N']);
 });
+
+test('Screener: el oscilador usa el máx/mín de hl2 (como el Pine del Screener), distinto al indicador completo', () => {
+  require('../nova-nexus.js'); const NN = globalThis.NovaNexus; let x = 100;
+  const cs = Array.from({length: 400}, (_, i) => { x += Math.sin(i / 7) * 2 + Math.cos(i / 3); const o = x, c = x + Math.sin(i), h = Math.max(o, c) + 1.5 + (i % 5) * .3, l = Math.min(o, c) - 1.5 - (i % 3) * .4; return {t: i * 36e5, o, h, l, c, v: 1000}; });
+  const a = NN.compute(cs, {cooldown: 0, minScore: 1}), b = NN.compute(cs, {cooldown: 0, minScore: 1, hl2Range: true});
+  assert.notDeepStrictEqual(a.osc.slice(-50), b.osc.slice(-50));
+  const hl2 = cs.map(c => (c.h + c.l) / 2), i = 399, w = hl2.slice(i - 19, i + 1), hh = Math.max(...w), ll = Math.min(...w), av = w.reduce((p, q) => p + q) / 20;
+  assert.ok(Number.isFinite(hh - ll + av)); // la rama hl2 solo cambia el rango; ambas devuelven series finitas
+  assert.ok(Number.isFinite(b.osc[i]));
+});

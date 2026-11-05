@@ -286,7 +286,7 @@
     const sLen = 20, sSig = 3, sDfl = 30, OB = 40, OS = -40, OBr = 35, OSr = -35, emaLen = 200, MFmin = 3.0, adxLen = 14, adxThr = 25, divLk = 5, divTrs = 25, atrL = 14;
 
     /* Oscilador */
-    const hl2 = H.map((h, i) => (h + L[i]) / 2), av = sma(hl2, sLen), hh = highest(H, sLen), ll = lowest(L, sLen);
+    const hl2 = H.map((h, i) => (h + L[i]) / 2), av = sma(hl2, sLen), hh = highest(o.hl2Range ? hl2 : H, sLen), ll = lowest(o.hl2Range ? hl2 : L, sLen); // hl2Range: el Pine del Screener toma el máximo/mínimo de hl2 (el indicador completo usa high/low)
     const trM = H.map((h, i) => i === 0 ? NA : Math.max(h - L[i], Math.abs(h - C[i - 1]), Math.abs(L[i] - C[i - 1]))); // tr manual (na en la 1.ª barra)
     const oAtr = rma(trM, sLen);
     const oIn = C.map((c, i) => { const avg = ((hh[i] + ll[i]) / 2 + av[i]) / 2; return (c - avg) / oAtr[i] * 100; });

@@ -4502,8 +4502,9 @@ window.CCT_discordStore = {get: () => state.discord, set: patch => { state.disco
 window.CCT_host = {
   interval: () => state.interval,
   async top(n) { try { if (!popAll.length) await loadPopTickers(); } catch {} return popAll.slice(0, n).map(t => ({symbol: t.symbol, price: +t.lastPrice, chg: +t.priceChangePercent})); },
-  async klines(sym, itv) {
-    return (await fetchKlinesAny(sym, itv, undefined, 300)).cs;
+  mine() { return state.symbols.map(k => ({symbol: k, name: meta(k)[0], price: +tickers[k]?.lastPrice || 0, chg: +tickers[k]?.priceChangePercent || 0})); }, // lista de Mi seguimiento (cada una con su exchange)
+  async klines(sym, itv) { // 1000 velas: más historia = EMA 200 y RMA convergen como en TradingView
+    return (await fetchKlinesAny(sym, itv, undefined, 1000)).cs;
   },
   openSignal(sym, itv) { // abre el gráfico de la moneda con Nova Nexus activo para ver la señal
     if (INTERVALS.includes(itv)) state.interval = itv;

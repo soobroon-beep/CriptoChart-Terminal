@@ -14,12 +14,12 @@
     up: '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M12 5l8 12H4z"/></svg>',
     down: '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M12 19L4 7h16z"/></svg>'
   };
-  const st = {tf: null, filter: 'sig', rows: [], busy: false, at: 0, gen: 0, done: 0, total: 0};
+  const st = {tf: null, src: 'top', filter: 'sig', rows: [], busy: false, at: 0, gen: 0, done: 0, total: 0};
 
-  /* Señal activa de una moneda: la última señal de Nova Nexus (sin enfriamiento, como el Pine del screener) si tiene como máximo SIG_BARS velas (edad 1 = la vela actual o recién cerrada, … edad 5 = hace 4 velas). */
+  /* Señal activa de una moneda: la última señal de Nova Nexus calculada igual que el Pine del Screener (sin enfriamiento y con el rango máx/mín sobre hl2) si tiene como máximo SIG_BARS velas (edad 1 = la vela actual o recién cerrada, … edad 5 = hace 4 velas). */
   function signalOf(cs) {
     if (!cs || cs.length < 60 || !window.NovaNexus) return null;
-    const r = window.NovaNexus.compute(cs, {cooldown: 0, minScore: 1}), sg = r.last; if (!sg) return null;
+    const r = window.NovaNexus.compute(cs, {cooldown: 0, minScore: 1, hl2Range: true}), sg = r.last; if (!sg) return null;
     const ago = cs.length - 1 - sg.i; if (ago >= SIG_BARS) return null;
     return {side: sg.side, range: !!sg.range, div: !!sg.div, score: sg.score, ago, age: ago + 1, left: SIG_BARS - ago, price: sg.price};
   }
@@ -28,7 +28,7 @@
 
   async function scan() {
     const h = H(); if (!h) return; const gen = ++st.gen; st.busy = true; st.rows = []; st.done = 0; paint();
-    let top = []; try { top = await h.top(TOP_N); } catch {}
+    let top = []; try { top = st.src === 'mine' ? h.mine() : await h.top(TOP_N); } catch {}
     st.total = top.length; paint();
     let k = 0;
     const worker = async () => {
@@ -36,7 +36,7 @@
         const t = top[k++]; let sig = null, ok = true;
         try { sig = signalOf(await h.klines(t.symbol, st.tf)); } catch { ok = false; }
         if (gen !== st.gen) return;
-        st.rows.push({symbol: t.symbol, price: t.price, chg: t.chg, sig, ok, idx: k}); st.done++; if (st.done % 5 === 0 || st.done === top.length) paint();
+        st.rows.push({symbol: t.symbol, name: t.name, price: t.price, chg: t.chg, sig, ok, idx: k}); st.done++; if (st.done % 5 === 0 || st.done === top.length) paint();
       }
     };
     await Promise.all(Array.from({length: 6}, worker));
@@ -52,8 +52,8 @@
   const kindOfFilter = (r, f) => kindOf(r.sig) === f;
 
   function rowHtml(r) {
-    const k = kindOf(r.sig), s = r.sig, b = r.symbol.replace(/USDT$/, ''), chgC = r.chg >= 0 ? 'positive' : 'negative';
-    const badge = s ? `<span class="scr-badge ${k}">${s.side === 'buy' ? ICON.up : ICON.down}<b>${LABEL[k]}</b><i title="Vela ${s.age} de ${SIG_BARS} desde que salió la señal">${s.age}/${SIG_BARS}</i></span>` : `<span class="scr-none">${r.ok ? 'Sin señal' : 'Sin datos'}</span>`;
+    const k = kindOf(r.sig), s = r.sig, b = r.name || r.symbol.replace(/USDT$/, ''), chgC = r.chg >= 0 ? 'positive' : 'negative';
+    const badge = s ? `<span class="scr-badge ${k}">${s.side === 'buy' ? ICON.up : ICON.down}<b>${s.div ? (s.side === 'buy' ? 'DIV+' : 'DIV-') : LABEL[k]}</b><i title="Vela ${s.age} de ${SIG_BARS} desde que salió la señal">${s.age}/${SIG_BARS}</i></span>` : `<span class="scr-none">${r.ok ? 'Sin señal' : 'Sin datos'}</span>`;
     const extra = s ? `<small>${s.side === 'buy' ? 'Compra' : 'Venta'} · puntaje ${s.score}/5${s.div ? ' · divergencia' : ''} · ${s.ago === 0 ? 'en esta vela (recién salida)' : 'hace ' + s.ago + (s.ago === 1 ? ' vela' : ' velas')}</small>` : `<small>${r.price ? '$' + r.price.toLocaleString('en-US', {maximumFractionDigits: r.price < 1 ? 5 : 2}) : ''}</small>`;
     return `<button class="scr-row" data-scr-open="${esc(r.symbol)}"><div class="scr-coin"><b>${esc(b)}</b>${extra}</div><div class="scr-px"><span class="${chgC}">${r.chg >= 0 ? '+' : ''}${(+r.chg || 0).toFixed(2)}%</span>${badge}</div><span class="scr-go">${ICON.chev}</span></button>`;
   }
@@ -64,10 +64,10 @@
     const chips = [['sig', 'Con señal', n.long + n.short + n.rng], ['long', 'Long', n.long], ['short', 'Short', n.short], ['rng', 'Rango', n.rng], ['all', 'Todas', st.rows.length]];
     const prog = st.busy ? `<div class="scr-prog"><i style="width:${st.total ? Math.round(st.done / st.total * 100) : 5}%"></i></div><small class="scr-note">Analizando ${st.done}/${st.total || TOP_N}…</small>` : '';
     const list = visibleRows();
-    el.innerHTML = `<div class="scr-tfs">${TFS.map(t => `<button data-scr-tf="${t}" class="${t === st.tf ? 'on' : ''}">${t}</button>`).join('')}<button class="scr-refresh" data-scr-refresh="1" aria-label="Actualizar" ${st.busy ? 'disabled' : ''}>${ICON.refresh}</button></div>
+    el.innerHTML = `<div class="scr-chips scr-src"><button data-scr-src="top" class="${st.src === 'top' ? 'on' : ''}">Top 50 volumen</button><button data-scr-src="mine" class="${st.src === 'mine' ? 'on' : ''}">Mi seguimiento</button></div><div class="scr-tfs">${TFS.map(t => `<button data-scr-tf="${t}" class="${t === st.tf ? 'on' : ''}">${t}</button>`).join('')}<button class="scr-refresh" data-scr-refresh="1" aria-label="Actualizar" ${st.busy ? 'disabled' : ''}>${ICON.refresh}</button></div>
       <div class="scr-chips">${chips.map(([k, l, c]) => `<button data-scr-f="${k}" class="${st.filter === k ? 'on' : ''}">${l}<i>${c}</i></button>`).join('')}</div>${prog}
-      <div class="scr-list">${list.length ? list.map(rowHtml).join('') : `<div class="scr-empty">${st.busy ? '' : 'Ninguna de las ' + TOP_N + ' monedas tiene señal ahora en ' + st.tf + '. Prueba otra temporalidad.'}</div>`}</div>
-      <small class="scr-note">Top ${TOP_N} por volumen en Binance Spot · señales de Nova Nexus (visibles ${SIG_BARS} velas) · ${st.at ? 'actualizado ' + new Date(st.at).toLocaleTimeString('es', {hour: '2-digit', minute: '2-digit'}) : 'calculando…'}. Es una herramienta de análisis, no asesoría financiera.</small>`;
+      <div class="scr-list">${list.length ? list.map(rowHtml).join('') : `<div class="scr-empty">${st.busy ? '' : 'Ninguna de las ' + (st.rows.length || TOP_N) + ' monedas tiene señal ahora en ' + st.tf + '. Prueba otra temporalidad.'}</div>`}</div>
+      <small class="scr-note">${st.src === 'mine' ? 'Tu lista de Mi seguimiento (cada moneda con su exchange)' : 'Top ' + TOP_N + ' por volumen en Binance Spot'} · señales de Nova Nexus (visibles ${SIG_BARS} velas) · ${st.at ? 'actualizado ' + new Date(st.at).toLocaleTimeString('es', {hour: '2-digit', minute: '2-digit'}) : 'calculando…'}. Es una herramienta de análisis, no asesoría financiera.</small>`;
   }
 
   /* El Screener vive en el panel lateral (#screenerView, igual que Noticias o Alertas), no en una ventana emergente. */
@@ -76,6 +76,7 @@
     const el = $('#screenerView'); if (!el || bound) return; bound = true;
     el.addEventListener('click', e => {
       const tf = e.target.closest('[data-scr-tf]'); if (tf) { st.tf = tf.dataset.scrTf; scan(); return; }
+      const sc = e.target.closest('[data-scr-src]'); if (sc) { st.src = sc.dataset.scrSrc; scan(); return; }
       const f = e.target.closest('[data-scr-f]'); if (f) { st.filter = f.dataset.scrF; paint(); return; }
       if (e.target.closest('[data-scr-refresh]')) { scan(); return; }
       const o = e.target.closest('[data-scr-open]'); if (o) { const h = H(); if (h) h.openSignal(o.dataset.scrOpen, st.tf); }

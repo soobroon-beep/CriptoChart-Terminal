@@ -20,12 +20,12 @@ async function topSymbols(n) {
     .sort((a, b) => +b.quoteVolume - +a.quoteVolume).slice(0, n).map(t => ({symbol: t.symbol, price: +t.lastPrice}));
 }
 async function candles(sym, tf) { // solo velas cerradas: la señal «edad 1» es la vela que acaba de cerrar
-  const raw = await getJSON(`/api/v3/klines?symbol=${sym}&interval=${tf}&limit=300`), now = Date.now();
+  const raw = await getJSON(`/api/v3/klines?symbol=${sym}&interval=${tf}&limit=1000`), now = Date.now();
   return raw.filter(k => k[6] < now).map(k => ({t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5]}));
 }
 function signalOf(cs) { // misma regla que el Screener de la app (screener.js): última señal sin enfriamiento, vigente SIG_BARS velas
   if (!cs || cs.length < 60) return null;
-  const r = NN.compute(cs, {cooldown: 0, minScore: 1}), sg = r.last; if (!sg) return null;
+  const r = NN.compute(cs, {cooldown: 0, minScore: 1, hl2Range: true}), sg = r.last; if (!sg) return null;
   const ago = cs.length - 1 - sg.i; if (ago >= SIG_BARS) return null;
   return {side: sg.side, range: !!sg.range, div: !!sg.div, score: sg.score, age: ago + 1, ago};
 }
