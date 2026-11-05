@@ -338,4 +338,13 @@ body.pane .chart-symhead{display:none}
 .st-acct.empty .st-track{outline:1px dashed var(--line);outline-offset:-1px;opacity:.75}
 .st-acct.broke{border-color:var(--red)}
 .st-mkt{display:flex;align-items:center;gap:10px;padding-left:14px;border-left:1px solid var(--line);margin-left:auto}
-@media(min-width:1024px){.right-rail .rr-acct-bar{display:none}.right-rail .rr-end{margin-top:auto}}
+@media(min-width:1024px){.right-rail .rr-acct-bar{display:none}
+  /* el grupo de abajo (cuenta, tema, ajustes) vuelve a quedar pegado al fondo de la barra, como estaba */
+  .right-rail .rr-acct-bar+.rr-btn.rr-end,.right-rail .rr-theme{margin-top:auto}
+  /* iconos de la barra derecha un poco más grandes */
+  main{--rail-w:54px}
+  .right-rail{gap:7px}
+  .right-rail .rr-btn{width:42px;height:42px;border-radius:11px}
+  .right-rail .rr-btn svg{width:25px;height:25px}
+}
+@media(min-width:1024px) and (max-height:690px){.right-rail{gap:4px}.right-rail .rr-btn{width:38px;height:38px}.right-rail .rr-btn svg{width:22px;height:22px}}
