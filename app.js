@@ -3622,7 +3622,7 @@ function renderAcct() {
     root.classList.toggle('empty', !i.ok); root.classList.toggle('broke', i.ok && i.ratio <= 0.03);
     if (f) { f.style.setProperty('--ab-p', i.pct + '%'); f.style.background = i.color || 'transparent'; }
     if (v) { v.textContent = i.text; v.style.color = i.color || ''; }
-    if (root.classList.contains('rr-btn')) root.dataset.tip = i.tip;
+    if (root.classList.contains('rr-btn')) root.dataset.tip = i.tip; else if (root.id === 'stAcct') root.title = i.tip;
   }
   const sub = $('#acctSub'); if (sub) sub.textContent = i.ok ? i.tip : 'Sin configurar. Pon tu capital inicial y tu saldo actual';
 }
