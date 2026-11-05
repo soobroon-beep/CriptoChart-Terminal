@@ -89,13 +89,6 @@
     <!-- 2 · GRÁFICO -->
     <section class="view chart-view" id="chartView">
       <div class="chart-tabs" id="chartTabs" role="tablist" aria-label="Pestañas de gráficos"></div>
-      <div class="chart-heading">
-        <button id="symbolButton" class="symbol-button">
-          <span id="coinIcon" class="coin-icon">₿</span>
-          <span><strong id="coinTitle">BTC / USDT</strong><small id="srcLabel" title="Cambiar fuente de velas">BINANCE SPOT ▾</small></span>
-        </button>
-        <div class="priceblock"><strong id="lastPrice">—</strong><small id="dayChange">—</small></div>
-      </div>
       <div class="chart-bar">
       <div class="timeframes" id="timeframes"></div>
       <div class="chart-toolbar">
@@ -112,6 +105,13 @@
       </div>
       </div>
       <div class="chart-area" id="chartArea">
+        <div class="chart-symhead" id="chartSymHead">
+          <button id="symbolButton" class="symbol-button">
+            <span id="coinIcon" class="coin-icon">₿</span>
+            <span><strong id="coinTitle">BTC / USDT</strong><small id="srcLabel" title="Cambiar fuente de velas">BINANCE SPOT ▾</small></span>
+          </button>
+          <div class="priceblock"><strong id="lastPrice">—</strong><small id="dayChange">—</small></div>
+        </div>
         <div class="brand-fab" title="VORTEX · Powered by Nova Nexus" aria-label="VORTEX · Powered by Nova Nexus"><img data-app-icon src="icons/i01-192.png" alt="VORTEX" width="24" height="24"><span class="bf-tip"><b>VORTEX</b><small>Powered by Nova Nexus</small></span></div>
         <div class="chart-label">
           <strong id="chartLabel">BTCUSDT</strong> <span id="intervalLabel">1h</span> <span id="liveDot" class="live-dot" title="Tiempo real"></span>
@@ -127,6 +127,10 @@
           <button id="zoomOut" aria-label="Alejar">−</button>
           <button id="zoomIn" aria-label="Acercar">＋</button>
         </div>
+      </div>
+      <div class="chart-status" id="chartStatus">
+        <button type="button" class="ss-btn" id="ssBtn" aria-haspopup="true" aria-expanded="false" aria-label="Sesiones de las bolsas"><span class="ss-dots" id="ssDots"></span><span class="ss-txt" id="ssTxt">—</span></button>
+        <span class="ss-clock" id="ssClock" aria-label="Hora"></span>
       </div>
     </section>
 
@@ -265,6 +269,7 @@
 <script src="ai-ui.js"></script>
 <script src="fx.js"></script>
 <script src="prefs.js"></script>
+<script src="sessions.js"></script>
 <script src="changelog.js"></script>
 <script src="app.js"></script>
 <script src="screener.js"></script>

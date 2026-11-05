@@ -847,6 +847,7 @@ $('#timeframes').addEventListener('click', e => {
   const b = e.target.closest('[data-tf]'); if (!b) return;
   state.interval = b.dataset.tf; save(); renderFrames(); clearTransient(); loadCandles();
 });
+const symHeadH = () => { const e = $('#chartSymHead'); return e && e.offsetParent !== null ? e.offsetHeight : 0; };
 function updateChartHeader() {
   const b = base(state.symbol), t = tickers[state.symbol];
   const last = candles.length ? candles[candles.length - 1].c : Number(t?.lastPrice);
@@ -858,6 +859,7 @@ function updateChartHeader() {
   $('#lastPrice').textContent = fmt(last);
   $('#dayChange').textContent = pct(ch);
   $('#dayChange').className = ch >= 0 ? 'positive' : 'negative';
+  if (typeof scheduleRender === 'function') scheduleRender();
 }
 /* Velas desde Binance o Bybit Spot (para que el perfil de volumen y el POC coincidan con TradingView/Bybit). Si Bybit falla o no lista el par, se usa Binance. */
 const BYBIT = 'https://api.bybit.com/v5/market', BY_IV = {'1m':'1','5m':'5','15m':'15','30m':'30','1h':'60','4h':'240','1d':'D','1w':'W','1M':'M'};
@@ -2475,7 +2477,8 @@ function renderCore() {
   const prAll = activePine().filter(p => pineVisibleOn(p, state.interval)).map(p => ({p, r: pineStyled(pineRes[p.sid], p)})).filter(x => x.r && x.r.ok && x.r._key === pineKeyNow), pr = prAll.filter(x => !x.p.hide), pHid = prAll.filter(x => x.p.hide);
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
-  const left = 6, right = 64, axisH = 22, top0 = 6;
+  const SH = symHeadH(); document.getElementById('chartArea').style.setProperty('--sh', SH + 'px'); // la franja con el nombre y el precio de la moneda va arriba del gráfico
+  const left = 6, right = 64, axisH = 22, top0 = 6 + SH;
   const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH0 = stdOn('rsi') ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH0 = 0; // el volumen ya no tiene panel propio: se dibuja sobre las velas, abajo del gráfico
   const cap = Math.max(40, h - axisH - 80 - top0); let rsiH = rsiH0 && paneH.rsi ? clamp(paneH.rsi, 40, cap) : rsiH0, volH = volH0 && paneH.vol ? clamp(paneH.vol, 36, cap) : volH0;
   const panelKeys = [...PANELS.filter(k => stdOn(k) && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
@@ -3599,7 +3602,7 @@ area.addEventListener('contextmenu', e => {
 function syncFullscreenLabel() {} // los botones Expandir y Ajustar ya no existen (se hace con el doble toque y el botón A)
 const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} syncUi(); scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
 
-if (window.ResizeObserver) new ResizeObserver(() => scheduleRender()).observe(area);
+if (window.ResizeObserver) new ResizeObserver(() => { scheduleRender(); if (!deskMQ.matches && typeof placeFab === 'function') placeFab(); }).observe(area);
 window.addEventListener('resize', scheduleRender);
 
 /* ───────── Barra de progreso de la cuenta ─────────
@@ -3704,6 +3707,46 @@ function renderPrefs() {
   document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('#prefsPop, #setPrefs')) setOpen(false); }, true);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pop.hidden) setOpen(false); });
 }
+/* ───────── Sesiones de las bolsas: barra de estado abajo a la derecha del gráfico; al pasar el cursor (o tocar) sale la ventana con Nueva York, Londres, Tokio… ───────── */
+{
+  const btn = $('#ssBtn'), txt = $('#ssTxt'), dots = $('#ssDots'), clk = $('#ssClock'); let pop = null, lastMin = -1;
+  const p2 = n => String(n).padStart(2, '0'), hm = t => { const q = CCTPrefs.parts(t, PR.tz); return `${p2(q.h)}:${p2(q.mi)}`; };
+  const tzLabel = () => { if (PR.tz === 'UTC') return 'UTC'; try { const z = PR.tz === 'auto' ? undefined : PR.tz, o = new Intl.DateTimeFormat('es', {timeZone: z, timeZoneName: 'short'}).formatToParts(new Date()).find(x => x.type === 'timeZoneName'); return o ? o.value : ''; } catch { return ''; } };
+  const dayStart = now => { if (PR.tz === 'auto') { const d = new Date(now); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); } const f = CCTSessions.fields(now, PR.tz); return CCTSessions.zonedToUtc(f.y, f.mo, f.d, 0, 0, PR.tz); };
+  function paintBar() {
+    const now = Date.now(), all = CCTSessions.all(now), hd = CCTSessions.headline(now);
+    dots.innerHTML = all.map(x => `<i class="${x.open ? 'on' : ''}" style="--c:${x.m.color}"></i>`).join('');
+    txt.textContent = hd ? (hd.kind === 'close' ? `${hd.m.short} cierra ${CCTSessions.dur(hd.until - now)}` : `${hd.m.short} abre en ${CCTSessions.dur(hd.until - now)}`) : '—';
+  }
+  function tick() {
+    const q = CCTPrefs.parts(Date.now(), PR.tz), d = new Date(), s = PR.tz === 'auto' ? d.getSeconds() : d.getUTCSeconds();
+    clk.textContent = `${tzLabel()} ${PR.clock === '12' ? `${q.h % 12 || 12}:${p2(q.mi)}:${p2(s)} ${q.h < 12 ? 'a. m.' : 'p. m.'}` : `${p2(q.h)}:${p2(q.mi)}:${p2(s)}`}`;
+    if (q.mi !== lastMin) { lastMin = q.mi; paintBar(); if (pop) paintPop(); }
+  }
+  function paintPop() {
+    const now = Date.now(), ds = dayStart(now), DAY = 864e5, pos = t => Math.max(0, Math.min(100, (t - ds) / DAY * 100));
+    const rows = CCTSessions.all(now).map(x => {
+      const iv = CCTSessions.intervals(x.m, now), j = iv.findIndex(v => v[1] > now), c = iv[j], n = x.m.parts.length;
+      let range = '—'; if (c) { const f = iv[j - c[2]], l = iv[j - c[2] + n - 1]; if (f && l) range = `${hm(f[0])} - ${hm(l[1])}`; }
+      const segs = iv.filter(v => v[1] > ds && v[0] < ds + DAY).map(v => `<span class="ss-seg" style="left:${pos(v[0])}%;width:${Math.max(1, pos(v[1]) - pos(v[0]))}%"></span>`).join('');
+      const st = x.open ? `Abierta · cierra en ${CCTSessions.dur(x.until - now)}` : (x.until ? `Cerrada · abre en ${CCTSessions.dur(x.until - now)}` : 'Cerrada');
+      return `<div class="ss-row${x.open ? ' open' : ''}" style="--c:${x.m.color}"><div class="ss-n"><i></i><div><b>${esc(x.m.name)}</b><small>${st}</small></div></div><div class="ss-track">${segs}<span class="ss-now" style="left:${pos(now)}%"></span></div><div class="ss-r">${range}</div></div>`;
+    }).join('');
+    pop.innerHTML = `<div class="ss-ax"><span style="left:0">00:00</span><span style="left:25%">06:00</span><span style="left:50%">12:00</span><span style="left:75%">18:00</span></div>${rows}<p class="ss-note">Horario regular de cada bolsa (sin feriados), en ${esc(PR.tz === 'auto' ? 'la hora de tu dispositivo' : tzLabel())}.</p>`;
+    place();
+  }
+  function place() { if (!pop) return; const r = btn.getBoundingClientRect(); pop.style.right = Math.max(8, innerWidth - r.right - 4) + 'px'; pop.style.bottom = (innerHeight - r.top + 8) + 'px'; }
+  const show = () => { if (pop) return; pop = document.createElement('div'); pop.className = 'ss-pop'; pop.setAttribute('role', 'tooltip'); document.body.appendChild(pop); paintPop(); btn.setAttribute('aria-expanded', 'true'); };
+  const hide = () => { if (pop) { pop.remove(); pop = null; btn.setAttribute('aria-expanded', 'false'); } };
+  let hv = 0;
+  btn.addEventListener('mouseenter', () => { clearTimeout(hv); show(); }); btn.addEventListener('mouseleave', () => { hv = setTimeout(hide, 150); });
+  btn.addEventListener('focus', show); btn.addEventListener('blur', hide);
+  btn.addEventListener('click', e => { e.stopPropagation(); pop ? hide() : show(); }); // celular: un toque abre y otro cierra
+  document.addEventListener('pointerdown', e => { if (pop && !e.target.closest('#ssBtn, .ss-pop')) hide(); }, true);
+  window.addEventListener('resize', place);
+  tick(); setInterval(tick, 1000);
+}
+
 function openNews() {
   document.querySelectorAll('.news-pop').forEach(x => x.remove());
   const cl = window.CCT_CHANGELOG || [], m = document.createElement('div'); m.className = 'acct-pop news-pop';

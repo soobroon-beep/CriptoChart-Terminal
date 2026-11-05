@@ -285,3 +285,38 @@ body.light .theme-sw .ti-moon{transform:rotate(90deg) scale(.3);opacity:0}
 .tp-spark{margin:8px 0 6px;height:44px}.tp-spark .spark{width:100%;height:44px;display:block}
 .tp-f{display:flex;justify-content:space-between;font-size:12px;font-weight:650;font-variant-numeric:tabular-nums}
 body.pane .chart-tabs{display:none}
+
+/* Sesiones de las bolsas */
+.chart-status{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex:0 0 auto;padding:4px 12px;min-height:28px;font-size:11px;color:var(--muted);border-top:1px solid var(--line)}
+body.pane .chart-status{display:none}
+.ss-btn{display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border:1px solid transparent;border-radius:999px;background:transparent;color:var(--text);font-size:11px;font-weight:650;cursor:pointer;transition:background .2s,border-color .2s}
+.ss-btn:hover,.ss-btn[aria-expanded=true]{background:linear-gradient(145deg,rgba(255,255,255,.1),rgba(255,255,255,.02)),var(--raised);border-color:var(--glass-line,var(--line))}
+.ss-dots{display:inline-flex;gap:3px}.ss-dots i{width:7px;height:7px;border-radius:50%;background:var(--c);opacity:.22;transition:opacity .3s,box-shadow .3s}.ss-dots i.on{opacity:1;box-shadow:0 0 6px var(--c)}
+.ss-clock{font-variant-numeric:tabular-nums;letter-spacing:.2px;white-space:nowrap}
+.ss-pop{position:fixed;z-index:96;width:min(380px,calc(100vw - 16px));padding:12px 14px 10px;border-radius:14px;
+  background:linear-gradient(145deg,rgba(255,255,255,.1),rgba(255,255,255,.02)),var(--surface);border:1px solid var(--glass-line,var(--line));
+  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);box-shadow:0 18px 44px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.14);animation:ppIn .2s ease-out}
+.ss-ax{position:relative;height:14px;margin:0 66px 4px 112px;font-size:9px;color:var(--muted)}.ss-ax span{position:absolute;top:0;transform:translateX(-50%)}.ss-ax span:first-child{transform:none}
+.ss-row{display:grid;grid-template-columns:112px 1fr 66px;align-items:center;gap:0;padding:5px 0}
+.ss-n{display:flex;align-items:center;gap:7px;min-width:0}.ss-n i{width:8px;height:8px;flex:none;border-radius:50%;background:var(--c);opacity:.35}.ss-row.open .ss-n i{opacity:1;box-shadow:0 0 7px var(--c)}
+.ss-n b{display:block;font-size:12px;color:var(--text);white-space:nowrap}.ss-n small{display:block;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:96px}
+.ss-track{position:relative;height:7px;border-radius:4px;background:rgba(127,140,160,.22)}
+.ss-seg{position:absolute;top:0;bottom:0;border-radius:4px;background:var(--c);opacity:.55}.ss-row.open .ss-seg{opacity:.95}
+.ss-now{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;border-radius:1px;background:var(--text);opacity:.85}
+.ss-r{font-size:11px;font-weight:650;text-align:right;font-variant-numeric:tabular-nums;color:var(--text);white-space:nowrap;padding-left:8px}
+.ss-note{margin:6px 0 0;font-size:9.5px;color:var(--muted);line-height:1.4}
+@media(max-width:480px){.chart-status{justify-content:space-between;padding:4px 10px}.ss-row{grid-template-columns:96px 1fr 62px}.ss-ax{margin-left:96px;margin-right:62px}.ss-n small{max-width:80px}}
+@media (prefers-reduced-motion:reduce){.ss-pop{animation:none}}
+
+/* Nombre y precio de la moneda dentro del gráfico (arriba a la izquierda), separados de los indicadores por una línea */
+.chart-symhead{position:absolute;left:0;right:0;top:0;z-index:5;display:flex;align-items:center;gap:18px;padding:6px 14px;min-height:54px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.04),transparent)}
+.chart-symhead .symbol-button{flex:0 0 auto;gap:10px}
+.chart-symhead .symbol-button strong{font-size:16px;line-height:1.1}.chart-symhead .symbol-button small{margin-top:3px;font-size:9.5px;letter-spacing:.3px}
+.chart-symhead .priceblock{display:flex;align-items:baseline;gap:9px;text-align:left}
+.chart-symhead .priceblock strong{display:inline;font-size:22px;font-weight:700;letter-spacing:-.3px;font-variant-numeric:tabular-nums}
+.chart-symhead .priceblock small{display:inline;margin:0;font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums}
+.chart-label{top:calc(8px + var(--sh,0px))!important}
+.chart-label #chartLabel{display:none}
+body.pane .chart-symhead{display:none}
+@media(max-width:760px){.chart-symhead{min-height:46px;padding:4px 10px;gap:12px}.chart-symhead .priceblock strong{font-size:18px}.chart-symhead .symbol-button .coin-icon{width:30px;height:30px;font-size:17px}}
+@media(max-width:1023px){.chart-status{display:none!important}}
