@@ -27,7 +27,8 @@
       <span id="connection" class="connection">● Conectando</span>
       <button id="accountBtn" class="account-btn" hidden>Iniciar sesión</button>
       <button id="settingsBtn" class="icon-btn" title="Ajustes" aria-label="Ajustes"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
-      <button id="themeBtn" title="Cambiar tema" class="icon-btn"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg></button>
+      <button id="prefsBtn" title="Notificaciones y preferencias" aria-label="Notificaciones y preferencias" class="icon-btn"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/><path d="M2.5 9.5a10 10 0 0 1 2-3.5M21.5 9.5a10 10 0 0 0-2-3.5"/></svg></button>
+      <button id="themeBtn" title="Cambiar tema" aria-label="Cambiar tema" class="icon-btn theme-sw"><svg class="ic ti-sun"  viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></svg><svg class="ic ti-moon"  viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
     </div>
   </header>
 
@@ -46,6 +47,8 @@
       <button class="rr-btn" id="rrDiscord" data-side="discordView" data-tip="Discord · enviar señales y avisos" aria-label="Discord" type="button"><svg viewBox="0 0 24 24" aria-hidden="true" style="fill:currentColor;stroke:none"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z"/></svg></button>
       <button class="rr-btn rr-acct-bar" id="acctBar" data-acct-bar data-acct-open data-tip="Saldo de la cuenta" aria-label="Saldo de la cuenta" type="button"><span class="ab-track"><span class="ab-fill"></span><span class="ab-mark"></span></span><span class="ab-val">—</span></button>
       <button class="rr-btn rr-end" id="rrAccount" data-tip="Iniciar sesión" aria-label="Iniciar sesión" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.8-3.6 3.7-5.4 7-5.4s6.2 1.8 7 5.4"/></svg></button>
+      <button class="rr-btn rr-theme theme-sw" id="rrTheme" data-tip="Cambiar tema" aria-label="Cambiar tema" type="button"><svg class="ti-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></svg><svg class="ti-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
+      <button class="rr-btn" id="rrPrefs" data-tip="Notificaciones y preferencias" aria-label="Notificaciones y preferencias" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/><path d="M2.5 9.5a10 10 0 0 1 2-3.5M21.5 9.5a10 10 0 0 0-2-3.5"/></svg></button>
       <button class="rr-btn" data-side="settingsView" data-tip="Ajustes" aria-label="Ajustes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
     </nav>
     <!-- Barra izquierda de herramientas de dibujo (escritorio) -->
@@ -190,16 +193,6 @@
       <div class="set-tiles">
         <div class="set-tile"><button class="set-circle" data-acct-open type="button" aria-label="Saldo de la cuenta" title="Saldo de la cuenta"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><path d="M4 7.5V17a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H6.5A2.5 2.5 0 0 1 4 7.5z"/><circle cx="16" cy="13.5" r="1.1" fill="currentColor" stroke="none"/></svg></button><span class="set-cap">Saldo</span><div class="ab-h mini" data-acct-bar><span class="ab-fill"></span></div></div>
       </div>
-      <div class="section-label">APARIENCIA</div>
-      <div class="set-tiles">
-        <div class="set-tile"><button id="themeSetting" class="set-circle theme-ico" type="button" aria-label="Cambiar tema" title="Cambiar tema">
-          <svg class="ti-sun" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></svg>
-          <svg class="ti-moon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button><span class="set-cap">Tema</span></div>
-      </div>
-      <div class="section-label">PREFERENCIAS</div>
-      <div id="prefsBox"></div>
-      <div class="section-label">NOTIFICACIONES</div>
-      <div id="notifBox"></div>
       <div class="section-label">COMUNIDAD</div>
       <div class="set-tiles">
         <div class="set-tile" id="dcSettingRow"><button id="dcOpenFromSettings" class="set-circle" type="button" aria-label="Discord · Nova Nexus" title="Discord · Nova Nexus"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8.5c2.5-1 5.5-1 8 0M7.5 16c3 1.2 6 1.2 9 0"/><path d="M8.5 7.5 7.8 6C6.2 6.4 5 7 4 8c-1.2 3-1.6 6-1.2 9 1.2.9 2.5 1.5 3.9 1.8l.9-1.5M15.5 7.5l.7-1.5c1.6.4 2.8 1 3.8 2 1.2 3 1.6 6 1.2 9-1.2.9-2.5 1.5-3.9 1.8l-.9-1.5"/><circle cx="9.3" cy="12.5" r="1" fill="currentColor" stroke="none"/><circle cx="14.7" cy="12.5" r="1" fill="currentColor" stroke="none"/></svg></button><span class="set-cap">Discord</span></div>
@@ -242,7 +235,16 @@
       <div class="sym-foot"><span>↑↓ Navegar</span><span>Enter Abrir</span><span>Doble clic: mejor mercado</span><span>Esc Cerrar</span></div>
     </div>
   </div>
-  <div id="toast" role="status"></div>
+  <div class="prefs-pop" id="prefsPop" role="dialog" aria-label="Notificaciones y preferencias" hidden>
+  <div class="pp-head"><b>Notificaciones y preferencias</b><button type="button" class="pp-x" data-pp-close aria-label="Cerrar">&times;</button></div>
+  <div class="pp-body">
+    <div class="section-label">NOTIFICACIONES</div>
+    <div id="notifBox"></div>
+    <div class="section-label">PREFERENCIAS</div>
+    <div id="prefsBox"></div>
+  </div>
+</div>
+<div id="toast" role="status"></div>
 </div>
 <script src="firebase-config.js"></script>
 <script src="icons.js"></script>

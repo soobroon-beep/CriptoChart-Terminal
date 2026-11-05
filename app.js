@@ -3618,15 +3618,22 @@ function renderPrefs() {
   if (window.caches && caches.keys) caches.keys().then(k => { const m = k.map(x => /^cct-shell-v(\d+)$/.exec(x)).filter(Boolean).map(x => +x[1]).sort((a, b) => b - a)[0]; const e = $('#buildNo'); if (e && m) e.textContent = '· compilación ' + m; }).catch(() => {});
 }
 {
-  const root = $('#settingsView');
-  root.addEventListener('click', e => {
+  const onClick = e => {
     const b = e.target.closest('[data-pk]'); if (b && b.tagName === 'BUTTON') { const v = b.dataset.v; setPref(b.dataset.pk, /^\d+$/.test(v) ? +v : v); return; }
     const w = e.target.closest('[data-sw]');
     if (w) { const k = w.dataset.sw; if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); if (on) { try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {} } save(); renderPrefs(); renderMoveAlerts(); } else setPref(k, !PR.n[k], true); return; }
     if (e.target.closest('[data-play]')) { const t = $('#notifBox select[data-pk=tone]'); alertBeep(true, t && t.value); return; }
     if (e.target.closest('[data-news]')) openNews();
-  });
-  root.addEventListener('change', e => { const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } });
+  };
+  const onChange = e => { const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } };
+  for (const r of [$('#settingsView'), $('#prefsPop')]) { r.addEventListener('click', onClick); r.addEventListener('change', onChange); }
+  // Campana: abre o cierra el panel de notificaciones y preferencias
+  const pop = $('#prefsPop'), btns = [$('#rrPrefs'), $('#prefsBtn')];
+  const setOpen = on => { pop.hidden = !on; btns.forEach(b => b && b.classList.toggle('active', on)); if (on) renderPrefs(); };
+  btns.forEach(b => b && b.addEventListener('click', e => { e.stopPropagation(); setOpen(pop.hidden); }));
+  pop.querySelector('[data-pp-close]').onclick = () => setOpen(false);
+  document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('#prefsPop, #rrPrefs, #prefsBtn')) setOpen(false); }, true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pop.hidden) setOpen(false); });
 }
 function openNews() {
   document.querySelectorAll('.news-pop').forEach(x => x.remove());
@@ -3653,7 +3660,7 @@ function pickSource(anchor) { // menú para elegir la fuente de velas (Binance S
 }
 paintSource(); window.__paintSource = paintSource;
 { const sl = $('#srcLabel'); if (sl) sl.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); openSheet(); }); } // el exchange se elige al buscar el activo
-$('#themeBtn').onclick = $('#themeSetting').onclick = () => { state.light = !state.light; save(); theme(); };
+document.querySelectorAll('.theme-sw').forEach(b => b.onclick = () => { state.light = !state.light; save(); theme(); });
 $('#exportData').onclick = () => {
   const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'}), url = URL.createObjectURL(blob), a = document.createElement('a');
   a.href = url; a.download = 'vortex-config.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 500);
