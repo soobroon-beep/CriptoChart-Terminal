@@ -188,25 +188,19 @@
       <div class="section-label">CUENTA</div>
       <div id="accountBox"></div>
       <div class="section-label">APARIENCIA</div>
-      <div class="setting-row compact">
-        <div><b>Tema</b></div>
-        <button id="themeSetting" class="theme-ico" type="button" aria-label="Cambiar tema" title="Cambiar tema">
-          <svg class="ti-sun" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></svg>
-          <svg class="ti-moon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
-        </button>
-      </div>
-      <div class="setting-row" id="dcSettingRow">
-        <div><b>Discord · Nova Nexus</b><small>Únete al servidor y recibe las señales y avisos</small></div>
-        <button id="dcOpenFromSettings" class="small-button" type="button">Abrir</button>
-      </div>
-      <div class="setting-row acct-row">
-        <div><b>Saldo de la cuenta</b><small id="acctSub">Sin configurar</small><div class="ab-h" data-acct-bar><span class="ab-fill"></span></div></div>
-        <button class="acct-btn" data-acct-open type="button" aria-label="Editar saldo de la cuenta"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><path d="M4 7.5V17a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H6.5A2.5 2.5 0 0 1 4 7.5z"/><circle cx="16" cy="13.5" r="1.1" fill="currentColor" stroke="none"/></svg><span>Editar</span></button>
+      <div class="set-tiles">
+        <div class="set-tile"><button id="themeSetting" class="set-circle theme-ico" type="button" aria-label="Cambiar tema" title="Cambiar tema">
+          <svg class="ti-sun" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></svg>
+          <svg class="ti-moon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button><span class="set-cap">Tema</span></div>
+        <div class="set-tile" id="dcSettingRow"><button id="dcOpenFromSettings" class="set-circle" type="button" aria-label="Discord · Nova Nexus" title="Discord · Nova Nexus"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8.5c2.5-1 5.5-1 8 0M7.5 16c3 1.2 6 1.2 9 0"/><path d="M8.5 7.5 7.8 6C6.2 6.4 5 7 4 8c-1.2 3-1.6 6-1.2 9 1.2.9 2.5 1.5 3.9 1.8l.9-1.5M15.5 7.5l.7-1.5c1.6.4 2.8 1 3.8 2 1.2 3 1.6 6 1.2 9-1.2.9-2.5 1.5-3.9 1.8l-.9-1.5"/><circle cx="9.3" cy="12.5" r="1" fill="currentColor" stroke="none"/><circle cx="14.7" cy="12.5" r="1" fill="currentColor" stroke="none"/></svg></button><span class="set-cap">Discord</span></div>
+        <div class="set-tile"><button class="set-circle" data-acct-open type="button" aria-label="Saldo de la cuenta" title="Saldo de la cuenta"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><path d="M4 7.5V17a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H6.5A2.5 2.5 0 0 1 4 7.5z"/><circle cx="16" cy="13.5" r="1.1" fill="currentColor" stroke="none"/></svg></button><span class="set-cap">Saldo</span><div class="ab-h mini" data-acct-bar><span class="ab-fill"></span></div></div>
       </div>
       <div id="appInstall"></div>
       <div class="section-label">DATOS Y SEGUIMIENTO</div>
-      <button class="setting-row action-row" id="exportData"><span>Exportar mi configuración (JSON)</span><span>↗</span></button>
-      <label class="setting-row action-row" for="importFile"><span>Importar configuración (JSON)</span><span>↙</span></label>
+      <div class="set-tiles">
+        <div class="set-tile"><button class="set-circle" id="exportData" type="button" aria-label="Exportar mi configuración (JSON)" title="Exportar mi configuración (JSON)"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></button><span class="set-cap">Exportar</span></div>
+        <div class="set-tile"><label class="set-circle" for="importFile" role="button" tabindex="0" aria-label="Importar configuración (JSON)" title="Importar configuración (JSON)"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></label><span class="set-cap">Importar</span></div>
+      </div>
       <input type="file" id="importFile" accept="application/json" hidden>
       <p class="small-note">Los dibujos, indicadores, temporalidad y seguimiento se guardan en este dispositivo y, si inicias sesión con Google, también en tu cuenta. Viajan en la exportación JSON. Esta interfaz móvil todavía no incluye el intérprete Pine ni las alertas del proyecto original. No se simulan cotizaciones.</p>
     </section>
