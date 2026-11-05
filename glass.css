@@ -320,3 +320,8 @@ body.pane .chart-status{display:none}
 body.pane .chart-symhead{display:none}
 @media(max-width:760px){.chart-symhead{min-height:46px;padding:4px 10px;gap:12px}.chart-symhead .priceblock strong{font-size:18px}.chart-symhead .symbol-button .coin-icon{width:30px;height:30px;font-size:17px}}
 @media(max-width:1023px){.chart-status,.chart-tabs{display:none!important}}
+
+/* imagen de referencia de cada script */
+.pine-row{flex-wrap:wrap}
+.pine-prev{display:block;flex:0 0 100%;width:100%;height:auto;max-height:170px;object-fit:cover;border-radius:10px;margin-bottom:8px;background:#0b0e14}
+.pine-prev.ph{display:flex;align-items:center;justify-content:center;min-height:70px;color:var(--muted);font-size:12px}

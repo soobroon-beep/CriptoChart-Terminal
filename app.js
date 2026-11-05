@@ -3829,7 +3829,7 @@ function addScript(code, fallbackName) {
   const m = code.match(/indicator\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/) || code.match(/strategy\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/);
   const sid = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   scripts.push({id: sid, name: (m ? m[1] : fallbackName || 'Script').slice(0, 80), code, size, lines: code.split('\n').length, addedAt: Date.now()});
-  saveScripts(); renderScripts(); toast('Script guardado'); return sid;
+  saveScripts(); renderScripts(); toast('Script guardado'); const ns = scripts.find(x => x.id === sid); if (ns) setTimeout(() => genPrev(ns), 300); return sid;
 }
 function migrateCatalog() { // copias antiguas (pegadas a mano) de los scripts incluidos: pasan a la versión integrada, sin tocar sus ajustes
   const cat = scripts.filter(x => x.builtin); let changed = false;
@@ -3997,6 +3997,25 @@ function openPineDialog(sid) {
     save(); if (inChanged) { pineKey = ''; schedulePine(); } renderIndicators(); scheduleRender(); toast('Configuración aplicada');
   }}));
 }
+/* ───────── Imagen de referencia de cada script que subes (se genera sola, en este dispositivo) ───────── */
+const PREV_KEY = 'cct_prev_v1', prevBusy = new Set();
+let prevStore = (() => { try { return JSON.parse(localStorage.getItem(PREV_KEY)) || {}; } catch { return {}; } })();
+const codeHash = c => { let h = 5381; for (let i = 0; i < c.length; i++) h = ((h << 5) + h + c.charCodeAt(i)) | 0; return c.length + ':' + h; };
+function scriptPrev(x) { const e = prevStore[x.id]; if (e && e.h === codeHash(x.code)) return e.u; genPrev(x); return null; }
+async function genPrev(x) {
+  if (prevBusy.has(x.id) || !window.CCTPinePreview || !window.CCTPine) return; prevBusy.add(x.id);
+  const h = codeHash(x.code); let u = '';
+  try {
+    const cs = CCTPinePreview.sampleCandles(), res = await pineRunRaw(x.code, {interval: '60', symbol: 'BTCUSDT', name: x.name, timeLimitMs: 9000, cs});
+    u = res && res.ok ? CCTPinePreview.render(res, cs, {title: x.name}) : 'err';
+  } catch { u = 'err'; }
+  prevBusy.delete(x.id); prevStore[x.id] = {h, u};
+  try { localStorage.setItem(PREV_KEY, JSON.stringify(prevStore)); } catch { for (const k of Object.keys(prevStore)) if (k !== x.id) delete prevStore[k]; try { localStorage.setItem(PREV_KEY, JSON.stringify(prevStore)); } catch {} }
+  if (sheetMode === 'indicators' && $('#sheet').classList.contains('open')) $('#sheetList').innerHTML = indicatorRows();
+  renderIndicators();
+}
+const prevImg = x => { const u = scriptPrev(x); return u && u !== 'err' ? `<img class="pine-prev" alt="Imagen de ${esc(x.name)}" src="${u}">` : `<div class="pine-prev ph">${u === 'err' ? 'Sin imagen: el script no se pudo calcular' : 'Generando imagen…'}</div>`; };
+window.__cctScripts = {addScript, store: () => prevStore}; // expuesto para pruebas
 const pineRetried = new Set();
 function schedulePine() {
   if (!candles.length || !activePine().length) return;
@@ -4030,7 +4049,7 @@ function catPreviewSvg(id) {
 }
 const catPineOf = c => state.pine.find(p => p.sid === 'cat:' + c.id);
 function catalogCards() {
-  return (window.CCTCatalog || []).filter(c => c.id !== 'nova-scr').map(c => {
+  return (window.CCTCatalog || []).map(c => {
     const p = catPineOf(c);
     return `<div class="nova-card ${p && p.on ? 'on' : ''}">${catPreviewSvg(c.id)}<div class="nova-body"><div><b>${esc(c.name)}</b><small>${esc(c.desc)}</small>${p ? (pineRes[p.sid] ? (pineRes[p.sid].ok ? '' : `<small class="pine-err">Error${pineRes[p.sid].error.line ? ' · línea ' + pineRes[p.sid].error.line : ''}: ${esc(pineRes[p.sid].error.msg)}</small><button class="small-button" data-pine-retry="${p.sid}">↻ Reintentar</button>`) : '<small>Calculando…</small>') : ''}</div><div class="script-btns">${p ? `<button class="small-button" data-pine-set="${p.sid}">${I('gear', 14)} Configurar</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${!!p.on}" aria-label="Activar ${esc(c.name)}"></button>` : `<button class="small-button" data-cat-add="${c.id}">＋ Añadir</button>`}</div></div></div>`;
   }).join('');
@@ -4054,7 +4073,7 @@ function pineSection() {
     if (!p.on) st = 'Apagado'; else if (!r) st = 'Calculando…';
     else if (!r.ok) st = `<span class="pine-err">Error${r.error.line ? ' · línea ' + r.error.line : ''}: ${esc(r.error.msg)}</span>`;
     else { const u = r.warnings.filter(w => w.level === 'unsupported').length; st = `${r.plots.length} plot${r.plots.length === 1 ? '' : 's'} · ` + (u ? `<span class="pine-warn">${I('warn', 14)} ${u} aviso${u > 1 ? 's' : ''} de no soportado</span>` : r.warnings.length ? `${r.warnings.length} aviso${r.warnings.length > 1 ? 's' : ''}` : 'sin avisos') + (r.meta.overlay ? '' : ' · panel propio') + (r.strategy ? ` · <b class="${r.strategy.stats.net >= 0 ? 'positive' : 'negative'}">Estrategia ${r.strategy.stats.net >= 0 ? '+' : ''}${r.strategy.stats.netPct.toFixed(2)}% · ${r.strategy.tradesTotal} ops</b>` : ''); }
-    return `<div class="setting-row pine-row"><div><b>${esc(s.name)}</b><small>${st}</small>${r && r.ok ? `<select class="pane-sel" data-pine-pane="${p.sid}" aria-label="Panel"><option value="" ${!p.pane ? 'selected' : ''}>Panel: automático (${r.meta.overlay ? 'sobre el gráfico' : 'abajo'})</option><option value="main" ${p.pane === 'main' ? 'selected' : ''}>Panel: sobre el gráfico</option><option value="top" ${p.pane === 'top' ? 'selected' : ''}>Panel: arriba (propio)</option><option value="bottom" ${p.pane === 'bottom' ? 'selected' : ''}>Panel: abajo (propio)</option></select>` : ''}</div><div class="script-btns">${r && r.ok && r.strategy ? `<button class="small-button" data-pine-rep="${p.sid}" aria-label="Informe">${I('chart', 16)}</button>` : ''}<button class="small-button" data-pine-set="${p.sid}" aria-label="Ajustes">${I('gear', 16)}</button><button class="small-button danger" data-pine-del="${p.sid}" aria-label="Quitar">✕</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${p.on}" aria-label="Activar"></button></div></div>`;
+    return `<div class="setting-row pine-row">${prevImg(s)}<div><b>${esc(s.name)}</b><small>${st}</small>${r && r.ok ? `<select class="pane-sel" data-pine-pane="${p.sid}" aria-label="Panel"><option value="" ${!p.pane ? 'selected' : ''}>Panel: automático (${r.meta.overlay ? 'sobre el gráfico' : 'abajo'})</option><option value="main" ${p.pane === 'main' ? 'selected' : ''}>Panel: sobre el gráfico</option><option value="top" ${p.pane === 'top' ? 'selected' : ''}>Panel: arriba (propio)</option><option value="bottom" ${p.pane === 'bottom' ? 'selected' : ''}>Panel: abajo (propio)</option></select>` : ''}</div><div class="script-btns">${r && r.ok && r.strategy ? `<button class="small-button" data-pine-rep="${p.sid}" aria-label="Informe">${I('chart', 16)}</button>` : ''}<button class="small-button" data-pine-set="${p.sid}" aria-label="Ajustes">${I('gear', 16)}</button><button class="small-button danger" data-pine-del="${p.sid}" aria-label="Quitar">✕</button><button class="toggle ${p.on ? 'on' : ''}" data-pine-tog="${p.sid}" aria-pressed="${p.on}" aria-label="Activar"></button></div></div>`;
   }).join('');
   return `<div class="pine-head"><b>Scripts de Pine</b><small>Pega código de TradingView: se interpreta aquí y se dibuja en el gráfico</small></div>${rows}<div class="setting-row"><button class="primary" data-pine-new="1">＋ Pegar / convertir Pine</button></div>`;
 }
