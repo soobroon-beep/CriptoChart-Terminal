@@ -115,6 +115,7 @@ function sanUi(u) {
   if (q.panes && typeof q.panes === 'object') { o.panes = {}; for (const k of ['pc', 'movil']) if (q.panes[k]) o.panes[k] = sanPanes(q.panes[k]); } // tamaño de paneles: uno para PC y otro para móvil
   if (q.dopt && typeof q.dopt === 'object' && !Array.isArray(q.dopt)) { const d = {}; for (const k of ['magnet', 'stay', 'lock', 'hide']) if (typeof q.dopt[k] === 'boolean') d[k] = q.dopt[k]; o.dopt = d; }
   if (typeof q.icon === 'string' && /^[a-z][a-z0-9]{2,11}$/.test(q.icon)) o.icon = q.icon;
+  if (q.prefs && typeof q.prefs === 'object') o.prefs = CCTPrefs.sanitize(q.prefs);
   if (q.favBar && typeof q.favBar === 'object') { const f = q.favBar, c01 = v => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null; o.favBar = {show: f.show !== false, x: c01(f.x), y: c01(f.y), mx: c01(f.mx), my: c01(f.my)}; }
   if (Array.isArray(q.favs)) o.favs = q.favs.filter(x => typeof x === 'string' && /^[a-zA-Z0-9]{2,24}$/.test(x)).slice(0, 24);
   return o;
@@ -191,6 +192,7 @@ const LAY_KEY = 'cct_layout_pref_v1', LAY_OK = ['1', '2v', '2h', '3', '4', '5'];
 let layoutNow = null; // diseño en uso en este dispositivo (se actualiza al elegirlo)
 const withLocalLayout = o => { const lp = lsGet(LAY_KEY) || layoutNow; return lp && LAY_OK.includes(lp) && o && typeof o === 'object' ? {...o, layout: lp} : o; };
 let state = merge(withLocalLayout(readLocal(storeKey()))), stateUid = uid; // stateUid: de qué cuenta viene el estado en memoria
+let PR = CCTPrefs.sanitize((state.ui || {}).prefs); // preferencias: zona horaria, decimales, sonido y avisos (viajan a la cuenta)
 if (PANE) { document.body.classList.add('pane'); const q = new URLSearchParams(location.search); if (!lsGet(STORE)) { state.symbol = /^[A-Z0-9]{5,15}$/.test(q.get('sym') || '') ? q.get('sym') : ['ETHUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'][PANE_N - 1]; } state.light = q.get('light') === '1'; }
 const dirtyKey = () => uid ? `${STORE}_dirty_${uid}` : null;
 const persistLocal = () => { try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch {} };
@@ -209,7 +211,7 @@ const srcOf = k => window.CCTMarkets ? CCTMarkets.srcOf(k) : 'binance', symOf = 
 const baseOnly = s => splitSym(s)[0], quoteOf = s => splitSym(s)[1], pairLbl = s => quoteOf(s) ? `${baseOnly(s)}/${quoteOf(s)}` : baseOnly(s);
 const base = s => { const [b, q] = splitSym(s); return q === 'USDT' || !q ? b : b + '/' + q; };
 const meta = s => catalog[baseOnly(s)] || [base(s), baseOnly(s).slice(0, 1)];
-const fmt = n => !Number.isFinite(n) ? '—' : n >= 1000 ? n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : n >= 1 ? n.toFixed(2) : n.toFixed(n < .01 ? 8 : 4);
+const fmt = n => CCTPrefs.formatPrice(n, PR);
 const pct = n => !Number.isFinite(n) ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -520,13 +522,18 @@ $('#popRows').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key
 
 /* ───────── Alertas de precio ───────── */
 const alertPrice = {}; // último precio conocido por símbolo (para alertas fuera del seguimiento)
-function alertBeep() { try { const A = window.AudioContext || window.webkitAudioContext, c = new A(), o = c.createOscillator(), g = c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.setValueAtTime(.2, c.currentTime); g.gain.exponentialRampToValueAtTime(.001, c.currentTime + .6); o.start(); o.stop(c.currentTime + .6); } catch {} }
+const TONE_SEQ = {beep: [[880, 0, .6, 'sine']], chime: [[988, 0, .35, 'sine'], [1319, .16, .55, 'sine']], pulse: [[440, 0, .14, 'triangle'], [440, .22, .14, 'triangle'], [440, .44, .14, 'triangle']], alarm: [[780, 0, .18, 'square'], [620, .2, .18, 'square'], [780, .4, .18, 'square']]};
+function alertBeep(force, tone) { // el sonido elegido en Configuración; force = prueba
+  if (!force && PR.sound === 'off') return;
+  try { const A = window.AudioContext || window.webkitAudioContext, c = new A(); for (const [f, t0, d, ty] of TONE_SEQ[tone || PR.tone] || TONE_SEQ.beep) { const o = c.createOscillator(), g = c.createGain(); o.type = ty; o.frequency.value = f; o.connect(g); g.connect(c.destination); const t = c.currentTime + t0; g.gain.setValueAtTime(ty === 'square' ? .08 : .2, t); g.gain.exponentialRampToValueAtTime(.001, t + d); o.start(t); o.stop(t + d + .02); } setTimeout(() => { try { c.close(); } catch {} }, 1500); } catch {}
+}
+const dcSend = (k, o) => { if (window.CCTDiscord && PR.n.discord) CCTDiscord.alert(k, o); }; // Discord solo si se quiere recibir ahí
 function fireAlert(a, price) {
-  a.on = false; a.firedAt = Date.now(); a.firedPrice = price;
+  a.on = false; a.firedAt = Date.now(); a.firedPrice = price; if (!PR.n.price) return; // avisos de precio apagados en Configuración
   const msg = `${base(a.symbol)} ${a.dir === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`;
   toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
   try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {}
-  if (window.CCTDiscord) CCTDiscord.alert('price', {symbol: base(a.symbol), dir: a.dir, level: a.price, price, note: a.note, text: msg});
+  dcSend('price', {symbol: base(a.symbol), dir: a.dir, level: a.price, price, note: a.note, text: msg});
 }
 function checkAlerts(sym, price) {
   if (!Number.isFinite(price)) return;
@@ -595,7 +602,7 @@ function fireMove(sym, dir, ch, lbl, price) {
   moveLog.unshift({t: Date.now(), s: sym, d: dir, c: +ch.toFixed(2), w: lbl, p: price}); moveLog = moveLog.slice(0, 30); try { localStorage.setItem(MOVE_LOG_KEY, JSON.stringify(moveLog)); } catch {}
   toast('Movimiento brusco: ' + msg); if ((state.moveAlerts || {}).sound !== false) { alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} }
   try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Movimiento brusco', {body: msg}); } catch {}
-  if (window.CCTDiscord) CCTDiscord.alert('move', {symbol: base(sym), dir, pct: ch, win: lbl, price, text: msg});
+  dcSend('move', {symbol: base(sym), dir, pct: ch, win: lbl, price, text: msg});
   renderMoveAlerts();
 }
 async function movePoll() {
@@ -681,11 +688,11 @@ function indSummary(a) { // texto legible de una alerta de indicador
 const alGroups = new Map(); let alBusy = false;
 function closedIdx(cs, lastClosedT) { for (let i = cs.length - 1; i >= 0; i--) if (cs[i].t === lastClosedT) return i; return -1; }
 function fireInd(a, info) {
-  a.firedAt = Date.now(); a.firedInfo = info; if (a.repeat === 'once') a.on = false;
+  a.firedAt = Date.now(); a.firedInfo = info; if (a.repeat === 'once') a.on = false; if (!PR.n.ind) return;
   const msg = `${base(a.symbol)} ${a.interval} · ${a.label}${info ? ' · ' + info : ''}${a.note ? ' · ' + a.note : ''}`;
   toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
   try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {}
-  if (window.CCTDiscord) CCTDiscord.alert('ind', {symbol: base(a.symbol), interval: a.interval, label: a.label, info, note: a.note, text: msg});
+  dcSend('ind', {symbol: base(a.symbol), interval: a.interval, label: a.label, info, note: a.note, text: msg});
 }
 async function lastClosedBar(sym, itv) {
   const raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${itv}&limit=2`), now = Date.now(), cl = raw.filter(d => d[6] < now);
@@ -2189,13 +2196,7 @@ function setupCanvas() {
   g = el.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0);
   return {w: r.width, h: r.height};
 }
-function timeLabel(t, prev) {
-  const d = new Date(t), p2 = n => String(n).padStart(2, '0'), iv = state.interval;
-  if (iv === '1M') return d.toLocaleString('es', {month: 'short', year: '2-digit'});
-  if (iv === '1d' || iv === '1w') return `${d.getDate()}/${d.getMonth() + 1}`;
-  if (prev != null && new Date(prev).getDate() !== d.getDate()) return `${d.getDate()}/${d.getMonth() + 1}`;
-  return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
-}
+function timeLabel(t, prev) { return CCTPrefs.axisLabel(t, prev, state.interval, PR); }
 let legRows = [], legSig = '', legStruct = '', grips = [], gripDrag = false;
 let paneH = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneH_v1') || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; } })();
 let paneOrder = (() => { try { const o = JSON.parse(localStorage.getItem('cct_paneOrder_v1') || '[]'); return Array.isArray(o) ? o.filter(k => typeof k === 'string').slice(0, 64) : []; } catch { return []; } })(); // orden elegido por el usuario para los paneles (RSI, MACD…)
@@ -2208,7 +2209,7 @@ let paneScale = paneScale0();
 const devClass = () => (window.matchMedia && matchMedia('(min-width: 1024px)').matches ? 'pc' : 'movil');
 function syncUi() { // vuelca las preferencias de interfaz al estado (que se guarda en el dispositivo y en la cuenta)
   const panes = Object.assign({}, (state.ui || {}).panes); panes[devClass()] = {paneH, paneScale, order: paneOrder}; // cada tipo de dispositivo guarda su propio tamaño
-  state.ui = sanUi({panes, dopt: DOPT, favBar: FB, favs: FAVS, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
+  state.ui = sanUi({panes, dopt: DOPT, favBar: FB, favs: FAVS, prefs: PR, icon: (window.CCTAppIcons && window.CCTAppIcons.selected) || (state.ui && state.ui.icon) || ''}); save();
 }
 function applyUi() { // al recibir el estado de la cuenta: aplica sus preferencias de interfaz en este dispositivo
   const u = state.ui || {};
@@ -2219,6 +2220,7 @@ function applyUi() { // al recibir el estado de la cuenta: aplica sus preferenci
   if (u.dopt) { Object.assign(DOPT, u.dopt); try { localStorage.setItem(DOPT_KEY, JSON.stringify(DOPT)); } catch {} }
   if (u.icon && window.CCTAppIcons && window.CCTAppIcons.selected !== u.icon) window.CCTAppIcons.apply(u.icon);
   if (Array.isArray(u.favs)) { FAVS = u.favs.slice(0, 24); try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch {} if (typeof buildRail === 'function') buildRail(); }
+  if (u.prefs) { PR = CCTPrefs.sanitize(u.prefs); if (typeof renderPrefs === 'function') renderPrefs(); }
   if (u.favBar) FB = Object.assign({show: true, x: null, y: null, mx: null, my: null}, u.favBar);
   if (typeof renderFavBar === 'function') renderFavBar();
 }
@@ -2690,7 +2692,7 @@ function renderCore() {
     g.strokeStyle = CS.cross || fg; g.globalAlpha = CS.crossA / 100; g.lineWidth = CS.crossW; g.setLineDash(CS.crossS === 'Sólida' ? [] : CS.crossS === 'Puntos' ? [1.5, 3] : [4, 4]);
     g.beginPath(); g.moveTo(cx, top0); g.lineTo(cx, h - axisH); g.moveTo(left, cy); g.lineTo(w - right + 2, cy); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
     g.fillStyle = CS.cross || fg; g.fillRect(w - right + 2, cy - 9, right - 3, 18); g.fillStyle = bg; g.fillText(fmt(PRICE(cy)), w - right + 5, cy + 3.5);
-    const tl = new Date(c.t).toLocaleString('es', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+    const tl = CCTPrefs.full(c.t, PR);
     const tw = g.measureText(tl).width + 12, tx = clamp(cx - tw / 2, left, w - right - tw);
     g.fillStyle = CS.cross || fg; g.fillRect(tx, h - axisH + 1, tw, 18); g.fillStyle = bg; g.fillText(tl, tx + 6, h - 8);
   }
@@ -3582,6 +3584,57 @@ window.addEventListener('message', e => { // Nexus Lens (iframe del mismo sitio)
   state.acct = sanAcct({start: A.start > 0 ? A.start : v, cur: v, auto: true}); save(); renderAcct();
 });
 renderAcct();
+
+/* ───────── Configuración: preferencias, notificaciones y acerca de ───────── */
+function setPref(k, v, sub) { // guarda una preferencia, la manda a la cuenta y repinta lo que depende de ella
+  const n = JSON.parse(JSON.stringify(PR)); if (sub) n.n[k] = v; else n[k] = v; PR = CCTPrefs.sanitize(n);
+  syncUi(); renderPrefs(); try { render(); renderWatch(); updateChartHeader(); renderAlerts(); renderMoveAlerts(); } catch {}
+}
+function renderPrefs() {
+  const pb = $('#prefsBox'), nb = $('#notifBox'), ab = $('#aboutBox'); if (!pb || !nb || !ab) return;
+  const seg = (k, cur, opts) => `<div class="seg" role="group">${opts.map(([v, t]) => `<button type="button" data-pk="${k}" data-v="${v}" aria-pressed="${String(cur) === String(v)}">${t}</button>`).join('')}</div>`;
+  const row = (t, sm, ctl) => `<div class="pref-row"><div class="pref-l"><b>${t}</b>${sm ? `<small>${sm}</small>` : ''}</div><div class="pref-c">${ctl}</div></div>`;
+  const sw = (id, on, t, sm) => row(t, sm, `<button type="button" class="toggle${on ? ' on' : ''}" data-sw="${id}" role="switch" aria-checked="${!!on}" aria-label="${t}"></button>`);
+  const t0 = Date.UTC(2026, 10, 4, 15, 5), ex = `${CCTPrefs.full(t0, PR)} · ${CCTPrefs.formatPrice(67890.1234, PR)}`;
+  pb.innerHTML = `<div class="pref-list">`
+    + row('Zona horaria', 'Para la hora del gráfico', `<select class="pref-sel" data-pk="tz" aria-label="Zona horaria">${CCTPrefs.TZ.map(([v, t]) => `<option value="${v}" ${PR.tz === v ? 'selected' : ''}>${t}</option>`).join('')}</select>`)
+    + row('Hora', '', seg('clock', PR.clock, [['24', '24 h'], ['12', '12 h']]))
+    + row('Fecha', '', seg('date', PR.date, [['dmy', 'D/M'], ['mdy', 'M/D'], ['iso', 'ISO']]))
+    + row('Decimales', 'En precios', seg('dec', PR.dec, [['auto', 'Auto'], [0, '0'], [2, '2'], [4, '4'], [6, '6'], [8, '8']]))
+    + row('Separadores', '', seg('sep', PR.sep, [['en', '1,234.5'], ['es', '1.234,5'], ['sp', '1 234,5'], ['none', '1234.5']]))
+    + row('Símbolo', 'Delante del precio', seg('sym', PR.sym, [['', 'Ninguno'], ['$', '$'], ['US$', 'US$']]))
+    + `<div class="pref-ex" aria-live="polite">${esc(ex)}</div></div>`;
+  const M = state.moveAlerts || {};
+  nb.innerHTML = `<div class="pref-list">`
+    + row('Sonido', '', seg('sound', PR.sound, [['on', 'Activado'], ['off', 'Silencio']]))
+    + row('Tono', '', `<select class="pref-sel" data-pk="tone" aria-label="Tono">${CCTPrefs.TONES.map(([v, t]) => `<option value="${v}" ${PR.tone === v ? 'selected' : ''}>${t}</option>`).join('')}</select><button type="button" class="pref-play" data-play aria-label="Probar sonido" title="Probar sonido"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg></button>`)
+    + sw('move', !!M.on, 'Movimientos bruscos', 'Sube o cae fuerte en minutos')
+    + sw('price', PR.n.price, 'Alertas de precio', 'Cuando el precio toca tu nivel')
+    + sw('ind', PR.n.ind, 'Alertas de indicador', 'Señales de tus indicadores')
+    + sw('discord', PR.n.discord, 'Enviar a Discord', 'Los avisos también al canal #vortex')
+    + `</div>`;
+  const cl = window.CCT_CHANGELOG || [], cur = cl[0] || {v: '—', d: ''};
+  ab.innerHTML = `<div class="pref-list">${row('VORTEX · Powered by Nova Nexus', `Versión ${esc(cur.v)} <span id="buildNo"></span>`, '<button type="button" class="pref-pill" data-news>Novedades</button>')}</div>`;
+  if (window.caches && caches.keys) caches.keys().then(k => { const m = k.map(x => /^cct-shell-v(\d+)$/.exec(x)).filter(Boolean).map(x => +x[1]).sort((a, b) => b - a)[0]; const e = $('#buildNo'); if (e && m) e.textContent = '· compilación ' + m; }).catch(() => {});
+}
+{
+  const root = $('#settingsView');
+  root.addEventListener('click', e => {
+    const b = e.target.closest('[data-pk]'); if (b && b.tagName === 'BUTTON') { const v = b.dataset.v; setPref(b.dataset.pk, /^\d+$/.test(v) ? +v : v); return; }
+    const w = e.target.closest('[data-sw]');
+    if (w) { const k = w.dataset.sw; if (k === 'move') { const on = !(state.moveAlerts || {}).on; state.moveAlerts = sanMoveAlerts({...state.moveAlerts, on}); if (on) { try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {} } save(); renderPrefs(); renderMoveAlerts(); } else setPref(k, !PR.n[k], true); return; }
+    if (e.target.closest('[data-play]')) { const t = $('#notifBox select[data-pk=tone]'); alertBeep(true, t && t.value); return; }
+    if (e.target.closest('[data-news]')) openNews();
+  });
+  root.addEventListener('change', e => { const s = e.target.closest('select[data-pk]'); if (s) { setPref(s.dataset.pk, s.value); if (s.dataset.pk === 'tone') alertBeep(true, s.value); } });
+}
+function openNews() {
+  document.querySelectorAll('.news-pop').forEach(x => x.remove());
+  const cl = window.CCT_CHANGELOG || [], m = document.createElement('div'); m.className = 'acct-pop news-pop';
+  m.innerHTML = `<b>Novedades</b>${cl.map(r => `<div class="nw-ver"><span>Versión ${esc(r.v)}</span><small>${esc(r.d)}</small></div><ul>${r.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`).join('')}<div class="acct-act"><button class="small-button" type="button" data-close>Cerrar</button></div>`;
+  document.body.appendChild(m); m.querySelector('[data-close]').onclick = () => m.remove();
+}
+renderPrefs();
 
 /* ───────── Tema, exportar e importar ───────── */
 window.addEventListener('cct-theme', () => { try { if (typeof render === 'function' && candles) render(); } catch {} });

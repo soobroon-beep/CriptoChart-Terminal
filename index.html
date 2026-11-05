@@ -196,6 +196,10 @@
           <svg class="ti-sun" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></svg>
           <svg class="ti-moon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button><span class="set-cap">Tema</span></div>
       </div>
+      <div class="section-label">PREFERENCIAS</div>
+      <div id="prefsBox"></div>
+      <div class="section-label">NOTIFICACIONES</div>
+      <div id="notifBox"></div>
       <div class="section-label">COMUNIDAD</div>
       <div class="set-tiles">
         <div class="set-tile" id="dcSettingRow"><button id="dcOpenFromSettings" class="set-circle" type="button" aria-label="Discord · Nova Nexus" title="Discord · Nova Nexus"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8.5c2.5-1 5.5-1 8 0M7.5 16c3 1.2 6 1.2 9 0"/><path d="M8.5 7.5 7.8 6C6.2 6.4 5 7 4 8c-1.2 3-1.6 6-1.2 9 1.2.9 2.5 1.5 3.9 1.8l.9-1.5M15.5 7.5l.7-1.5c1.6.4 2.8 1 3.8 2 1.2 3 1.6 6 1.2 9-1.2.9-2.5 1.5-3.9 1.8l-.9-1.5"/><circle cx="9.3" cy="12.5" r="1" fill="currentColor" stroke="none"/><circle cx="14.7" cy="12.5" r="1" fill="currentColor" stroke="none"/></svg></button><span class="set-cap">Discord</span></div>
@@ -207,6 +211,8 @@
         <div class="set-tile"><label class="set-circle" for="importFile" role="button" tabindex="0" aria-label="Importar configuración (JSON)" title="Importar configuración (JSON)"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></label><span class="set-cap">Importar</span></div>
       </div>
       <input type="file" id="importFile" accept="application/json" hidden>
+      <div class="section-label">ACERCA DE</div>
+      <div id="aboutBox"></div>
       <p class="small-note">Los dibujos, indicadores, temporalidad y seguimiento se guardan en este dispositivo y, si inicias sesión con Google, también en tu cuenta. Viajan en la exportación JSON. Esta interfaz móvil todavía no incluye el intérprete Pine ni las alertas del proyecto original. No se simulan cotizaciones.</p>
     </section>
   </main>
@@ -253,6 +259,8 @@
 <script src="ai.js"></script>
 <script src="ai-ui.js"></script>
 <script src="fx.js"></script>
+<script src="prefs.js"></script>
+<script src="changelog.js"></script>
 <script src="app.js"></script>
 <script src="screener.js"></script>
 <script src="discord-format.js"></script>
