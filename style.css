@@ -494,9 +494,9 @@ body.pane #chartView{display:flex!important;height:100dvh}
 .brand-fab{display:none}
 @media(min-width:1024px){
   .topbar,.chart-mode .topbar,.expanded .topbar{display:none!important}
-  .brand-fab{display:flex;align-items:center;position:absolute;left:10px;bottom:36px;z-index:6;height:26px;opacity:.85;transition:opacity .15s}
-  .brand-fab:hover{opacity:1}.brand-fab img{width:24px;height:24px;border-radius:0;display:block;object-fit:contain;background:none;box-shadow:none;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5))}
-  .brand-fab .bf-tip{position:absolute;left:32px;bottom:0;display:none;flex-direction:column;white-space:nowrap;background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:6px 10px;box-shadow:0 6px 18px #0008}
+  .brand-fab{display:flex;align-items:center;position:absolute;left:10px;bottom:34px;z-index:6;height:38px;opacity:.9;transition:opacity .15s}
+  .brand-fab:hover{opacity:1}.brand-fab img{width:38px;height:38px;border-radius:0;display:block;object-fit:contain;background:none;box-shadow:none;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5))}
+  .brand-fab .bf-tip{position:absolute;left:46px;bottom:4px;display:none;flex-direction:column;white-space:nowrap;background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:6px 10px;box-shadow:0 6px 18px #0008}
   .brand-fab:hover .bf-tip{display:flex}.bf-tip b{font-size:12px;letter-spacing:1.5px;color:#edf3fc}.bf-tip small{font-size:10px;color:#8796ab}
   .right-rail{top:0}
 }
