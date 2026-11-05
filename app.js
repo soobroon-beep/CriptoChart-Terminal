@@ -314,6 +314,33 @@ function openTagPop(k, x, y) {
   m.addEventListener('click', ev => { const b = ev.target.closest('[data-tagc]'); if (!b) return; close(); setTag(k, b.dataset.tagc); });
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', onKey, true); });
 }
+/* Menú de tres puntos de cada moneda en Mi seguimiento: abrir, color, mover a sección, alerta y quitar */
+function openRowMenu(k, x, y) {
+  $$('.row-menu, .tag-pop').forEach(m => m.remove());
+  const m = document.createElement('div'); m.className = 'row-menu'; m.setAttribute('role', 'menu');
+  const ic = d => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const secs = state.groups.length ? `<button type="button" class="rm-it" data-rm="sec" aria-expanded="false">${ic('<path d="M4 7h16M4 12h10M4 17h6"/>')}<span>Mover a sección</span><i class="rm-car">›</i></button><div class="rm-sub" hidden><button type="button" class="rm-it ${grpOf(k) ? '' : 'on'}" data-rm-sec="">Sin sección</button>${state.groups.map(g => `<button type="button" class="rm-it ${grpOf(k) === g.id ? 'on' : ''}" data-rm-sec="${g.id}">${esc(g.name)}</button>`).join('')}</div>` : '';
+  m.innerHTML = `<div class="rm-head"><b>${esc(base(k))}</b><small>${esc(meta(k)[0])}</small></div>
+    <button type="button" class="rm-it" data-rm="open">${ic('<path d="M4 18l5-6 4 3 7-9"/>')}<span>Abrir en el gráfico</span></button>
+    <div class="rm-color"><small>Color</small><div class="tag-grid">${TAGS.map(([c, n]) => `<button type="button" data-tagc="${c}" style="--c:${c}" class="${tagOf(k) === c ? 'on' : ''}" aria-label="${n}" title="${n}"></button>`).join('')}</div>${tagOf(k) ? '<button type="button" class="tag-none" data-tagc="">Sin color</button>' : ''}</div>
+    ${secs}
+    <button type="button" class="rm-it" data-rm="alert">${ic('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21h4"/>')}<span>Añadir alerta…</span></button>
+    <button type="button" class="rm-it danger" data-rm="del">${ic('<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>')}<span>Quitar de la lista</span></button>`;
+  document.body.appendChild(m);
+  const w = m.offsetWidth, h = m.offsetHeight; m.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + 'px'; m.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + 'px';
+  const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', onKey, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, onKey = ev => { if (ev.key === 'Escape') close(); };
+  m.addEventListener('click', ev => {
+    const c = ev.target.closest('[data-tagc]'); if (c) { close(); setTag(k, c.dataset.tagc); return; }
+    const sc = ev.target.closest('[data-rm-sec]'); if (sc) { close(); if (sc.dataset.rmSec) state.symGroup[k] = sc.dataset.rmSec; else delete state.symGroup[k]; save(); renderWatch(); return; }
+    const b = ev.target.closest('[data-rm]'); if (!b) return;
+    if (b.dataset.rm === 'sec') { const sub = m.querySelector('.rm-sub'); sub.hidden = !sub.hidden; b.setAttribute('aria-expanded', String(!sub.hidden)); const r = m.getBoundingClientRect(); if (r.bottom > innerHeight - 8) m.style.top = Math.max(8, innerHeight - 8 - r.height) + 'px'; return; }
+    close();
+    if (b.dataset.rm === 'open') selectSymbol(k);
+    else if (b.dataset.rm === 'alert') { renderAlerts(); switchView('alertsView'); setTimeout(() => { const sel = $('#alSym'); if (sel) sel.value = k; const pr = $('#alPrice'); if (pr) pr.focus(); }, 50); }
+    else if (b.dataset.rm === 'del') { state.symbols = state.symbols.filter(q => q !== k); delete state.symGroup[k]; delete (state.symColor || {})[k]; if (!state.symbols.length) editMode = false; save(); renderWatch(); }
+  });
+  setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', onKey, true); });
+}
 const grpOf = k => (state.symGroup && state.symGroup[k]) || '';
 function watchRow(s) {
   const t = tickers[s], change = Number(t?.priceChangePercent), price = Number(t?.lastPrice);
@@ -324,9 +351,9 @@ function watchRow(s) {
   const tg = tagOf(s), tgA = tg ? ` tagged" style="--tag:${tg}` : '';
   if (editMode) {
     const opts = `<option value="">Sin sección</option>` + state.groups.map(g => `<option value="${g.id}" ${grpOf(s) === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
-    return `<div class="watch-row editing${tgA}" data-symbol="${esc(s)}"><span class="drag-h" aria-hidden="true">⠿</span>${main}<span class="row-edit"><button type="button" class="tag-btn ${tg ? 'has' : ''}" data-color="${esc(s)}" ${tg ? `style="--tag:${tg}"` : ''} aria-label="Color de ${esc(base(s))}" title="Color"></button>${state.groups.length ? `<select class="sec-pick" data-assign="${esc(s)}" aria-label="Sección de ${esc(base(s))}">${opts}</select>` : ''}<button data-remove="${esc(s)}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
+    return `<div class="watch-row editing${tgA}" data-symbol="${esc(s)}"><span class="drag-h" aria-hidden="true">⠿</span>${main}<span class="row-edit">${state.groups.length ? `<select class="sec-pick" data-assign="${esc(s)}" aria-label="Sección de ${esc(base(s))}">${opts}</select>` : ''}<button data-remove="${esc(s)}" class="danger" aria-label="Quitar ${esc(base(s))}">✕</button></span></div>`;
   }
-  return `<button class="watch-row${tgA}" data-symbol="${esc(s)}">${main}<span class="tag-dot ${tg ? 'has' : ''}" role="button" data-color="${esc(s)}" ${tg ? `style="--tag:${tg}"` : ''} aria-label="Color de ${esc(base(s))}" title="Color"></span>${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
+  return `<button class="watch-row${tgA}" data-symbol="${esc(s)}"><span class="row-dots" role="button" tabindex="0" data-menu="${esc(s)}" aria-haspopup="menu" aria-label="Opciones de ${esc(base(s))}" title="Opciones"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></span>${main}${sparkSVG(s, change)}<span class="row-prices"><strong class="${flash}">${fmt(price)}</strong><small class="${change >= 0 ? 'positive' : 'negative'}">${pct(change)}</small></span></button>`;
 }
 let wlDragOn = false, wlDragPend = false; // mientras arrastras no se repinta la lista (los precios en vivo la reconstruían a mitad del gesto)
 function renderWatch() {
@@ -355,6 +382,7 @@ $('#watchRows').addEventListener('click', e => {
   const sren = e.target.closest('[data-secren]'), sdel = e.target.closest('[data-secdel]');
   const mv = e.target.closest('[data-secmv]'), col = e.target.closest('[data-color]');
   if (mv) { const i = state.groups.findIndex(x => x.id === mv.dataset.sid), j = i + Number(mv.dataset.secmv); if (i >= 0 && j >= 0 && j < state.groups.length) { [state.groups[i], state.groups[j]] = [state.groups[j], state.groups[i]]; save(); renderWatch(); } return; }
+  const dots = e.target.closest('[data-menu]'); if (dots) { const r = dots.getBoundingClientRect(); openRowMenu(dots.dataset.menu, r.left, r.bottom + 4); return; }
   if (col) { const r = col.getBoundingClientRect(); openTagPop(col.dataset.color, r.left, r.bottom + 6); return; }
   if (tog && Date.now() - suppressClick < 400) return;
   if (tog) { const g = state.groups.find(x => x.id === tog.dataset.tog); if (g) { g.collapsed = !g.collapsed; save(); renderWatch(); } return; }
