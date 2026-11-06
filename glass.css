@@ -494,3 +494,6 @@ button.brand-fab,button.brand-icon{background:none;border:0;padding:0;cursor:poi
     -webkit-backdrop-filter:blur(16px) saturate(150%);backdrop-filter:blur(16px) saturate(150%);box-shadow:0 4px 14px rgba(0,0,0,.25)}
   .light .right-rail .rr-btn::before{background:rgba(20,40,80,.06);border-color:rgba(20,40,80,.12);box-shadow:0 4px 12px rgba(20,40,80,.12)}
 }
+
+/* Dock derecho: solo crece el icono, sin círculo */
+.right-rail .rr-btn::before{content:none!important;display:none!important}
