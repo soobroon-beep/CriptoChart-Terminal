@@ -48,3 +48,9 @@ al = (alpha[y0:y1, x0:x1] * 255).astype(np.uint8); h, w = al.shape; side = max(h
 canvas = np.zeros((side, side), np.uint8); canvas[(side - h) // 2:(side - h) // 2 + h, (side - w) // 2:(side - w) // 2 + w] = al
 m = Image.fromarray(canvas).resize((256, 256), Image.LANCZOS)
 Image.merge('RGBA', (*Image.new('RGB', (256, 256), (255, 255, 255)).split(), m)).save(f'{OUT}/vortex-mark.png', optimize=True)
+
+# La estrella sola (misma lienzo de 256 px) para el destello de la animación del logo
+from scipy.ndimage import label, binary_dilation
+mk = np.array(Image.open(f'{OUT}/vortex-mark.png')); lab, _ = label(mk[..., 3] > 30)
+mk[..., 3] = np.where(binary_dilation(lab == 1, iterations=4), mk[..., 3], 0)
+Image.fromarray(mk).save(f'{OUT}/vortex-star.png', optimize=True)

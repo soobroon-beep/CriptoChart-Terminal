@@ -4498,7 +4498,7 @@ function cloudPush() {
    baja lo más nuevo de la cuenta y vuelve a cargar velas, precios y conexión en vivo (útil si el celular se quedó trabado). El guardado automático sigue igual. */
 let forceBusy = false;
 async function forceSync() {
-  if (forceBusy) return; forceBusy = true;
+  if (forceBusy) return; forceBusy = true; const t0 = Date.now();
   const btns = $$('#forceSync'); btns.forEach(b => b.classList.add('syncing')); toast('Guardando y actualizando…');
   let msg = '';
   try {
@@ -4521,7 +4521,8 @@ async function forceSync() {
     if (online) await Promise.allSettled([loadCandles(true), fetchTicker(), loadSparks()]); // velas nuevas + reconecta el tiempo real
     schedulePine(); scheduleRender(); updateChartHeader();
   } catch (e) { msg = 'No se pudo completar: ' + (e && (e.code || e.message) || 'error'); }
-  btns.forEach(b => b.classList.remove('syncing')); forceBusy = false; toast(msg || 'Listo');
+  const left = 1800 - (Date.now() - t0); if (left > 0) await new Promise(r => setTimeout(r, left)); // la animación se ve completa aunque el guardado sea rápido
+  btns.forEach(b => { b.classList.remove('syncing'); b.classList.add('done'); setTimeout(() => b.classList.remove('done'), 900); }); forceBusy = false; toast(msg || 'Listo');
 }
 const saveScriptsLocal = () => { try { localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); } catch {} };
 document.addEventListener('click', e => { if (e.target.closest('#forceSync')) forceSync(); });
