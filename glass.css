@@ -407,3 +407,21 @@ button.brand-fab,button.brand-icon{background:none;border:0;padding:0;cursor:poi
 @keyframes starPop{0%,56%{opacity:0;transform:scale(.2) rotate(-40deg);filter:none}68%{opacity:1;transform:scale(1.7) rotate(0);filter:drop-shadow(0 0 7px #fff) drop-shadow(0 0 14px rgba(160,190,255,.9))}82%{opacity:1;transform:scale(1);filter:drop-shadow(0 0 4px #fff)}100%{opacity:0;transform:scale(1)}}
 @keyframes markDone{0%{filter:drop-shadow(0 0 0 #fff)}35%{filter:drop-shadow(0 0 9px rgba(255,255,255,.95)) brightness(1.3)}100%{filter:none}}
 @media(prefers-reduced-motion:reduce){.brand-fab.syncing::after,.brand-fab.syncing::before,.brand-fab.syncing .bf-star{animation:none}.brand-fab.syncing img{opacity:.5}}
+
+/* Diseños guardados */
+.dz-back{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(3,6,12,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.dz-box{width:min(440px,100%);max-height:min(620px,90dvh);display:flex;flex-direction:column;gap:10px;padding:16px;background:var(--glass-2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--glass-hi);border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.55);color:var(--text,#e8eef8)}
+.dz-head{display:flex;align-items:center;justify-content:space-between;font-size:16px}
+.dz-x{background:none;border:0;color:inherit;font-size:16px;cursor:pointer;opacity:.7}
+.dz-note{margin:0;font-size:12px;opacity:.65;line-height:1.4}
+.dz-list{display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:60px}
+.dz-row{display:flex;align-items:center;gap:4px;border:1px solid var(--glass-hi);border-radius:14px;padding:4px;background:rgba(255,255,255,.03)}
+.dz-apply{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:0;color:inherit;text-align:left;padding:6px;border-radius:10px;cursor:pointer}
+.dz-apply:hover{background:rgba(255,255,255,.06)}
+.dz-sw{flex:none;display:flex;align-items:flex-end;gap:3px;width:38px;height:30px;padding:5px;border-radius:8px;border:1px solid rgba(255,255,255,.18)}
+.dz-sw i{flex:1;height:60%;border-radius:2px}.dz-sw i+i{height:90%}
+.dz-nm{display:flex;flex-direction:column;min-width:0}.dz-nm b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dz-nm small{font-size:11px;opacity:.6}
+.dz-ic{flex:none;width:30px;height:30px;display:grid;place-items:center;background:none;border:0;border-radius:8px;color:inherit;opacity:.65;cursor:pointer}.dz-ic:hover{opacity:1;background:rgba(255,255,255,.08)}.dz-del:hover{color:#f23645}
+.dz-empty{margin:8px 4px;font-size:13px;opacity:.65;line-height:1.45}
+.dz-save{display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border-radius:14px;border:1px solid var(--glass-hi);background:rgba(98,150,255,.18);color:inherit;font-weight:600;cursor:pointer}
+.dz-save:hover{background:rgba(98,150,255,.3)}

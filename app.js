@@ -25,7 +25,7 @@ const defaults = {
   symbols: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'],
   symbol: 'BTCUSDT', interval: '1h',
   indicators: {ema20:true, ema50:false, sma200:false, wma20:false, bollinger:false, vwap:false, supertrend:false, cross:false, rsi:true, macd:false, stoch:false, atr:false, obv:false, volume:true, vpvr:false, liqmap:false, adx:false, cci:false, willr:false, mfi:false, roc:false, stochrsi:false, ao:false, cmf:false, donchian:false, keltner:false, ichimoku:false, psar:false, patterns:false, dchan:false, nnIa:false, nnEma:false, nnTp:false, nnRules:false, nnSmc:false, nnOb:false, nnTrail:false, nnRev:false, nnSR:false, nnPiv:false, nnLiq:false, nnLiqBars:false, nnVP:false},
-  groups: [], symGroup: {}, symColor: {}, listRev: 0, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
+  groups: [], symGroup: {}, symColor: {}, listRev: 0, drawTpl: [], light: false, chartStyle: {}, ctype: 'candles', layout: '1', stdParams: {}, stdHide: {}, drawings: {}, brush: {c: '#e9c36e', w: 3}, pine: [], designs: [], source: 'binance', ui: {}, novaSaved: null, novaParams: {}, alerts: [], acct: {start: 0, cur: 0, auto: true}, moveAlerts: {on: true, pct: 2, sound: true}, discord: {url: '', invite: '', on: {move: true, price: true, ind: true, s1h: true, s4h: true}, sent: {s1h: 0, s4h: 0}}
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
@@ -134,6 +134,19 @@ function sanDrawExtra(d) { // estilo propio de cada dibujo: color, grosor, estil
   if (o.lock !== true) delete o.lock; if (o.hide !== true) delete o.hide;
   return o;
 }
+const DESIGN_KEYS = ['indicators', 'stdParams', 'stdHide', 'pine', 'chartStyle', 'ctype', 'novaParams', 'novaSaved', 'pn'];
+function sanDesigns(a) { // diseños guardados (configuración completa del gráfico): máx. 20 y de tamaño acotado, viajan a la cuenta
+  const out = [], seen = new Set(); if (!Array.isArray(a)) return out;
+  for (const d of a) {
+    if (!d || typeof d !== 'object' || typeof d.id !== 'string' || !/^[\w-]{1,24}$/.test(d.id) || seen.has(d.id) || !d.snap || typeof d.snap !== 'object' || Array.isArray(d.snap)) continue;
+    const s = {}; for (const k of DESIGN_KEYS) if (d.snap[k] !== undefined) s[k] = d.snap[k];
+    if (s.chartStyle) s.chartStyle = sanChartStyle(s.chartStyle); if (s.stdParams) s.stdParams = sanStdParams(s.stdParams);
+    if (s.pn) { const q = s.pn && typeof s.pn === 'object' ? s.pn : {}, h = {}; if (q.paneH && typeof q.paneH === 'object') for (const [k, v] of Object.entries(q.paneH).slice(0, 24)) if (/^[A-Za-z0-9:_-]{1,40}$/.test(k) && Number.isFinite(+v)) h[k] = +v; s.pn = {paneH: h, paneScale: Number.isFinite(+q.paneScale) ? Math.max(.6, Math.min(3, +q.paneScale)) : 1.25, order: Array.isArray(q.order) ? q.order.filter(x => typeof x === 'string').slice(0, 64) : []}; }
+    if (JSON.stringify(s).length > 24000) continue;
+    seen.add(d.id); out.push({id: d.id, name: String(d.name || 'Diseño').slice(0, 40), t: +d.t || 0, snap: s}); if (out.length >= 20) break;
+  }
+  return out;
+}
 function merge(s) {
   const o = {...structuredClone(defaults), ...s};
   o.indicators = {...defaults.indicators, ...(s.indicators || {})};
@@ -173,6 +186,7 @@ function merge(s) {
   }
   o.layout = ['1', '2v', '2h', '3', '4', '5'].includes(o.layout) ? o.layout : '1'; o.ctype = CTYPES.some(c => c[0] === o.ctype) ? o.ctype : 'candles'; o.chartStyle = sanChartStyle(o.chartStyle); o.stdParams = sanStdParams(o.stdParams);
   o.stdHide = o.stdHide && typeof o.stdHide === 'object' && !Array.isArray(o.stdHide) ? Object.fromEntries(Object.keys(o.stdHide).filter(k => o.stdHide[k] === true && Object.prototype.hasOwnProperty.call(o.indicators, k) && !k.startsWith('nn') && o.indicators[k]).map(k => [k, true])) : {}; // «oculto» (ojito) ≠ «apagado»: sigue activo en Indicadores, solo no se dibuja
+  o.designs = sanDesigns(o.designs);
   o.alerts = Array.isArray(o.alerts) ? o.alerts.map(sanAlert).filter(Boolean).slice(0, 50) : [];
   if (!Array.isArray(o.symbols) || !o.symbols.length) o.symbols = [...defaults.symbols];
   if (!INTERVALS.includes(o.interval)) o.interval = '1h';
@@ -3632,6 +3646,52 @@ function resetChart() {
   priceMan = null; paneMan = {_k: state.symbol + '|' + state.interval}; if (typeof paneH === 'object') { for (const k of Object.keys(paneH)) delete paneH[k]; savePaneH(); }
   updateAutoBtn(); legSig = ''; glide({visible: defaultVisible(), pan: 0}); scheduleRender(); toast('Gráfico restablecido');
 }
+/* ───────── Diseños: guardar la configuración completa del gráfico (indicadores, colores, orden, fondo, tamaños…) y aplicarla en cualquier gráfico ─────────
+   Los diseños viajan en el estado de la cuenta (state.designs). Los gráficos extra (iframes) leen la lista del gráfico principal y le piden los cambios por postMessage. */
+const designSnap = () => ({indicators: {...state.indicators}, stdParams: structuredClone(state.stdParams || {}), stdHide: {...(state.stdHide || {})}, pine: structuredClone(state.pine || []), chartStyle: {...(state.chartStyle || {})}, ctype: state.ctype, novaParams: structuredClone(state.novaParams || {}), novaSaved: state.novaSaved ? {...state.novaSaved} : null, pn: {paneH: {...paneH}, paneScale, order: [...paneOrder]}});
+const designsStoreKey = () => uid ? `cct_mobile_v1_${uid}` : 'cct_mobile_v1';
+const designsList = () => PANE ? sanDesigns(readLocal(designsStoreKey()).designs) : (state.designs || []);
+function applyDesign(d) {
+  const sn = d.snap || {}, next = {...state}; for (const k of DESIGN_KEYS) if (k !== 'pn' && sn[k] !== undefined) next[k] = structuredClone(sn[k]);
+  if (sn.pn) { const panes = Object.assign({}, (state.ui || {}).panes); panes[devClass()] = {paneH: sn.pn.paneH, paneScale: sn.pn.paneScale, order: sn.pn.order}; next.ui = {...(state.ui || {}), panes}; }
+  applyState(next, true); syncUi(); // syncUi vuelca los tamaños y guarda (cuenta incluida)
+  priceMan = null; legSig = ''; pineKey = ''; if (candles.length) { calcNova(); calcExtra(); } schedulePine(); scheduleRender();
+}
+function designsOp(m) { // en el gráfico principal: cambia la lista y guarda; en un gráfico extra: se lo pide al principal
+  if (PANE) { try { parent.postMessage({cct: 'designs', ...m}, location.origin); } catch {} return; }
+  let l = (state.designs || []).slice();
+  if (m.op === 'add') l.push({id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: String(m.name || 'Diseño').slice(0, 40), t: Date.now(), snap: m.snap});
+  else if (m.op === 'del') l = l.filter(x => x.id !== m.id);
+  else if (m.op === 'ren') l = l.map(x => x.id === m.id ? {...x, name: String(m.name || x.name).slice(0, 40)} : x);
+  else if (m.op === 'upd') l = l.map(x => x.id === m.id ? {...x, t: Date.now(), snap: m.snap} : x);
+  state.designs = sanDesigns(l); save(); persistLocal(); if (document.querySelector('.dz-back')) renderDesigns();
+}
+if (!PANE) window.addEventListener('message', e => { const m = e.data; if (e.origin !== location.origin || !m || m.cct !== 'designs' || !['add', 'del', 'ren', 'upd'].includes(m.op)) return; designsOp({op: m.op, id: typeof m.id === 'string' ? m.id : '', name: m.name, snap: m.snap}); });
+function renderDesigns() {
+  const box = document.querySelector('.dz-box .dz-list'); if (!box) return; const list = designsList();
+  const cnt = d => Object.entries((d.snap || {}).indicators || {}).filter(([, v]) => v).length + ((d.snap || {}).pine || []).filter(p => p.on !== false).length;
+  box.innerHTML = list.length ? list.map(d => `<div class="dz-row" data-id="${esc(d.id)}"><button class="dz-apply" data-a="apply" title="Aplicar este diseño al gráfico"><span class="dz-sw" style="background:${esc((d.snap.chartStyle || {}).bg || CHART_DEF.bg)}"><i style="background:${esc((d.snap.chartStyle || {}).up || CHART_DEF.up)}"></i><i style="background:${esc((d.snap.chartStyle || {}).down || CHART_DEF.down)}"></i></span><span class="dz-nm"><b>${esc(d.name)}</b><small>${cnt(d)} indicadores${d.t ? ' · ' + new Date(d.t).toLocaleDateString() : ''}</small></span></button><button class="dz-ic" data-a="upd" title="Actualizar con el gráfico actual">${SV('<path d="M4 12a8 8 0 0 1 14-5.3M20 4v4.5h-4.5M20 12a8 8 0 0 1-14 5.3M4 20v-4.5h4.5"/>', 16)}</button><button class="dz-ic" data-a="ren" title="Cambiar nombre">${SV('<path d="M4 20h4L19 9l-4-4L4 16z"/>', 16)}</button><button class="dz-ic dz-del" data-a="del" title="Borrar">${SV('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>', 16)}</button></div>`).join('') : '<p class="dz-empty">Aún no tienes diseños. Deja el gráfico como te gusta (fondo, indicadores, colores, orden) y toca «Guardar diseño actual».</p>';
+}
+function openDesigns() {
+  document.querySelectorAll('.dz-back').forEach(x => x.remove());
+  const back = document.createElement('div'); back.className = 'dz-back';
+  back.innerHTML = `<div class="dz-box" role="dialog" aria-label="Diseños"><div class="dz-head"><b>Diseños</b><button class="dz-x" data-a="close" aria-label="Cerrar">✕</button></div><p class="dz-note">Cada diseño guarda todo el gráfico: fondo, colores, indicadores y sus ajustes, orden y tamaño de paneles. Tócalo para aplicarlo a este gráfico${PANE ? '' : ' (también a los que abras al lado)'}. Se guardan en tu cuenta.</p><div class="dz-list"></div><button class="dz-save" data-a="save">${SV('<path d="M12 5v14M5 12h14"/>', 16)}<span>Guardar diseño actual</span></button></div>`;
+  document.body.appendChild(back); renderDesigns();
+  const close = () => { back.remove(); document.removeEventListener('keydown', esc2, true); }, esc2 = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', esc2, true);
+  const refresh = () => setTimeout(renderDesigns, PANE ? 300 : 0);
+  back.addEventListener('click', e => {
+    if (e.target === back) return close();
+    const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a, row = b.closest('.dz-row'), id = row && row.dataset.id, d = id && designsList().find(x => x.id === id);
+    if (a === 'close') close();
+    else if (a === 'save') { const n = (prompt('Nombre del diseño:', 'Diseño ' + (designsList().length + 1)) || '').trim().slice(0, 40); if (!n) return; designsOp({op: 'add', name: n, snap: designSnap()}); refresh(); toast('Diseño guardado'); }
+    else if (a === 'apply' && d) { applyDesign(d); close(); toast('Diseño aplicado: ' + d.name); }
+    else if (a === 'upd' && d) { if (!confirm(`¿Reemplazar «${d.name}» con el gráfico actual?`)) return; designsOp({op: 'upd', id, snap: designSnap()}); refresh(); toast('Diseño actualizado'); }
+    else if (a === 'ren' && d) { const n = (prompt('Nombre del diseño:', d.name) || '').trim(); if (!n) return; designsOp({op: 'ren', id, name: n}); refresh(); }
+    else if (a === 'del' && d) { if (!confirm(`¿Borrar el diseño «${d.name}»?`)) return; designsOp({op: 'del', id}); refresh(); }
+  });
+}
+{ const b = $('#designsBtn'); if (b) b.onclick = openDesigns; }
 area.addEventListener('contextmenu', e => {
   if (e.target.closest('.chart-label, .leg-row, button, .pop-menu, .favbar')) return;
   e.preventDefault(); document.querySelectorAll('.chart-ctx').forEach(x => x.remove());
@@ -4461,6 +4521,7 @@ function reconcile(local, remote) { // mezcla de dos dispositivos que cambiaron 
     if (Array.isArray(L.groups)) { out.groups = Array.isArray(out.groups) ? out.groups : []; for (const g of L.groups) if (!out.groups.some(x => x.id === g.id)) out.groups.push(g); }
   }
   if (L.drawings && typeof L.drawings === 'object') { out.drawings = out.drawings && typeof out.drawings === 'object' ? out.drawings : {}; for (const [k, arr] of Object.entries(L.drawings)) { const cur = Array.isArray(out.drawings[k]) ? out.drawings[k] : []; const ids = new Set(cur.map(d => d && d.id)); const extra = (Array.isArray(arr) ? arr : []).filter(d => d && !ids.has(d.id)); if (extra.length) out.drawings[k] = [...cur, ...extra].slice(-300); } }
+  if (Array.isArray(L.designs)) { out.designs = Array.isArray(out.designs) ? out.designs : []; for (const d of L.designs) if (d && !out.designs.some(x => x.id === d.id)) out.designs.push(d); }
   if (Array.isArray(L.alerts)) { out.alerts = Array.isArray(out.alerts) ? out.alerts : []; for (const a of L.alerts) if (a && !out.alerts.some(x => x.id === a.id)) out.alerts.push(a); }
   out.rev = Math.max(Date.now(), (+L.rev || 0), (+remote.rev || 0)) + 1;
   return out;
