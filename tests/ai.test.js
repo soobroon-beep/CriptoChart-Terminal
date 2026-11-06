@@ -35,3 +35,14 @@ test('askClaude: arma la petición y maneja errores', async () => {
   const b = JSON.parse(req.o.body); assert.equal(b.model, 'm'); assert.match(b.system, /cripto/i); assert.match(b.messages.at(-1).content, /DATOS DEL GRÁFICO/); assert.equal(req.o.headers['x-api-key'], 'k');
   global.fetch = async () => ({ok: false, status: 401, json: async () => ({})}); await assert.rejects(() => AI.askClaude({key: 'k'}, ctx, [], 'x', {}), /no es válida/);
 });
+
+test('brief del día: estrategia combinada única y ventana de operación según el calendario', () => {
+  const cs = []; let p = 100; for (let i = 0; i < 300; i++) { const o = p, c = o + Math.sin(i / 7) * .6 + .12; cs.push({t: 1e12 + i * 36e5, o, h: Math.max(o, c) + .3, l: Math.min(o, c) - .3, c, v: 1000 + i}); p = c; }
+  const now = Date.now(), last = cs[299].c;
+  const ctx = {symbol: 'BTC', interval: '1h', candles: cs, change24h: 1, active: [], values: {}, zones: {sup: [], res: []}, vp: null, pine: [], nova: {base: last - 1, top: last - .4, bot: last - 2, osc: -45, sig: -50, flux: 8, adx: 30, ema200: last - 5, smcTrend: 1, last: {side: 'buy', score: 4, ago: 3, price: last, sl: 90, tp1: 110, tp2: 115, tp3: 120}}};
+  const out = AI.briefLocal(ctx, {now, calendar: [{title: 'FOMC Press Conference', country: 'USD', impact: 'High', t: now + 3 * 36e5}], news: [], market: []});
+  assert.match(out, /Estrategia combinada/); assert.doesNotMatch(out, /Estrategia SMC|Estrategia Cloud/);
+  assert.match(out, /¿Cuándo operar\?/); assert.match(out, /opera \*\*después de/); assert.match(out, /Recomendación de hoy/);
+  const W = AI.tradeWindow(AI.calendarFor([{title: 'Core CPI m/m', country: 'USD', impact: 'High', t: now + 36e5}], now), now);
+  assert.equal(W.rows.length, 1); assert.equal(Math.round((W.rows[0].until - W.rows[0].e.t) / 6e4), 30);
+});

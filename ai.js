@@ -198,6 +198,52 @@
     return 'full';
   }
   const HELP = ['Soy tu analista de gráficos cripto. Leo **tu gráfico abierto** (velas, indicadores activados, zonas de Nova Nexus), las **noticias** y el **calendario económico**, y te respondo en español.', '', 'Prueba con:', '- «Analiza el gráfico» · resumen completo', '- «¿Cuál es la tendencia?» · «¿Qué soportes y resistencias ves?»', '- «¿Cómo van mis indicadores?» · «¿Qué dicen las noticias?»', '- «¿Hay eventos del calendario que me afecten?»', '- «¿Qué escenarios ves?» · «¿Cómo manejo el riesgo?»', '- «¿Qué es el RSI?»', '', 'Solo hablo de cripto y de lo que muestran tus datos.'].join('\n');
+  /* ───────── Estrategia combinada (una sola) ─────────
+     Une en un solo puntaje (-100…100) todo lo que tienes: indicadores del gráfico (EMA, MACD, RSI, Bollinger, VWAP, Supertrend…), Nova Nexus
+     (nube EMA, oscilador + señal, flujo de dinero, ADX, última señal IA y estructura SMC) y los scripts de Pine activos. No se calcula Cloud y SMC por separado. */
+  function strategy(ctx, A) {
+    const V = ctx && ctx.nova, pts = [], add = (p, t) => { if (p) pts.push([Math.round(p), t]); };
+    if (V && A) {
+      const px = A.price;
+      if (V.top != null && V.bot != null) add(px > V.top ? 14 : px < V.bot ? -14 : (px >= V.base ? 4 : -4), px > V.top ? 'precio sobre la nube EMA de Nova Nexus' : px < V.bot ? 'precio bajo la nube EMA de Nova Nexus' : 'precio dentro de la nube EMA');
+      if (V.osc != null) { add(V.osc >= 40 ? -8 : V.osc <= -40 ? 8 : 0, V.osc >= 40 ? 'oscilador en sobrecompra (riesgo de giro)' : 'oscilador en sobreventa (posible rebote)'); if (V.sig != null) add(V.osc > V.sig ? 5 : -5, V.osc > V.sig ? 'oscilador por encima de su señal' : 'oscilador por debajo de su señal'); }
+      if (V.flux != null) add(V.flux > 3 ? 6 : V.flux < -3 ? -6 : 0, V.flux > 3 ? 'flujo de dinero comprador' : 'flujo de dinero vendedor');
+      if (V.ema200 != null && V.adx != null) add(V.adx >= 25 ? (px > V.ema200 ? 6 : -6) : 0, V.adx >= 25 ? 'tendencia fuerte (ADX ' + V.adx.toFixed(0) + ') ' + (px > V.ema200 ? 'sobre' : 'bajo') + ' la EMA 200' : '');
+      if (V.smcTrend) add(V.smcTrend > 0 ? 10 : -10, V.smcTrend > 0 ? 'estructura SMC alcista' : 'estructura SMC bajista');
+      if (V.last && V.last.ago <= 15) { const w = (10 + 2 * V.last.score) * (V.last.ago <= 5 ? 1 : .5); add(V.last.side === 'buy' ? w : -w, `señal IA de ${V.last.side === 'buy' ? 'compra' : 'venta'} hace ${V.last.ago} velas (puntaje ${V.last.score}/5)`); }
+    }
+    const nv = pts.reduce((a, b) => a + b[0], 0), score = Math.max(-100, Math.min(100, Math.round((A ? A.score : 0) * .55 + nv * .75)));
+    return {score, nova: pts, novaScore: nv, bias: score >= 40 ? 'alcista fuerte' : score >= 15 ? 'alcista' : score <= -40 ? 'bajista fuerte' : score <= -15 ? 'bajista' : 'neutral / lateral'};
+  }
+  /* Ventana para operar según el calendario: desde qué hora conviene operar después de cada evento. */
+  const hhmm = (t, now) => { const d = new Date(t), same = d.toDateString() === new Date(now).toDateString(); return (same ? 'hoy' : d.toLocaleDateString('es', {weekday: 'short'})) + ' ' + d.toLocaleTimeString('es', {hour: '2-digit', minute: '2-digit', hour12: false}); };
+  function tradeWindow(C, now) {
+    if (!C) return null; const rows = [], hiRe = /fomc|fed|powell|interest rate|rate decision|cpi|nfp|non-?farm|payroll|pce|gdp|ecb|boj|boe/i;
+    const waitMin = e => (hiRe.test(e.title || '') && /fomc|powell|rate decision|interest rate|ecb|boj|boe|fed/i.test(e.title || '')) ? 60 : 30;
+    const ev = C.upcoming.filter(e => e.t - now < 24 * 3600e3).concat((C.recent || []).filter(e => now - e.t < 2 * 3600e3));
+    for (const e of ev) { const hi = C.imp(e) === 2, wait = hi ? waitMin(e) : 15; if (!hi && e.t < now) continue; rows.push({e, hi, from: e.t - (hi ? 30 : 10) * 60e3, until: e.t + wait * 60e3, wait}); }
+    const active = rows.filter(r => r.hi && now >= r.from && now < r.until), nextHi = rows.filter(r => r.hi && r.until > now).sort((a, b) => a.until - b.until)[0] || null;
+    return {rows: rows.sort((a, b) => a.e.t - b.e.t), active, nextHi};
+  }
+  function secWindow(W, C, now) {
+    if (!W || !W.rows.length) return `**¿Cuándo operar?** No hay eventos económicos relevantes en las próximas 24 h: puedes operar con tu plan normal, cuidando el riesgo.`;
+    const L = ['**¿Cuándo operar? (según el calendario económico, hora de tu dispositivo)**'];
+    if (W.active.length) { const a = W.active[0]; L.push(`**Ahora no abras operaciones nuevas:** ${C.name(a.e)} ${a.e.t > now ? 'sale ' + whenStr(a.e.t, now) : 'salió ' + whenStr(a.e.t, now)}. Espera al menos hasta **${hhmm(a.until, now)}** a que cierren las primeras velas de reacción.`); }
+    const grp = []; for (const r of W.rows) { const g = grp.find(x => x.r.e.t === r.e.t && x.r.hi === r.hi); if (g) g.names.push(C.name(r.e)); else grp.push({r, names: [C.name(r.e)]}); }
+    for (const {r, names} of grp.slice(0, 5)) L.push(`- ${r.hi ? '[Alto]' : '[Medio]'} ${names.slice(0, 2).join(' + ')}${names.length > 2 ? ' y ' + (names.length - 2) + ' más' : ''} · ${hhmm(r.e.t, now)}: ${r.hi ? `evita entradas nuevas desde ${hhmm(r.from, now)}; opera **después de ${hhmm(r.until, now)}**` : `cuidado ±15 min, opera después de ${hhmm(r.until, now)}`}.`);
+    L.push('Después del dato, confirma con una vela de 15 min que cierre fuera del rango del movimiento inicial antes de entrar (el primer impulso suele ser una trampa).');
+    return L.join('\n');
+  }
+  function secStrategy(S, A, ctx) {
+    const L = [`**Estrategia combinada (Nova Nexus + todos tus indicadores): ${S.bias}** · puntaje ${S.score > 0 ? '+' : ''}${S.score}/100`];
+    const pos = S.nova.filter(x => x[0] > 0).map(x => x[1]), neg = S.nova.filter(x => x[0] < 0).map(x => x[1]), V = ctx && ctx.nova;
+    if (pos.length) L.push('A favor: ' + pos.slice(0, 5).join(', ') + '.'); if (neg.length) L.push('En contra: ' + neg.slice(0, 5).join(', ') + '.');
+    if (A) { const ap = A.why.filter(w => w[0] > 0).map(w => w[1]).slice(0, 3), an = A.why.filter(w => w[0] < 0).map(w => w[1]).slice(0, 3); if (ap.length) L.push('Indicadores comunes a favor: ' + ap.join(', ') + '.'); if (an.length) L.push('Indicadores comunes en contra: ' + an.join(', ') + '.'); }
+    const pv = (ctx && ctx.pine || []).map(p => (p.plots || []).filter(x => x.value != null).slice(0, 3).map(x => `${x.title}: ${fmt(x.value)}`).join(' · ') && `${p.name} → ${(p.plots || []).filter(x => x.value != null).slice(0, 3).map(x => `${x.title}: ${fmt(x.value)}`).join(' · ')}`).filter(Boolean);
+    if (pv.length) L.push('Tus scripts activos: ' + pv.slice(0, 3).join(' | ') + '.');
+    if (V && V.last && V.last.ago <= 15) L.push(`Última señal IA: **${V.last.side === 'buy' ? 'compra' : 'venta'}** hace ${V.last.ago} velas · SL ${fp(V.last.sl)} · TP1 ${fp(V.last.tp1)} · TP2 ${fp(V.last.tp2)}.`);
+    return L.join('\n');
+  }
   /* Brief del día: mercado cripto en conjunto (amplitud, BTC/ETH), noticias, calendario y el gráfico abierto → inclinación más probable. Educativo, no asesoría. */
   function briefLocal(ctx, extra) {
     extra = extra || {}; const now = extra.now || Date.now(), M = Array.isArray(extra.market) ? extra.market.filter(x => x && Number.isFinite(x.chg24h)) : [];
@@ -219,14 +265,17 @@
       L.push(secCalendar(C, now));
       if (C.soonHigh.length) pts.push([0, 'evento de alto impacto cercano (más volatilidad, dirección incierta)']);
     }
+    const W = tradeWindow(C, now); let S = null;
     if (A) {
-      pts.push([Math.round(A.score * .5), `gráfico ${A.symbol} ${IV_NAME[A.interval] || A.interval} ${A.bias}`]);
-      L.push(`**Tu gráfico (${A.symbol} · ${IV_NAME[A.interval] || A.interval}):** sesgo **${A.bias}** (puntaje ${A.score > 0 ? '+' : ''}${A.score}) · estructura ${A.structure}` + (A.rsi != null ? ` · RSI ${A.rsi.toFixed(0)}` : '') + '.');
+      S = strategy(ctx, A); pts.push([Math.round(S.score * .5), `estrategia combinada ${A.symbol} ${IV_NAME[A.interval] || A.interval}: ${S.bias}`]);
+      L.push(`**Tu gráfico (${A.symbol} · ${IV_NAME[A.interval] || A.interval}):** estructura ${A.structure}` + (A.rsi != null ? ` · RSI ${A.rsi.toFixed(0)}` : '') + '.', secStrategy(S, A, ctx));
       if (A.resists[0] || A.supports[0]) L.push(`Niveles a vigilar: ${A.resists[0] ? 'resistencia ' + fp(A.resists[0].p) : ''}${A.resists[0] && A.supports[0] ? ' · ' : ''}${A.supports[0] ? 'soporte ' + fp(A.supports[0].p) : ''}.`);
     }
     const tot = pts.reduce((a, b) => a + b[0], 0), lean = tot >= 22 ? 'alcista' : tot >= 8 ? 'ligeramente alcista' : tot <= -22 ? 'bajista' : tot <= -8 ? 'ligeramente bajista' : 'lateral / sin ventaja clara';
     L.push('### Hacia dónde se inclina el mercado', `**Lectura: ${lean}** (puntaje combinado ${tot > 0 ? '+' : ''}${tot}).`, 'Factores: ' + (pts.length ? pts.map(p => p[1]).join('; ') : 'datos insuficientes') + '.');
-    L.push(C && C.soonHigh.length ? 'Atención: con un dato macro de alto impacto en menos de 24 h, conviene esperar a la reacción antes de apostar por una dirección.' : 'Si el precio rompe el nivel clave con volumen, la lectura gana fuerza; si lo pierde, se invalida.');
+    L.push(secWindow(W, C, now));
+    if (A && S) { const up = tot >= 8, dn = tot <= -8, r0 = A.resists[0], s0 = A.supports[0], when = W && W.nextHi ? ` **después de ${hhmm(W.nextHi.until, now)}**` : ''; L.push(`### Recomendación de hoy`, up ? `Se favorecen **largos**${when}: busca entrada en retrocesos hacia ${s0 ? fp(s0.p) : 'el soporte cercano'} o confirmación sobre ${r0 ? fp(r0.p) : 'la resistencia cercana'}; si pierde ${s0 ? fp(s0.p) : 'el soporte'} la idea se invalida.` : dn ? `Se favorecen **cortos**${when}: busca entrada en rebotes hacia ${r0 ? fp(r0.p) : 'la resistencia cercana'} o confirmación bajo ${s0 ? fp(s0.p) : 'el soporte cercano'}; si recupera ${r0 ? fp(r0.p) : 'la resistencia'} la idea se invalida.` : `Sin ventaja clara: **espera**${when} a que rompa ${r0 ? fp(r0.p) : 'la resistencia'} o ${s0 ? fp(s0.p) : 'el soporte'} con volumen antes de operar.`, 'Usa stop por ATR y arriesga una fracción pequeña de tu cuenta.'); }
+    else L.push(C && C.soonHigh.length ? 'Atención: con un dato macro de alto impacto en menos de 24 h, conviene esperar a la reacción antes de apostar por una dirección.' : 'Si el precio rompe el nivel clave con volumen, la lectura gana fuerza; si lo pierde, se invalida.');
     return L.join('\n\n') + '\n\n' + DISC;
   }
   function answerLocal(question, ctx, extra) {
@@ -247,12 +296,12 @@
 ALCANCE: solo el sector cripto (criptomonedas, mercado cripto, análisis técnico del gráfico del usuario, noticias y eventos macro que lo afectan). Si te piden otra cosa, explica amablemente que solo atiendes cripto y reconduce.
 BASE: cada afirmación debe apoyarse en los DATOS que se te entregan (velas, indicadores activados por el usuario, zonas, noticias, calendario). Cita el indicador o nivel concreto. Si un dato no está, dilo; no inventes precios, niveles, noticias ni cifras.
 ESTILO: claro y directo, con listas cortas; incluye niveles de invalidación y relación beneficio/riesgo cuando propongas escenarios; menciona la incertidumbre y los eventos de calendario cercanos. Nunca prometas resultados ni des órdenes de compra/venta: presenta escenarios educativos. Cierra análisis de operaciones con una línea breve: «Análisis educativo, no asesoría financiera.»
-BRIEF DEL DÍA: si piden un «brief», resume el mercado cripto de hoy (amplitud, BTC/ETH, noticias, calendario económico y el gráfico abierto), y termina con una sección «Hacia dónde se inclina el mercado» con tu lectura más probable (alcista, bajista o lateral), los factores que la sostienen y qué la invalidaría. No des certezas.
+BRIEF DEL DÍA: si piden un «brief», resume el mercado cripto de hoy (amplitud, BTC/ETH, noticias, calendario económico y el gráfico abierto), usa UNA sola estrategia combinada (campo estrategia_combinada y nova_nexus: nube EMA, oscilador, flujo, ADX, señal IA, SMC junto con los demás indicadores; no calcules Cloud y SMC por separado), indica desde qué hora conviene operar según los eventos de alto impacto del calendario (normalmente 30–60 min después del dato, esperando velas de reacción) y termina con una sección «Hacia dónde se inclina el mercado» con tu lectura más probable (alcista, bajista o lateral), los factores que la sostienen y qué la invalidaría. No des certezas.
 FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo que pidan más detalle.`;
   function compactContext(ctx, A, extra) {
     const now = extra.now || Date.now(), N = newsFor(extra.news, ctx.symbol, now), C = calendarFor(extra.calendar, now), r = x => x == null ? null : +(+x).toPrecision(7);
     return JSON.stringify({activo: ctx.symbol, marco: ctx.interval, precio: r(ctx.candles[ctx.candles.length - 1].c), cambio24h_pct: ctx.change24h,
-      indicadores_activos: ctx.active, valores: ctx.values, zonas: ctx.zones, perfil_volumen: ctx.vp, scripts_pine: ctx.pine,
+      indicadores_activos: ctx.active, valores: ctx.values, nova_nexus: ctx.nova, estrategia_combinada: A && (() => { const S = strategy(ctx, A); return {puntaje: S.score, sesgo: S.bias, factores_nova: S.nova.map(x => x[1])}; })(), zonas: ctx.zones, perfil_volumen: ctx.vp, scripts_pine: ctx.pine,
       analisis_calculado: A && {sesgo: A.bias, puntaje: A.score, confianza: A.confidence, estructura: A.structure, rsi: r(A.rsi), macd_hist: r(A.macd.hist), ema20: r(A.ema20), ema50: r(A.ema50), sma200: r(A.sma200), atr: r(A.atr), volumen_vs_prom: r(A.volRatio), soportes: A.supports.map(s => [r(s.p), s.k]), resistencias: A.resists.map(s => [r(s.p), s.k]), notas: A.notes, plan: A.plan},
       ultimas_velas_OHLCV: ctx.candles.slice(-60).map(c => [c.t, r(c.o), r(c.h), r(c.l), r(c.c), r(c.v)]),
       noticias: N && N.top.map(i => ({titulo: i.title, fuente: i.src, hace_min: Math.round((now - i.t) / 6e4), tono: i.s, impacto: i.impact})),
@@ -272,7 +321,7 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
     } finally { clearTimeout(to); }
   }
 
-  const api = {analyze, briefLocal, answerLocal, intent, newsFor, calendarFor, sentiment, compactContext, askClaude, SYSTEM, ema, rsi, macd, atr, swings, fmt, trCal, GLOSS};
+  const api = {analyze, strategy, tradeWindow, briefLocal, answerLocal, intent, newsFor, calendarFor, sentiment, compactContext, askClaude, SYSTEM, ema, rsi, macd, atr, swings, fmt, trCal, GLOSS};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTAICore = api;
   if (typeof document === 'undefined') return;

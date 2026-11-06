@@ -4710,8 +4710,17 @@ window.CCT_getAIContext = function () {
     const table = []; for (const t of (r.tables || []).slice(0, 3)) { const rows = {}; for (const c of t.cells || []) { if (c.text == null || String(c.text).trim() === '') continue; (rows[c.r] = rows[c.r] || []).push(String(c.text).replace(/\s+/g, ' ').trim().slice(0, 40)); } Object.keys(rows).sort((a, b) => a - b).slice(0, 14).forEach(k => table.push(rows[k].join(': '))); }
     return {name: String((sc && sc.name) || (r.meta && r.meta.title) || 'Script').slice(0, 40), plots, table};
   }).filter(Boolean).slice(0, 6);
+  let nova = null; // lectura de Nova Nexus (nube EMA, oscilador, flujo, ADX, señal IA, SMC) calculada siempre, aunque los módulos no estén encendidos
+  try {
+    if (window.NovaNexus && n >= 60) {
+      const NP = novaP, r = NovaNexus.compute(candles, {smc: true, emaLen: NP('emaLen'), emaMult: NP('emaMult'), minScore: NP('minScore'), cooldown: NP('cooldown'), cdBoth: NP('cdBoth'), slMult: NP('slMult'), tp1Mult: NP('tp1'), tp2Mult: NP('tp2'), tp3Mult: NP('tp3'), tpBars: NP('tpBars'), smcOpts: {mslen: NP('smcLen'), window: NP('smcWindow'), swingLimit: NP('smcSwing'), sweep: NP('smcSweep'), oblast: NP('obLast'), obmiti: NP('obMiti')}}), i = n - 1, sg = r.last;
+      nova = {base: lastV(r.emaBase), top: lastV(r.emaTop), bot: lastV(r.emaBot), osc: lastV(r.osc), sig: null, flux: lastV(r.flux), adx: lastV(r.adx), ema200: lastV(r.ema200), smcTrend: r.smc ? r.smc.trend : 0,
+        last: sg ? {side: sg.side, score: sg.score, div: !!sg.div, ago: i - sg.i, price: sg.price, sl: sg.sl, tp1: sg.tp1, tp2: sg.tp2, tp3: sg.tp3} : null};
+      if (r.osc && n >= 4) { const a = r.osc.slice(-3).filter(Number.isFinite); if (a.length === 3) nova.sig = a[0] / 3 + a[1] / 3 + a[2] / 3; } // media de 3 del oscilador = línea de señal
+    }
+  } catch (e) { nova = null; }
   const tk = tickers[state.symbol];
-  return {symbol: symOf(state.symbol), exchange: exName(state.symbol), interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine};
+  return {nova, symbol: symOf(state.symbol), exchange: exName(state.symbol), interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine};
 };
 /* ───────── Divisiones: de 1 a 5 gráficos ─────────
    Cada gráfico extra es la misma app dentro de un iframe (con su propio activo, temporalidad e indicadores). 3, 4 y 5 gráficos solo en pantallas anchas. */
