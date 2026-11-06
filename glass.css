@@ -487,3 +487,10 @@ button.brand-fab,button.brand-icon{background:none;border:0;padding:0;cursor:poi
   .light .right-rail .rr-btn::before{background:rgba(255,255,255,.55);border-color:rgba(20,40,80,.18);box-shadow:0 6px 18px rgba(20,40,80,.2),inset 0 1px 0 rgba(255,255,255,.8)}
   .right-rail .rr-btn:hover{background:none}
 }
+
+/* Círculo del dock: liquid glass minimalista y plano (como el botón de favoritos), sin reflejos */
+@media(min-width:1024px){
+  .right-rail .rr-btn::before{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);
+    -webkit-backdrop-filter:blur(16px) saturate(150%);backdrop-filter:blur(16px) saturate(150%);box-shadow:0 4px 14px rgba(0,0,0,.25)}
+  .light .right-rail .rr-btn::before{background:rgba(20,40,80,.06);border-color:rgba(20,40,80,.12);box-shadow:0 4px 12px rgba(20,40,80,.12)}
+}
