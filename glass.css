@@ -473,3 +473,6 @@ button.brand-fab,button.brand-icon{background:none;border:0;padding:0;cursor:poi
 /* Colores de clasificación en Mi seguimiento (se habían tapado con el estilo minimalista) */
 #watchRows .watch-row.tagged:not(.sec-head):not(.sec-row){background:linear-gradient(90deg,color-mix(in srgb,var(--tag) 22%,transparent),color-mix(in srgb,var(--tag) 4%,transparent) 70%,transparent);box-shadow:inset 3px 0 0 var(--tag);border-bottom-color:color-mix(in srgb,var(--tag) 25%,transparent)}
 #watchRows .watch-row.tagged:not(.sec-head):not(.sec-row):hover{background:linear-gradient(90deg,color-mix(in srgb,var(--tag) 30%,transparent),color-mix(in srgb,var(--tag) 8%,transparent) 70%,transparent);box-shadow:inset 3px 0 0 var(--tag)}
+
+/* Celular: sin los botones A / − / + sobre el gráfico (se usa pellizcar y las barras de escala) */
+@media(max-width:1023px){.chart-controls{display:none!important}}
