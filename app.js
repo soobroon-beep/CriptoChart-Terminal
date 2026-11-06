@@ -2540,7 +2540,12 @@ function renderCore() {
   const paneOf = x => x.p.pane || (x.r.meta.overlay ? 'main' : 'bottom'); // dónde se dibuja cada script: sobre el precio, en un panel arriba o en un panel abajo
   const pOver = pr.filter(x => paneOf(x) === 'main'), pSub = pr.filter(x => paneOf(x) === 'bottom'), pTop = pr.filter(x => paneOf(x) === 'top');
   const SH = symHeadH(); document.getElementById('chartArea').style.setProperty('--sh', SH + 'px'); // la franja con el nombre y el precio de la moneda va arriba del gráfico
-  const left = 6, right = 64, axisH = 22, top0 = 6;
+  const left = 6, axisH = 22, top0 = 6; let right = 64;
+  if (!deskMQ.matches && candles.length) { // celular: la columna de precios solo tan ancha como sus números (poco margen)
+    g.font = '10px system-ui'; const lc = candles[candles.length - 1].c; let mw = 0;
+    for (const v of [lc, lc * 1.02, lc * .98]) mw = Math.max(mw, g.measureText(fmt(v)).width);
+    right = Math.max(38, Math.min(64, Math.ceil(mw) + 11));
+  }
   const psc = paneScale, hasTbl = prAll.some(x => x.r.tables && x.r.tables.length && !x.r.plots.length && !(x.r.shapes || []).length && !x.p.hide), rsiH0 = stdOn('rsi') ? Math.round(Math.max(70, h * (hasTbl ? .1 : .16))) : 0, volH0 = 0; // el volumen ya no tiene panel propio: se dibuja sobre las velas, abajo del gráfico
   const cap = Math.max(40, h - axisH - 80 - top0); let rsiH = rsiH0 && paneH.rsi ? clamp(paneH.rsi, 40, cap) : rsiH0, volH = volH0 && paneH.vol ? clamp(paneH.vol, 36, cap) : volH0;
   const panelKeys = [...PANELS.filter(k => stdOn(k) && ind[k]), ...pSub.map(x => 'pine:' + x.p.sid)];
