@@ -15,6 +15,17 @@
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="glass.css">
 <link rel="stylesheet" href="pwa.css">
+<script>/* Alto real de la pantalla: al abrir/recargar la app en el celular el navegador a veces calcula un alto mayor al visible y la barra de abajo queda fuera. Se mide y se corrige. */
+(function () {
+  var r = document.documentElement, vv = window.visualViewport;
+  function fit() {
+    var a = document.activeElement; if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && document.hasFocus()) return; // con el teclado abierto no se reajusta
+    var h = Math.round((vv && vv.height) || innerHeight); if (h > 200) r.style.setProperty('--app-h', h + 'px');
+    if (window.scrollY || r.scrollTop) scrollTo(0, 0);
+  }
+  fit(); ['resize', 'orientationchange', 'pageshow', 'focus', 'visibilitychange'].forEach(function (e) { addEventListener(e, fit); });
+  if (vv) vv.addEventListener('resize', fit); [60, 300, 900, 2000].forEach(function (ms) { setTimeout(fit, ms); });
+})();</script>
 </head>
 <body>
 <div id="app">

@@ -497,3 +497,6 @@ button.brand-fab,button.brand-icon{background:none;border:0;padding:0;cursor:poi
 
 /* Dock derecho: solo crece el icono, sin círculo */
 .right-rail .rr-btn::before{content:none!important;display:none!important}
+
+/* Celular: el alto de la app es el alto real medido (ver script en index.html), así la barra de abajo siempre queda dentro de la pantalla */
+@media(max-width:1023px){#app{height:var(--app-h,100dvh)}}
