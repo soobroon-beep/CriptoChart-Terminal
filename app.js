@@ -2766,6 +2766,10 @@ function renderCore() {
   g.fillStyle = priceMan ? '#548fff' : text; g.globalAlpha = priceMan ? .95 : .55;
   roundRect(w - 7, plotTop + plotH / 2 - 22, 4, 44, 2); g.fill();
   g.fillStyle = text; g.globalAlpha = .55; roundRect(left + plotW / 2 - 22, h - 6, 44, 4, 2); g.fill(); g.globalAlpha = 1;
+  // alertas de precio activas: línea punteada casi invisible en su nivel
+  { g.save(); g.strokeStyle = text; g.globalAlpha = .28; g.lineWidth = 1; g.setLineDash([2, 5]);
+    for (const a of state.alerts) { if (a.kind === 'ind' || !a.on || a.symbol !== state.symbol) continue; const ay = Math.round(Y(a.price)) + .5; if (!(ay > plotTop && ay < plotTop + plotH)) continue; g.beginPath(); g.moveTo(left, ay); g.lineTo(w - right, ay); g.stroke(); }
+    g.restore(); }
   // etiqueta de último precio
   const lastC = candles[n - 1], ly = Y(lastC.c);
   if (ly > plotTop && ly < plotTop + plotH) {
