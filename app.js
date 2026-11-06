@@ -979,9 +979,9 @@ async function loadCandles(silent = false) {
     candles = r.cs; dataSrc = r.src;
     recalc();
     if (!silent) { stopMotion(); visible = defaultVisible(); pan = 0; const ca = $('#chartArea'); if (ca) { ca.classList.remove('swap-in'); void ca.offsetWidth; ca.classList.add('swap-in'); } }
-    setFeedback(''); updateChartHeader(); render(); connectWS();
+    setFeedback(''); updateChartHeader(); render(); connectWS(); return true;
   } catch (e) {
-    if (e.name === 'AbortError') return;
+    if (e.name === 'AbortError') return false;
     if (!silent && srcOf(sym) === 'dom') { setFeedback(e.message || 'Sin datos de dominancia'); render(); return; }
     if (!silent) { setFeedback(`No se pudieron cargar las velas de ${SOURCES[srcOf(sym)] || 'Binance'}${srcOf(sym) !== 'binance' ? ' ni de Binance Spot' : ''}. No se muestran datos simulados.`); render(); }
   }
@@ -3676,6 +3676,7 @@ function designsOp(m) { // en el gráfico principal: cambia la lista y guarda; e
   else if (m.op === 'upd') l = l.map(x => x.id === m.id ? {...x, t: Date.now(), snap: m.snap} : x);
   state.designs = sanDesigns(l); save(); persistLocal(); if (document.querySelector('.dz-back')) renderDesigns();
 }
+if (PANE) window.addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.cct === 'refresh') { closeWS(); loadCandles(true); fetchTicker(); } });
 if (!PANE) window.addEventListener('message', e => { const m = e.data; if (e.origin !== location.origin || !m || m.cct !== 'designs' || !['add', 'del', 'ren', 'upd'].includes(m.op)) return; designsOp({op: m.op, id: typeof m.id === 'string' ? m.id : '', name: m.name, snap: m.snap}); });
 function renderDesigns() {
   const box = document.querySelector('.dz-box .dz-list'); if (!box) return; const list = designsList();
@@ -4589,7 +4590,12 @@ async function forceSync() {
     } else msg = 'Guardado en este dispositivo. Inicia sesión para guardarlo también en tu cuenta';
     pineKey = ''; try { applyUi(); } catch {}
     renderWatch(); renderIndicators(); countIndicators(); renderAlerts(); renderAccount();
-    if (online) await Promise.allSettled([loadCandles(true), fetchTicker(), loadSparks()]); // velas nuevas + reconecta el tiempo real
+    if (online) { // actualiza el gráfico de verdad: corta el tiempo real (puede haberse quedado colgado), baja las velas más recientes y reconecta
+      closeWS(); const hang = setTimeout(() => { if (fetchCtl) fetchCtl.abort(); }, 12000);
+      const [cr] = await Promise.allSettled([loadCandles(true), fetchTicker(), loadSparks()]); clearTimeout(hang);
+      if (!(cr.status === 'fulfilled' && cr.value)) { connectWS(); if (candles.length) msg = 'Guardado, pero no se pudo actualizar el gráfico: revisa tu conexión'; }
+      document.querySelectorAll('iframe').forEach(f => { try { f.contentWindow.postMessage({cct: 'refresh'}, location.origin); } catch {} }); // los gráficos de al lado también
+    }
     schedulePine(); scheduleRender(); updateChartHeader();
   } catch (e) { msg = 'No se pudo completar: ' + (e && (e.code || e.message) || 'error'); }
   const left = 1800 - (Date.now() - t0); if (left > 0) await new Promise(r => setTimeout(r, left)); // la animación se ve completa aunque el guardado sea rápido
