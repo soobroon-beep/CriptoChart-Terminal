@@ -460,3 +460,12 @@ button.brand-fab,button.brand-icon{background:none;border:0;padding:0;cursor:poi
 #watchRows .wl-sec .wl-sec-ed{opacity:.45}
 #watchRows .wl-sec:hover .wl-sec-ed,#watchRows .wl-sec .wl-sec-ed:focus-within{opacity:1}
 @media(max-width:760px){#watchView .head-actions{gap:6px}#watchView .head-actions .small-button{padding:9px 12px;font-size:13px;border-radius:12px}#watchView .view-head h1{font-size:26px}}
+
+/* Favoritos (móvil): liquid glass minimalista — cristal liso, sin reflejos ni luz arriba */
+.fav-fab,.favbar.fb-mobile{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);
+  -webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);box-shadow:0 6px 20px rgba(0,0,0,.28)}
+.fav-fab svg{filter:none;stroke-width:1.6}
+.fav-fab.open,.fav-fab.drag{box-shadow:0 8px 24px rgba(0,0,0,.34);background:rgba(255,255,255,.12)}
+.fav-fab.open svg{fill:none}
+.favbar.fb-mobile .fb-btn{color:rgba(255,255,255,.78)}
+.favbar.fb-mobile .fb-btn.on{background:rgba(255,255,255,.16);box-shadow:none;color:#fff}
