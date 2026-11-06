@@ -384,15 +384,14 @@ function renderWatch() {
   state.groups.forEach((g, gi) => {
     const items = list.filter(s => grpOf(s) === g.id), open = q || !g.collapsed;
     if (!items.length && q) return;
-    html.push(`<div class="wl-sec ${g.collapsed ? 'closed' : ''}" data-sec="${g.id}"><span class="sec-grip" title="Arrastra para mover la sección" aria-label="Mover sección">⠿</span><button class="wl-sec-t" data-tog="${g.id}" aria-expanded="${!g.collapsed}"><span class="wl-car">▾</span><span class="wl-nm">${esc(g.name)}</span><small>${items.length}</small></button>${editMode ? `<span class="wl-sec-ed"><button data-secmv="-1" data-sid="${g.id}" aria-label="Subir sección" ${gi === 0 ? 'disabled' : ''}>▲</button><button data-secmv="1" data-sid="${g.id}" aria-label="Bajar sección" ${gi === state.groups.length - 1 ? 'disabled' : ''}>▼</button><button data-secren="${g.id}" aria-label="Renombrar sección">✎</button><button data-secdel="${g.id}" class="danger" aria-label="Eliminar sección">✕</button></span>` : ''}</div>`);
+    html.push(`<div class="wl-sec ${g.collapsed ? 'closed' : ''}" data-sec="${g.id}"><span class="sec-grip" title="Arrastra para mover la sección" aria-label="Mover sección">⠿</span><button class="wl-sec-t" data-tog="${g.id}" aria-expanded="${!g.collapsed}"><span class="wl-car">▾</span><span class="wl-nm">${esc(g.name)}</span><small>${items.length}</small></button>${true ? `<span class="wl-sec-ed"><button hidden data-secmv="-1" data-sid="${g.id}" aria-label="Subir sección" ${gi === 0 ? 'disabled' : ''}>▲</button><button hidden data-secmv="1" data-sid="${g.id}" aria-label="Bajar sección" ${gi === state.groups.length - 1 ? 'disabled' : ''}>▼</button><button data-secren="${g.id}" aria-label="Renombrar sección">✎</button><button data-secdel="${g.id}" class="danger" aria-label="Eliminar sección">✕</button></span>` : ''}</div>`);
     if (open) html.push(items.map(watchRow).join('') || (editMode ? '<p class="small-note wl-empty">Sección vacía: arrastra aquí o elige la sección en cada activo.</p>' : ''));
   });
   $('#watchRows').innerHTML = html.join('') || '<p class="small-note">No hay activos con ese nombre.</p>';
   $('#totalAssets').textContent = state.symbols.length;
   $('#winners').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) > 0).length;
   $('#losers').textContent = state.symbols.filter(s => Number(tickers[s]?.priceChangePercent) < 0).length;
-  $('#editWatch').textContent = editMode ? 'Listo' : 'Editar';
-  const as = $('#addSection'); if (as) as.hidden = !editMode;
+  const as = $('#addSection'); if (as) as.hidden = false;
 }
 const moveInGroup = (k, dir) => { const g = grpOf(k), idx = state.symbols.map((x, i) => grpOf(x) === g ? i : -1).filter(i => i >= 0), p = idx.indexOf(state.symbols.indexOf(k)), o = idx[p + dir]; if (o === undefined) return; const i = state.symbols.indexOf(k); [state.symbols[i], state.symbols[o]] = [state.symbols[o], state.symbols[i]]; };
 const newSecId = () => 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36);
@@ -493,7 +492,6 @@ $('#watchRows').addEventListener('change', e => { const sel = e.target.closest('
 let suppressClick = 0;
 $('#watchRows').addEventListener('contextmenu', e => { const r = e.target.closest('.watch-row[data-symbol]'); if (!r || e.pointerType === 'touch' || $('#watchRows').classList.contains('wl-dragging')) return; e.preventDefault(); openTagPop(r.dataset.symbol, e.clientX, e.clientY); });
 $('#addSection').onclick = () => { const n = prompt('Nombre de la sección (por ejemplo: BingX)'); if (!n || !n.trim()) return; state.groups.push({id: newSecId(), name: n.trim().slice(0, 40), collapsed: false}); save(); renderWatch(); };
-$('#editWatch').onclick = () => { editMode = !editMode; renderWatch(); };
 
 async function fetchTicker() {
   try {
@@ -655,10 +653,11 @@ $('#alertsView').addEventListener('click', e => {
    Solo avisa, no opera. Se calcula con precios reales de Binance Spot; sin datos no se inventa nada. */
 const MOVE_WIN = [[300000, '5 min', 1], [3600000, '1 h', 2.5]], MOVE_COOL = 900000, MOVE_LOG_KEY = 'cct_move_log_v1';
 const moveBuf = {}, moveLast = {}; let moveLog = (() => { try { const a = JSON.parse(lsGet(MOVE_LOG_KEY) || '[]'); return Array.isArray(a) ? a.slice(0, 30) : []; } catch { return []; } })();
+const MOVE_TOP = ['BTC', 'ETH', 'BNB', 'XRP', 'SOL']; // los avisos de movimientos bruscos son solo del top 5 por capitalización (sin stablecoins); el Screener sigue revisando todas
 function moveCheck(sym, price, now) {
   const b = moveBuf[sym] || (moveBuf[sym] = []); b.push([now, price]);
   while (b.length && now - b[0][0] > 3720000) b.shift();
-  const M = state.moveAlerts || {}; if (!M.on) return;
+  const M = state.moveAlerts || {}; if (!M.on || !MOVE_TOP.includes(baseOnly(sym))) return;
   for (const [W, lbl, mult] of MOVE_WIN) {
     const start = b.find(x => x[0] >= now - W); if (!start || now - start[0] < W * 0.6) continue; // todavía no hay historia suficiente
     const ch = (price / start[1] - 1) * 100, thr = M.pct * mult; if (!Number.isFinite(ch) || Math.abs(ch) < thr) continue;
@@ -688,7 +687,7 @@ function renderMoveAlerts() {
   const near = MOVE_LEVELS.reduce((a, l) => Math.abs(l[0] - M.pct) < Math.abs(a[0] - M.pct) ? l : a);
   const sv = p => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px">${p}</svg>`; // (SV aún no existe cuando esto corre por primera vez)
   const ic = d => d === 'up' ? sv('<path d="M5 15l5-5 3 3 6-7"/><path d="M15 6h4v4"/>') : sv('<path d="M5 9l5 5 3-3 6 7"/><path d="M15 18h4v-4"/>');
-  box.innerHTML = `<div class="setting-row"><div><b>Avisar movimientos bruscos</b><small>Sube o cae fuerte en minutos: recibes aviso de tu seguimiento</small></div><button class="toggle ${M.on ? 'on' : ''}" id="moveOn" type="button" aria-label="Avisos de movimientos bruscos" aria-pressed="${!!M.on}"></button></div>`
+  box.innerHTML = `<div class="setting-row"><div><b>Avisar movimientos bruscos</b><small>Sube o cae fuerte en minutos: solo del top 5 (BTC, ETH, BNB, XRP, SOL)</small></div><button class="toggle ${M.on ? 'on' : ''}" id="moveOn" type="button" aria-label="Avisos de movimientos bruscos" aria-pressed="${!!M.on}"></button></div>`
     + (M.on ? `<div class="setting-row"><div><b>Sensibilidad</b><small>También avisa si pasa ±${(M.pct * 2.5).toFixed(M.pct * 2.5 % 1 ? 1 : 0)} % en 1 hora</small></div><select id="moveLvl" class="pane-sel" aria-label="Sensibilidad">${MOVE_LEVELS.map(l => `<option value="${l[0]}" ${l[0] === near[0] ? 'selected' : ''}>${l[1]}</option>`).join('')}</select></div>
       <div class="setting-row"><div><b>Sonido y vibración</b><small>Además del mensaje en pantalla</small></div><button class="toggle ${M.sound !== false ? 'on' : ''}" id="moveSnd" type="button" aria-label="Sonido y vibración" aria-pressed="${M.sound !== false}"></button></div>` : '')
     + (moveLog.length ? `<div class="section-label">ÚLTIMOS AVISOS</div>` + moveLog.slice(0, 8).map(x => `<div class="setting-row move-row ${x.d}"><div><b>${ic(x.d)} ${esc(base(x.s))} ${x.c > 0 ? '+' : ''}${x.c}% en ${esc(x.w)}</b><small>${new Date(x.t).toLocaleString()} · ${fmt(x.p)}</small></div></div>`).join('') : '');
