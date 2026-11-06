@@ -285,9 +285,15 @@ function onLayoutChange() {
 if (deskMQ.addEventListener) deskMQ.addEventListener('change', onLayoutChange);
 
 /* ───────── 1 · Seguimiento ───────── */
+/* Fotos de las criptomonedas: logo real desde un CDN público (CoinCap, y de respaldo el set cryptocurrency-icons); si ninguno existe se queda la inicial de siempre */
+const COIN_SRC = [b => `https://assets.coincap.io/assets/icons/${b}@2x.png`, b => `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/${b}.png`];
+const coinKey = b => { b = String(b || '').toLowerCase().replace(/^(?:1000000|1000|1m)(?=[a-z])/, ''); return /^[a-z0-9]{1,12}$/.test(b) ? b : ''; };
+const coinImg = b => { const k = coinKey(b); return k ? `<img class="coin-img" src="${COIN_SRC[0](k)}" data-k="${k}" data-i="0" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''; };
+document.addEventListener('error', e => { const im = e.target; if (!im || !im.classList || !im.classList.contains('coin-img')) return; const i = +im.dataset.i + 1; if (i < COIN_SRC.length) { im.dataset.i = i; im.src = COIN_SRC[i](im.dataset.k); } else im.remove(); }, true);
+document.addEventListener('load', e => { const im = e.target; if (im && im.classList && im.classList.contains('coin-img') && im.naturalWidth > 1) im.parentNode.classList.add('has-img'); }, true);
 function coinBadge(s) {
   const b = baseOnly(s);
-  return `<span class="coin-icon ${b === 'ETH' ? 'eth' : b === 'SOL' ? 'sol' : b === 'BNB' ? 'bnb' : b === 'XRP' ? 'xrp' : b === 'BTC' ? '' : 'other'}">${esc(meta(s)[1])}</span>`;
+  return `<span class="coin-icon ${b === 'ETH' ? 'eth' : b === 'SOL' ? 'sol' : b === 'BNB' ? 'bnb' : b === 'XRP' ? 'xrp' : b === 'BTC' ? '' : 'other'}">${esc(meta(s)[1])}${b.endsWith('.D') ? '' : coinImg(b)}</span>`;
 }
 /* Mini gráficos (sparklines) de la lista: últimas 24 h con velas de 30 min de Binance Spot (49 puntos: la apertura de la primera vela y el cierre de cada una).
    El último punto se sustituye por el precio en vivo del ticker. Verde si la moneda sube en 24 h, rojo si baja (el mismo signo que el % de la fila). Sin datos no se dibuja nada inventado. */
@@ -909,7 +915,7 @@ function updateChartHeader() {
   const b = base(state.symbol), t = tickers[state.symbol];
   const last = candles.length ? candles[candles.length - 1].c : Number(t?.lastPrice);
   const ch = Number(t?.priceChangePercent);
-  $('#coinIcon').textContent = meta(state.symbol)[1];
+  { const ci = $('#coinIcon'), sb = baseOnly(state.symbol), key = state.symbol; if (ci.dataset.k !== key) { ci.dataset.k = key; ci.classList.remove('has-img'); ci.innerHTML = esc(meta(state.symbol)[1]) + (sb.endsWith('.D') || srcOf(state.symbol) === 'dom' ? '' : coinImg(sb)); } }
   $('#coinTitle').textContent = pairLbl(state.symbol).replace('/', ' / '); { const sl = $('#srcLabel'); if (sl) sl.textContent = (SOURCES[dataSrc || srcOf(state.symbol)] || 'Binance Spot').toUpperCase() + ' ▾'; }
   $('#chartLabel').textContent = symOf(state.symbol);
   $('#intervalLabel').textContent = state.interval;
@@ -1497,7 +1503,7 @@ let symOpen = false, symMode = 'select', symTab = 'all', symExp = 'vol', symSel 
 const SYM_TABS = [['all', 'Todos'], ['crypto', 'Cripto'], ['dom', 'Dominancia'], ['fav', 'Mi seguimiento']];
 const SYM_EXP = [['vol', 'Más volumen'], ['up', 'Suben hoy'], ['down', 'Bajan hoy']];
 const symName = b => (catalog[b] || [(window.CCTMarkets && CCTMarkets.DOM_NAMES[b]) || ''])[0];
-const symIcon = b => `<span class="coin-icon ${b === 'ETH' ? 'eth' : b === 'SOL' ? 'sol' : b === 'BNB' ? 'bnb' : b === 'XRP' ? 'xrp' : b === 'BTC' ? '' : 'other'}">${esc(b.endsWith('.D') ? 'D' : (catalog[b] || [0, b.slice(0, 1)])[1])}</span>`;
+const symIcon = b => `<span class="coin-icon ${b === 'ETH' ? 'eth' : b === 'SOL' ? 'sol' : b === 'BNB' ? 'bnb' : b === 'XRP' ? 'xrp' : b === 'BTC' ? '' : 'other'}">${esc(b.endsWith('.D') ? 'D' : (catalog[b] || [0, b.slice(0, 1)])[1])}${b.endsWith('.D') ? '' : coinImg(b)}</span>`;
 const symPx = r => Number.isFinite(r.last) ? fmt(r.last) + (r.src === 'dom' ? '%' : '') : '—';
 const symChg = r => Number.isFinite(r.chg) ? `<small class="${r.chg >= 0 ? 'positive' : 'negative'}">${r.chg >= 0 ? '▲' : '▼'} ${Math.abs(r.chg).toFixed(2)}%</small>` : '<small>—</small>';
 function symBuild() {
