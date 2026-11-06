@@ -476,3 +476,14 @@ button.brand-fab,button.brand-icon{background:none;border:0;padding:0;cursor:poi
 
 /* Celular: sin los botones A / − / + sobre el gráfico (se usa pellizcar y las barras de escala) */
 @media(max-width:1023px){.chart-controls{display:none!important}}
+
+/* Barra derecha (PC): al pasar el ratón, el icono crece dentro de un círculo de cristal (liquid glass) */
+@media(min-width:1024px){
+  .right-rail .rr-btn::before{content:'';position:absolute;inset:0;border-radius:50%;pointer-events:none;z-index:-1;
+    opacity:calc((var(--dk,1) - 1) * 1.6);transform:scale(calc(1 + (var(--dk,1) - 1) * .32));
+    background:radial-gradient(120% 120% at 30% 20%,rgba(255,255,255,.2),rgba(255,255,255,.05) 55%),rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.3);-webkit-backdrop-filter:blur(14px) saturate(170%);backdrop-filter:blur(14px) saturate(170%);
+    box-shadow:0 6px 18px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.4)}
+  .light .right-rail .rr-btn::before{background:rgba(255,255,255,.55);border-color:rgba(20,40,80,.18);box-shadow:0 6px 18px rgba(20,40,80,.2),inset 0 1px 0 rgba(255,255,255,.8)}
+  .right-rail .rr-btn:hover{background:none}
+}
