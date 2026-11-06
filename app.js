@@ -418,14 +418,20 @@ $('#watchRows').addEventListener('change', e => { const sel = e.target.closest('
     if (!st.on) { if (Math.hypot(e.clientX - st.x, e.clientY - st.y) > 9) clear(); return; } // se movió antes del tiempo: era un desplazamiento
     e.preventDefault(); st.ghost.style.top = (e.clientY - st.dy) + 'px';
     $$('#watchRows .drop-before, #watchRows .drop-after, #watchRows .drop-on').forEach(x => x.classList.remove('drop-before', 'drop-after', 'drop-on'));
-    if (st.sec) { // una sección se suelta en cualquier parte de otra (encabezado o monedas): se coloca antes o después de ese bloque completo
+    if (st.sec) { // una sección se puede soltar ENTRE las monedas (incluso entre las sueltas de arriba) o antes/después de otra sección
+      const scr = () => { const sc2 = box.closest('.view'); if (sc2) { const vr = sc2.getBoundingClientRect(); if (e.clientY < vr.top + 50) sc2.scrollTop -= 10; else if (e.clientY > vr.bottom - 50) sc2.scrollTop += 10; } };
+      const tc = target(e.clientX, e.clientY);
+      if (tc && !tc.classList.contains('wl-sec') && tc.dataset.symbol && grpOf(tc.dataset.symbol) !== st.key) { // sobre una moneda: la sección queda justo antes o después de ella
+        const rc = tc.getBoundingClientRect(), after = e.clientY > rc.top + rc.height / 2;
+        st.drop = {sec: true, coin: tc.dataset.symbol, after}; tc.classList.add(after ? 'drop-after' : 'drop-before'); scr(); return;
+      }
+      if (tc && !tc.classList.contains('wl-sec')) { st.drop = null; scr(); return; } // sobre sus propias monedas: nada
       const kids = [...box.children], blocks = []; let cur = null;
       for (const k of kids) { const r0 = k.getBoundingClientRect(); if (k.classList.contains('wl-sec')) { cur = {head: k, top: r0.top, bottom: r0.bottom}; blocks.push(cur); } else if (cur) cur.bottom = r0.bottom; }
       const others = blocks.filter(b => b.head !== st.el), idx = others.filter(b => e.clientY > (b.top + b.bottom) / 2).length;
       st.drop = {sec: true, idx, others: others.map(b => b.head.dataset.sec)};
       if (idx < others.length) others[idx].head.classList.add('drop-before'); else if (others.length) { const last = others[others.length - 1].head, lk = kids.filter(k => k !== st.el); const tail = lk[lk.length - 1]; (tail || last).classList.add('drop-after'); }
-      const sc2 = box.closest('.view'); if (sc2) { const vr = sc2.getBoundingClientRect(); if (e.clientY < vr.top + 50) sc2.scrollTop -= 10; else if (e.clientY > vr.bottom - 50) sc2.scrollTop += 10; }
-      return;
+      scr(); return;
     }
     const t = target(e.clientX, e.clientY); if (!t || t === st.el) { st.drop = null; return; }
     const r = t.getBoundingClientRect();
@@ -441,6 +447,15 @@ $('#watchRows').addEventListener('change', e => { const sel = e.target.closest('
     if (!d) { if (s0.on) renderWatch(); return; }
     if (s0.sec) {
       const from = state.groups.findIndex(x => x.id === s0.key); if (from < 0 || !d.sec) return renderWatch();
+      if (d.coin) { // entre las monedas: las monedas desde ese punto hasta el final de su bloque pasan a la sección, y la sección va justo después de ese bloque
+        const S = state.groups[from], tk = d.coin, gid = grpOf(tk); if (gid === S.id) return renderWatch();
+        const blk = state.symbols.filter(x => grpOf(x) === gid), ix = blk.indexOf(tk) + (d.after ? 1 : 0), moved = blk.slice(ix);
+        state.symbols = state.symbols.filter(x => !moved.includes(x));
+        const first = state.symbols.findIndex(x => grpOf(x) === S.id); if (first < 0) state.symbols.push(...moved); else state.symbols.splice(first, 0, ...moved);
+        moved.forEach(x => { state.symGroup[x] = S.id; });
+        state.groups = state.groups.filter(g => g.id !== S.id); state.groups.splice(gid ? state.groups.findIndex(g => g.id === gid) + 1 : 0, 0, S);
+        save(); renderWatch(); return;
+      }
       const [g1] = state.groups.splice(from, 1); let to = state.groups.length;
       if (d.idx < d.others.length) to = state.groups.findIndex(x => x.id === d.others[d.idx]); else if (d.others.length) to = state.groups.findIndex(x => x.id === d.others[d.others.length - 1]) + 1;
       state.groups.splice(to < 0 ? state.groups.length : to, 0, g1);
@@ -4484,7 +4499,7 @@ function cloudPush() {
 let forceBusy = false;
 async function forceSync() {
   if (forceBusy) return; forceBusy = true;
-  const btns = $$('#forceSync, #forceSyncM'); btns.forEach(b => b.classList.add('syncing')); toast('Guardando y actualizando…');
+  const btns = $$('#forceSync'); btns.forEach(b => b.classList.add('syncing')); toast('Guardando y actualizando…');
   let msg = '';
   try {
     try { syncUi(); } catch {}
@@ -4509,7 +4524,7 @@ async function forceSync() {
   btns.forEach(b => b.classList.remove('syncing')); forceBusy = false; toast(msg || 'Listo');
 }
 const saveScriptsLocal = () => { try { localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); } catch {} };
-document.addEventListener('click', e => { if (e.target.closest('#forceSync, #forceSyncM')) forceSync(); });
+document.addEventListener('click', e => { if (e.target.closest('#forceSync')) forceSync(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { clearTimeout(pushTimer); cloudPushNow(); } });
 window.addEventListener('pagehide', () => { clearTimeout(pushTimer); cloudPushNow(); });
 async function initCloud() {

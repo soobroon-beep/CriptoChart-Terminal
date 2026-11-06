@@ -385,3 +385,10 @@ button.brand-fab,button.brand-icon{background:none;border:0;padding:0;cursor:poi
 .brand-fab.syncing img,.brand-icon.syncing img{animation:forceSpin 1s linear infinite}
 @keyframes forceSpin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.brand-fab.syncing img,.brand-icon.syncing img{animation:forcePulse 1s ease-in-out infinite}@keyframes forcePulse{50%{opacity:.4}}}
+
+/* Celular: el logo VORTEX también va dentro del gráfico, abajo a la izquierda y más pequeño (toca para guardar y actualizar) */
+@media(max-width:1023px){
+  #chartArea .brand-fab{display:flex;align-items:center;position:absolute;left:8px;bottom:30px;z-index:6;height:28px;opacity:.8}
+  #chartArea .brand-fab img{width:28px;height:28px;display:block;object-fit:contain;filter:drop-shadow(0 1px 4px rgba(0,0,0,.6))}
+  #chartArea .brand-fab .bf-tip{display:none!important}
+}
