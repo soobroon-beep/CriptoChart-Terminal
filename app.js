@@ -3513,6 +3513,7 @@ area.addEventListener('pointerdown', e => { stopMotion();
   const pt = local(e);
   gest = {id: e.pointerId, x0: e.clientX, y0: e.clientY, pan0: pan, moved: false, mode: 'pending', start: null, handle: null, timer: 0};
   const paneAx = pt.x >= geo.w - geo.right - 4 ? paneHit.find(q => pt.y >= q.top0 && pt.y < q.top0 + q.H) : null;
+  { const ip = !paneAx && pt.x < geo.w - geo.right - 4 ? paneHit.find(q => pt.y >= q.top0 && pt.y < q.top0 + q.H) : null; if (ip) gest.inPane = {key: ip.key, min0: ip.mn, max0: ip.mx, H: Math.max(30, ip.H - 10)}; } // dedo dentro de un panel (oscilador, RSI…): al arrastrar también se desplaza en vertical
   const onPriceAxis = !paneAx && pt.x >= geo.w - geo.right - 4 && pt.y <= geo.plotTop + geo.plotH + 8, onTimeAxis = pt.y >= geo.h - 34 && pt.x < geo.w - geo.right;
   if (paneAx) { gest.mode = 'scaleP'; gest.pane = {key: paneAx.key, min0: paneAx.mn, max0: paneAx.mx}; cross = null; } // barra derecha de un panel (oscilador, RSI…): arrastrar = agrandar/achicar su escala
   else if (onPriceAxis || onTimeAxis) { // arrastrar la barra derecha = escala de precio · barra inferior = escala de tiempo
@@ -3581,6 +3582,7 @@ area.addEventListener('pointermove', e => {
   }
   else if (gest.mode === 'pan') {
     const p0 = pan; pan = gest.pan0 + (e.clientX - gest.x0) / geo.step; const tn = performance.now(); if (gest.tl) { const dt = tn - gest.tl; if (dt > 0) gest.vel = .6 * (gest.vel || 0) + .4 * ((pan - p0) / dt); } gest.tl = tn;
+    if (gest.inPane) { const q = gest.inPane, dy = (e.clientY - gest.y0) / q.H * (q.max0 - q.min0); paneMan[q.key] = {min: q.min0 + dy, max: q.max0 + dy}; } // panel: sube/baja el rango para ver sobrecompra, sobreventa…
     if (priceMan) { if (gest.pm0 == null) gest.pm0 = {min: priceMan.min, max: priceMan.max}; const dy = (e.clientY - gest.y0) / geo.plotH * (gest.pm0.max - gest.pm0.min); priceMan = {min: gest.pm0.min + dy, max: gest.pm0.max + dy}; } // con escala manual también se mueve en vertical
     scheduleRender();
   }
