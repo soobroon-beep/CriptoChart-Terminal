@@ -20,7 +20,7 @@
 <div id="app">
   <header class="topbar">
     <div class="brand">
-      <div class="brand-icon"><img data-app-icon src="icons/i01-192.png" alt="VORTEX" width="28" height="28"></div>
+      <button type="button" class="brand-icon" id="forceSyncM" title="Guardar todo y actualizar" aria-label="Guardar todo y actualizar"><img data-app-icon src="icons/i01-192.png" alt="VORTEX" width="28" height="28"></button>
       <div><strong>VORTEX</strong><small>Powered by Nova Nexus</small></div>
     </div>
     <div class="top-actions">
@@ -112,7 +112,7 @@
           </button>
           <div class="priceblock"><strong id="lastPrice">—</strong><small id="dayChange">—</small></div>
         </div>
-        <div class="brand-fab" title="VORTEX · Powered by Nova Nexus" aria-label="VORTEX · Powered by Nova Nexus"><img src="icons/vortex-mark.png" alt="VORTEX" width="38" height="38"><span class="bf-tip"><b>VORTEX</b><small>Powered by Nova Nexus</small></span></div>
+        <button type="button" class="brand-fab" id="forceSync" title="VORTEX · Powered by Nova Nexus" aria-label="VORTEX · Powered by Nova Nexus"><img src="icons/vortex-mark.png" alt="VORTEX" width="38" height="38"><span class="bf-tip"><b>VORTEX</b><small>Powered by Nova Nexus</small><em>Clic: guardar todo y actualizar</em></span></button>
         <div class="chart-label">
           <strong id="chartLabel">BTCUSDT</strong> <span id="intervalLabel">1h</span> <span id="liveDot" class="live-dot" title="Tiempo real"></span>
           <button id="legToggle" class="leg-toggle" type="button" aria-expanded="false" hidden><span id="legCount">0 indicadores</span></button>

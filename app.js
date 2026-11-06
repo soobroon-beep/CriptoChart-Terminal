@@ -3466,7 +3466,7 @@ const area = $('#chartArea'), ptrs = new Map();
 let gest = null, pinch = null, lastTap = null, brushLive = null;
 const local = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
 area.addEventListener('pointerdown', e => { stopMotion();
-  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.pbar,.pbar-pop,.pbar-hidden,.leg-toggle,.favbar,.fav-fab')) return;
+  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.pbar,.pbar-pop,.pbar-hidden,.leg-toggle,.favbar,.fav-fab,.brand-fab')) return;
   try { area.setPointerCapture(e.pointerId); } catch {} ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   if (!geo) return;
   if (ptrs.size === 2) { startPinch(); return; }
@@ -4479,6 +4479,37 @@ function cloudPush() {
   clearTimeout(pushTimer); pushTimer = setTimeout(cloudPushNow, 1200);
 }
 // al cerrar o mandar la pestaña a segundo plano (móvil) se sube de inmediato lo pendiente, sin esperar el retardo
+/* Botón del logo VORTEX: guarda TODO ahora mismo (gráficos, ajustes, lista, indicadores, scripts, alertas) en este dispositivo y en la cuenta,
+   baja lo más nuevo de la cuenta y vuelve a cargar velas, precios y conexión en vivo (útil si el celular se quedó trabado). El guardado automático sigue igual. */
+let forceBusy = false;
+async function forceSync() {
+  if (forceBusy) return; forceBusy = true;
+  const btns = $$('#forceSync, #forceSyncM'); btns.forEach(b => b.classList.add('syncing')); toast('Guardando y actualizando…');
+  let msg = '';
+  try {
+    try { syncUi(); } catch {}
+    save(); saveScriptsLocal();
+    clearTimeout(pushTimer); clearTimeout(scriptsTimer);
+    const online = navigator.onLine !== false;
+    if (uid && db && fbUser) {
+      if (!online) msg = 'Sin conexión: guardado en este dispositivo, se subirá a tu cuenta al volver';
+      else {
+        await cloudPushNow(true); // sube (y mezcla con lo más nuevo de la cuenta si otro dispositivo guardó algo)
+        const sref = db.doc(`users/${uid}/data/scripts`), local = JSON.stringify(userScripts());
+        if (local !== scriptsRemote) { await sref.set({items: local, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); scriptsRemote = local; } // scripts nuevos o borrados aquí
+        else { const sn = await sref.get({source: 'server'}), str = sn.exists ? sn.data().items : ''; if (str && str !== scriptsRemote) { const arr = JSON.parse(str); if (Array.isArray(arr)) { scriptsRemote = str; scripts = withCatalog(arr); saveScriptsLocal(); renderScripts(); } } } // sin cambios locales: se baja lo de la cuenta
+        msg = /^No se pudo/.test(syncStatus) ? 'No se pudo guardar en la nube; sigue guardado en este dispositivo' : 'Todo guardado en tu cuenta y actualizado ✓';
+      }
+    } else msg = 'Guardado en este dispositivo. Inicia sesión para guardarlo también en tu cuenta';
+    pineKey = ''; try { applyUi(); } catch {}
+    renderWatch(); renderIndicators(); countIndicators(); renderAlerts(); renderAccount();
+    if (online) await Promise.allSettled([loadCandles(true), fetchTicker(), loadSparks()]); // velas nuevas + reconecta el tiempo real
+    schedulePine(); scheduleRender(); updateChartHeader();
+  } catch (e) { msg = 'No se pudo completar: ' + (e && (e.code || e.message) || 'error'); }
+  btns.forEach(b => b.classList.remove('syncing')); forceBusy = false; toast(msg || 'Listo');
+}
+const saveScriptsLocal = () => { try { localStorage.setItem(scriptsKey(), JSON.stringify({items: userScripts()})); } catch {} };
+document.addEventListener('click', e => { if (e.target.closest('#forceSync, #forceSyncM')) forceSync(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { clearTimeout(pushTimer); cloudPushNow(); } });
 window.addEventListener('pagehide', () => { clearTimeout(pushTimer); cloudPushNow(); });
 async function initCloud() {

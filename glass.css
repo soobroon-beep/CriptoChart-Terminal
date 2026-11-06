@@ -376,3 +376,12 @@ body.pane .chart-symhead{display:none}
 .chart-symhead{left:8px;right:auto;top:6px;width:fit-content;max-width:calc(100% - 84px);min-height:0;gap:14px;padding:6px 14px 6px 10px;border:0;border-bottom:0;border-radius:14px;
   background:color-mix(in srgb,var(--bg) 34%,transparent);-webkit-backdrop-filter:blur(10px) saturate(1.25);backdrop-filter:blur(10px) saturate(1.25);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
 @media(max-width:760px){.chart-symhead{min-height:0;padding:4px 10px 4px 8px;gap:10px;top:4px;left:6px}}
+
+/* Botón del logo: guardar todo y actualizar */
+button.brand-fab,button.brand-icon{background:none;border:0;padding:0;cursor:pointer;color:inherit;font:inherit}
+.brand-fab{pointer-events:auto}
+.bf-tip em{font-style:normal;font-size:10px;color:var(--accent);margin-top:3px}
+.brand-fab:active img,.brand-icon:active img{transform:scale(.92)}
+.brand-fab.syncing img,.brand-icon.syncing img{animation:forceSpin 1s linear infinite}
+@keyframes forceSpin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.brand-fab.syncing img,.brand-icon.syncing img{animation:forcePulse 1s ease-in-out infinite}@keyframes forcePulse{50%{opacity:.4}}}
