@@ -161,7 +161,7 @@ function merge(s) {
     }
     const bq = o.brush && typeof o.brush === 'object' ? o.brush : {};
     o.brush = {c: /^#[0-9a-f]{6}$/i.test(bq.c) ? bq.c : '#e9c36e', w: Math.max(1, Math.min(24, Math.round(+bq.w) || 3))};
-    o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 12).map(t => ({n: t.n.slice(0, 24), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})})) : [];
+    o.drawTpl = Array.isArray(o.drawTpl) ? o.drawTpl.filter(t => t && typeof t === 'object' && typeof t.n === 'string' && t.n.trim()).slice(0, 80).map(t => ({n: t.n.slice(0, 24), ...(typeof t.k === 'string' && /^[a-z0-9_]{1,24}$/i.test(t.k) ? {k: t.k} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.gc) ? {gc: t.gc} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.rc) ? {rc: t.rc} : {}), ...['nt', 'no', 'ns'].reduce((a, f) => typeof t[f] === 'boolean' ? (a[f] = t[f], a) : a, {}), ...(/^#[0-9a-f]{6}$/i.test(t.col) ? {col: t.col} : {}), ...(Number.isFinite(+t.lw) && +t.lw > 0 ? {lw: Math.min(24, +t.lw)} : {}), ...(t.ds === 'dash' || t.ds === 'dot' ? {ds: t.ds} : {}), ...(/^#[0-9a-f]{6}$/i.test(t.tc) ? {tc: t.tc} : {}), ...(Number.isFinite(+t.ts) && +t.ts > 0 ? {ts: Math.max(8, Math.min(36, Math.round(+t.ts)))} : {})})) : [];
   }
   o.novaParams = o.novaParams && typeof o.novaParams === 'object' && !Array.isArray(o.novaParams) ? Object.fromEntries(Object.entries(o.novaParams).filter(([k, v]) => /^[a-zA-Z0-9]{1,24}$/.test(k) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean' || (typeof v === 'string' && v.length < 400))).slice(0, 120)) : {};
   o.ui = sanUi(o.ui); o.acct = sanAcct(o.acct); o.moveAlerts = sanMoveAlerts(o.moveAlerts); o.discord = sanDiscord(o.discord);
@@ -1816,14 +1816,18 @@ function sbEditText(val) {
   const d = curDraw(); if (!d) return; const v = String(val || '').trim().slice(0, 80);
   if (SB_TEXT.has(d.type)) { if (!v) { toast('El texto no puede quedar vacío'); return; } patchD({text: v}); } else patchD({label: v || null});
 }
-const tplOf = d => { const o = {}; if (d.col) o.col = d.col; const w = d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw; if (w) o.lw = w; if (d.ds) o.ds = d.ds; if (d.tc) o.tc = d.tc; if (d.ts) o.ts = d.ts; return o; };
+const tplKind = d => isPos(d) ? 'pos' : d.type;
+const tplFits = (t, d) => t.k ? t.k === tplKind(d) : !isPos(d); // las plantillas guardadas antes (sin tipo) valen para todo menos Long/Short
+const tplOf = d => { const o = {k: tplKind(d)}; if (isPos(d)) { for (const f of ['gc', 'rc', 'nt', 'no', 'ns']) if (d[f] != null) o[f] = d[f]; } if (d.col) o.col = d.col; const w = d.type === 'brush' ? (d.hl ? d.w / 3 : d.w) : d.lw; if (w) o.lw = w; if (d.ds) o.ds = d.ds; if (d.tc) o.tc = d.tc; if (d.ts) o.ts = d.ts; return o; };
 function sbSaveTpl() {
-  const d = curDraw(); if (!d) return; if ((state.drawTpl || []).length >= 12) { toast('Máximo 12 plantillas: borra alguna'); return; }
-  const n = (prompt('Nombre de la plantilla:', 'Plantilla ' + ((state.drawTpl || []).length + 1)) || '').trim().slice(0, 24); if (!n) return;
+  const d = curDraw(); if (!d) return; if ((state.drawTpl || []).filter(t => tplFits(t, d)).length >= 12) { toast('Máximo 12 plantillas de este tipo: borra alguna'); return; }
+  const n = (prompt('Nombre de la plantilla:', 'Plantilla ' + ((state.drawTpl || []).filter(t => tplFits(t, d)).length + 1)) || '').trim().slice(0, 24); if (!n) return;
   state.drawTpl = [...(state.drawTpl || []), {n, ...tplOf(d)}]; save(); renderSelBar(); toast('Plantilla guardada');
 }
 function sbApplyTpl(i) {
   const d = curDraw(), t = (state.drawTpl || [])[i]; if (!d || !t) return;
+  if (!tplFits(t, d)) return;
+  if (isPos(d)) { patchD({col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts, gc: t.gc, rc: t.rc, nt: t.nt, no: t.no, ns: t.ns}); return; }
   patchD(d.type === 'brush' ? {col: t.col, w: Math.round((t.lw || (d.hl ? d.w / 3 : d.w)) * (d.hl ? 3 : 1))} : {col: t.col, lw: t.lw, ds: t.ds, tc: t.tc, ts: t.ts});
   if (d.type === 'brush' && t.col) { state.brush.c = t.col; save(); }
 }
@@ -1849,7 +1853,7 @@ function popHtml(kind, d) {
   if (kind === 'ds') return `<div class="pp-title">Estilo de línea</div>${sbDsRow(d.ds)}`;
   if (kind === 'txt') return `<div class="pp-title">Texto</div>${isPos(d) ? posToggles(d) : ''}${sbTextBlock(d)}`;
   if (kind === 'tpl') {
-    const list = (state.drawTpl || []).map((t, i) => `<div class="pp-tpl"><button class="pp-item" data-ptpl="${i}"><i class="pp-dot" style="background:${t.col || sbDefCol()}"></i><span>${esc(t.n)}</span><small>${t.lw || ''}${t.lw ? 'px' : ''}${t.ds ? ' · ' + (t.ds === 'dash' ? 'discont.' : 'puntos') : ''}</small></button><button class="pp-x" data-ptpl-del="${i}" aria-label="Borrar plantilla">×</button></div>`).join('');
+    const list = (state.drawTpl || []).map((t, i) => tplFits(t, d) ? `<div class="pp-tpl"><button class="pp-item" data-ptpl="${i}"><i class="pp-dot" style="background:${t.col || sbDefCol()}"></i><span>${esc(t.n)}</span><small>${t.lw || ''}${t.lw ? 'px' : ''}${t.ds ? ' · ' + (t.ds === 'dash' ? 'discont.' : 'puntos') : ''}</small></button><button class="pp-x" data-ptpl-del="${i}" aria-label="Borrar plantilla">×</button></div>` : '').join('');
     return `<div class="pp-title">Plantillas de estilo</div><button class="pp-item" data-sb="tplsave">＋ Guardar el estilo actual como plantilla…</button><button class="pp-item" data-sb="tplreset">↺ Restablecer estilo</button>${list ? '<div class="pp-sep"></div>' + list : '<p class="pp-note">Aún no tienes plantillas. Guarda el estilo de este dibujo para aplicarlo en otros.</p>'}`;
   }
   if (kind === 'set') {
@@ -1872,10 +1876,10 @@ function popHtml(kind, d) {
 function sbMoreNoSel() { return `<button class="pp-item" data-sb="undo"><span class="pp-ic">${I('undo', 16)}</span><span>Deshacer</span></button><button class="pp-item" data-sb="redo"><span class="pp-ic">${I('redo', 16)}</span><span>Rehacer</span></button><button class="pp-item" data-sb="clear"><span class="pp-ic">${I('trash', 16)}</span><span>Borrar todos los dibujos</span></button>`; }
 function closePop() { selPop = ''; const p = $('#selPop'); if (p) p.remove(); document.querySelectorAll('#selBar [data-sb].open').forEach(b => b.classList.remove('open')); }
 function renderPop() {
-  const old = $('#selPop'), bar = $('#selBar'); if (old) old.remove();
+  const old = $('#selPop'), bar = $('#selBar'), keepTop = old && old.dataset.k === selPop ? old.scrollTop : 0; if (old) old.remove(); // al cambiar un ajuste el panel se vuelve a dibujar: conserva por dónde ibas
   if (!selPop || !bar) return;
   const d = curDraw(); let html = selPop === 'more' && !d ? sbMoreNoSel() : popHtml(selPop, d); if (!html) { selPop = ''; return; }
-  const pop = document.createElement('div'); pop.id = 'selPop'; pop.className = 'pbar-pop'; pop.innerHTML = html; $('#chartArea').appendChild(pop);
+  const pop = document.createElement('div'); pop.id = 'selPop'; pop.className = 'pbar-pop'; pop.dataset.k = selPop; pop.innerHTML = html; pop.addEventListener('wheel', e => e.stopPropagation(), {passive: true}); $('#chartArea').appendChild(pop); pop.scrollTop = keepTop; // la rueda del ratón desplaza el panel (no hace zoom al gráfico)
   const btn = bar.querySelector(`[data-sb="${selPop}"]`); if (btn) btn.classList.add('open');
   const ar = $('#chartArea').getBoundingClientRect(), br = (btn || bar).getBoundingClientRect(), below = br.top - ar.top < ar.height / 2;
   pop.style.left = clamp(br.left - ar.left - 4, 6, Math.max(6, ar.width - pop.offsetWidth - 6)) + 'px';
@@ -3672,7 +3676,7 @@ function applyDesign(d) {
 function designsOp(m) { // en el gráfico principal: cambia la lista y guarda; en un gráfico extra: se lo pide al principal
   if (PANE) { try { parent.postMessage({cct: 'designs', ...m}, location.origin); } catch {} return; }
   let l = (state.designs || []).slice();
-  if (m.op === 'add') l.push({id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: String(m.name || 'Diseño').slice(0, 40), t: Date.now(), snap: m.snap});
+  if (m.op === 'add') l.push({id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: String(m.name || 'Plantilla').slice(0, 40), t: Date.now(), snap: m.snap});
   else if (m.op === 'del') l = l.filter(x => x.id !== m.id);
   else if (m.op === 'ren') l = l.map(x => x.id === m.id ? {...x, name: String(m.name || x.name).slice(0, 40)} : x);
   else if (m.op === 'upd') l = l.map(x => x.id === m.id ? {...x, t: Date.now(), snap: m.snap} : x);
@@ -3683,12 +3687,12 @@ if (!PANE) window.addEventListener('message', e => { const m = e.data; if (e.ori
 function renderDesigns() {
   const box = document.querySelector('.dz-box .dz-list'); if (!box) return; const list = designsList();
   const cnt = d => Object.entries((d.snap || {}).indicators || {}).filter(([, v]) => v).length + ((d.snap || {}).pine || []).filter(p => p.on !== false).length;
-  box.innerHTML = list.length ? list.map(d => `<div class="dz-row" data-id="${esc(d.id)}"><button class="dz-apply" data-a="apply" title="Aplicar este diseño al gráfico"><span class="dz-sw" style="background:${esc((d.snap.chartStyle || {}).bg || CHART_DEF.bg)}"><i style="background:${esc((d.snap.chartStyle || {}).up || CHART_DEF.up)}"></i><i style="background:${esc((d.snap.chartStyle || {}).down || CHART_DEF.down)}"></i></span><span class="dz-nm"><b>${esc(d.name)}</b><small>${cnt(d)} indicadores${d.t ? ' · ' + new Date(d.t).toLocaleDateString() : ''}</small></span></button><button class="dz-ic" data-a="upd" title="Actualizar con el gráfico actual">${SV('<path d="M4 12a8 8 0 0 1 14-5.3M20 4v4.5h-4.5M20 12a8 8 0 0 1-14 5.3M4 20v-4.5h4.5"/>', 16)}</button><button class="dz-ic" data-a="ren" title="Cambiar nombre">${SV('<path d="M4 20h4L19 9l-4-4L4 16z"/>', 16)}</button><button class="dz-ic dz-del" data-a="del" title="Borrar">${SV('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>', 16)}</button></div>`).join('') : '<p class="dz-empty">Aún no tienes diseños. Deja el gráfico como te gusta (fondo, indicadores, colores, orden) y toca «Guardar diseño actual».</p>';
+  box.innerHTML = list.length ? list.map(d => `<div class="dz-row" data-id="${esc(d.id)}"><button class="dz-apply" data-a="apply" title="Aplicar esta plantilla al gráfico"><span class="dz-sw" style="background:${esc((d.snap.chartStyle || {}).bg || CHART_DEF.bg)}"><i style="background:${esc((d.snap.chartStyle || {}).up || CHART_DEF.up)}"></i><i style="background:${esc((d.snap.chartStyle || {}).down || CHART_DEF.down)}"></i></span><span class="dz-nm"><b>${esc(d.name)}</b><small>${cnt(d)} indicadores${d.t ? ' · ' + new Date(d.t).toLocaleDateString() : ''}</small></span></button><button class="dz-ic" data-a="upd" title="Actualizar con el gráfico actual">${SV('<path d="M4 12a8 8 0 0 1 14-5.3M20 4v4.5h-4.5M20 12a8 8 0 0 1-14 5.3M4 20v-4.5h4.5"/>', 16)}</button><button class="dz-ic" data-a="ren" title="Cambiar nombre">${SV('<path d="M4 20h4L19 9l-4-4L4 16z"/>', 16)}</button><button class="dz-ic dz-del" data-a="del" title="Borrar">${SV('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>', 16)}</button></div>`).join('') : '<p class="dz-empty">Aún no tienes plantillas. Deja el gráfico como te gusta (fondo, indicadores, colores, orden) y toca «Guardar plantilla actual».</p>';
 }
 function openDesigns() {
   document.querySelectorAll('.dz-back').forEach(x => x.remove());
   const back = document.createElement('div'); back.className = 'dz-back';
-  back.innerHTML = `<div class="dz-box" role="dialog" aria-label="Diseños"><div class="dz-head"><b>Diseños</b><button class="dz-x" data-a="close" aria-label="Cerrar">✕</button></div><p class="dz-note">Cada diseño guarda todo el gráfico: fondo, colores, indicadores y sus ajustes, orden y tamaño de paneles. Tócalo para aplicarlo a este gráfico${PANE ? '' : ' (también a los que abras al lado)'}. Se guardan en tu cuenta.</p><div class="dz-list"></div><button class="dz-save" data-a="save">${SV('<path d="M12 5v14M5 12h14"/>', 16)}<span>Guardar diseño actual</span></button></div>`;
+  back.innerHTML = `<div class="dz-box" role="dialog" aria-label="Plantillas"><div class="dz-head"><b>Plantillas</b><button class="dz-x" data-a="close" aria-label="Cerrar">✕</button></div><p class="dz-note">Cada plantilla guarda todo el gráfico: fondo, colores, indicadores y sus ajustes, orden y tamaño de paneles. Tócala para aplicarla a este gráfico${PANE ? '' : ' (también a los que abras al lado)'}. Se guardan en tu cuenta.</p><div class="dz-list"></div><button class="dz-save" data-a="save">${SV('<path d="M12 5v14M5 12h14"/>', 16)}<span>Guardar plantilla actual</span></button></div>`;
   document.body.appendChild(back); renderDesigns();
   const close = () => { back.remove(); document.removeEventListener('keydown', esc2, true); }, esc2 = e => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', esc2, true);
@@ -3697,11 +3701,11 @@ function openDesigns() {
     if (e.target === back) return close();
     const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a, row = b.closest('.dz-row'), id = row && row.dataset.id, d = id && designsList().find(x => x.id === id);
     if (a === 'close') close();
-    else if (a === 'save') { const n = (prompt('Nombre del diseño:', 'Diseño ' + (designsList().length + 1)) || '').trim().slice(0, 40); if (!n) return; designsOp({op: 'add', name: n, snap: designSnap()}); refresh(); toast('Diseño guardado'); }
-    else if (a === 'apply' && d) { applyDesign(d); close(); toast('Diseño aplicado: ' + d.name); }
-    else if (a === 'upd' && d) { if (!confirm(`¿Reemplazar «${d.name}» con el gráfico actual?`)) return; designsOp({op: 'upd', id, snap: designSnap()}); refresh(); toast('Diseño actualizado'); }
-    else if (a === 'ren' && d) { const n = (prompt('Nombre del diseño:', d.name) || '').trim(); if (!n) return; designsOp({op: 'ren', id, name: n}); refresh(); }
-    else if (a === 'del' && d) { if (!confirm(`¿Borrar el diseño «${d.name}»?`)) return; designsOp({op: 'del', id}); refresh(); }
+    else if (a === 'save') { const n = (prompt('Nombre de la plantilla:', 'Plantilla ' + (designsList().length + 1)) || '').trim().slice(0, 40); if (!n) return; designsOp({op: 'add', name: n, snap: designSnap()}); refresh(); toast('Plantilla guardada'); }
+    else if (a === 'apply' && d) { applyDesign(d); close(); toast('Plantilla aplicada: ' + d.name); }
+    else if (a === 'upd' && d) { if (!confirm(`¿Reemplazar «${d.name}» con el gráfico actual?`)) return; designsOp({op: 'upd', id, snap: designSnap()}); refresh(); toast('Plantilla actualizada'); }
+    else if (a === 'ren' && d) { const n = (prompt('Nombre de la plantilla:', d.name) || '').trim(); if (!n) return; designsOp({op: 'ren', id, name: n}); refresh(); }
+    else if (a === 'del' && d) { if (!confirm(`¿Borrar la plantilla «${d.name}»?`)) return; designsOp({op: 'del', id}); refresh(); }
   });
 }
 { const b = $('#designsBtn'); if (b) b.onclick = openDesigns; }
