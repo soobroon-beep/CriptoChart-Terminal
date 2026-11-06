@@ -1784,6 +1784,19 @@ function sbPrice(d) { // precio de la línea ahora (nivel de la línea en la úl
   const ia = idxOfTime(d.a.t), ib = idxOfTime(d.b.t); if (ia === ib || !candles.length) return NaN;
   return d.a.p + (d.b.p - d.a.p) * (candles.length - 1 - ia) / (ib - ia);
 }
+/* Cuenta regresiva del cierre de la vela actual (según la temporalidad) */
+function candleCountdown(c) {
+  if (!c || !(c.t > 0)) return null; const iv = state.interval; if (!(iv in IV_MS)) return null;
+  const end = iv === '1M' ? (() => { const d = new Date(c.t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1); })() : c.t + IV_MS[iv], left = end - Date.now();
+  return left > -2000 && left <= IV_MS[iv] * 1.01 + 864e5 ? Math.max(0, left) : null; // si la última vela ya está vieja (mercado sin datos), no se muestra
+}
+function fmtCountdown(ms, secs) {
+  const t = Math.floor(ms / 1000), d = Math.floor(t / 86400), h = Math.floor(t % 86400 / 3600), m = Math.floor(t % 3600 / 60), sc = t % 60, p2 = x => String(x).padStart(2, '0');
+  if (d > 0) return secs ? `${d}d ${p2(h)}h ${p2(m)}m` : `${d}d ${p2(h)}h`;
+  if (h > 0) return secs ? `${h}:${p2(m)}:${p2(sc)}` : `${h}:${p2(m)}`;
+  return `${p2(m)}:${p2(sc)}`;
+}
+setInterval(() => { if (document.visibilityState === 'visible' && candles.length) scheduleRender(); }, 1000);
 function sbAlert() {
   const d = curDraw(); if (!d) return;
   if (!SB_ALERT.has(d.type)) { toast('Las alertas se ponen en líneas de precio (horizontal, tendencia, rayo…)'); return; }
@@ -2759,6 +2772,11 @@ function renderCore() {
     const col = lastC.c >= lastC.o ? up : down;
     g.strokeStyle = col; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(left, ly); g.lineTo(w - right + 2, ly); g.stroke(); g.setLineDash([]);
     g.fillStyle = col; g.fillRect(w - right + 2, ly - 9, right - 3, 18); g.fillStyle = '#fff'; g.fillText(fmt(lastC.c), w - right + 5, ly + 3.5);
+    // tiempo que falta para que cierre la vela actual (texto pequeño debajo del precio)
+    const cd = candleCountdown(lastC); if (cd != null && ly + 9 + 14 < plotTop + plotH + 14) {
+      const f0 = g.font; g.font = '9.5px system-ui'; let tx = fmtCountdown(cd, true); if (g.measureText(tx).width > right - 8) tx = fmtCountdown(cd, false);
+      g.globalAlpha = .55; g.fillStyle = col; g.fillRect(w - right + 2, ly + 9, right - 3, 13); g.globalAlpha = 1; g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText(tx, w - right + 2 + (right - 3) / 2, ly + 19); g.textAlign = 'left'; g.font = f0;
+    }
   }
   if (vpvr) drawVPVRTags(vpvr); // etiquetas de POC / VAH / VAL en la escala de precios
   // leyenda de indicadores
@@ -3709,15 +3727,25 @@ function openDesigns() {
   });
 }
 { const b = $('#designsBtn'); if (b) b.onclick = openDesigns; }
+function copyText(txt, msg) {
+  const ok = () => toast(msg || 'Copiado'), old = () => { const t = document.createElement('textarea'); t.value = txt; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); ok(); } catch { toast('No se pudo copiar'); } t.remove(); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, old); else old();
+}
+function alertAtPrice(price) { // abre Alertas con el activo y el precio del clic ya puestos, listo para crear (nota, indicador, etc.)
+  if (!(price > 0)) { toast('No se pudo leer el precio de ese punto'); return; }
+  renderAlerts(); switchView('alertsView');
+  setTimeout(() => { const sel = $('#alSym'); if (sel) sel.value = state.symbol; const pr = $('#alPrice'); if (pr) { pr.value = String(price); pr.focus(); pr.select(); } toast('Alerta en ' + fmt(price) + ': añade una nota y toca «Crear alerta de precio»'); }, 60);
+}
 area.addEventListener('contextmenu', e => {
   if (e.target.closest('.chart-label, .leg-row, button, .pop-menu, .favbar')) return;
   e.preventDefault(); document.querySelectorAll('.chart-ctx').forEach(x => x.remove());
+  let ctxPrice = NaN; try { const q = local(e); if (geo && q.y >= 0) ctxPrice = +PRICE(q.y).toPrecision(8); } catch {}
   const m = document.createElement('div'); m.className = 'pop-menu chart-ctx';
-  m.innerHTML = `<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
+  m.innerHTML = `<button data-a="copyp">${SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 16)}<span>Copiar precio ${fmt(ctxPrice)}</span></button>${PANE ? '' : `<button data-a="alertp">${SV('<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 16)}<span>Añadir alerta en ${fmt(ctxPrice)}</span></button>`}<button data-a="reset">${SV('<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/>', 16)}<span>Restablecer gráfico</span></button><button data-a="auto">${SV('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 16)}<span>Escala de precio automática</span></button><button data-a="style">${SV('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.2" fill="currentColor" stroke="none"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.3.6-1.1.3-2.2-1-2.2H8"/>', 16)}<span>Aspecto del gráfico…</span></button>${!PANE ? `<button data-a="favbar">${I('star', 16)}<span>${FB.show ? 'Ocultar' : 'Mostrar'} barra de favoritos</span></button>` : ''}`;
   document.body.appendChild(m); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, e.clientX)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - m.offsetHeight - 8, e.clientY)) + 'px';
   const close = () => { m.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); }, away = ev => { if (!m.contains(ev.target)) close(); }, esc = ev => { if (ev.key === 'Escape') close(); };
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc, true); });
-  m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'reset') resetChart(); else if (b.dataset.a === 'style') openChartStyle(); else if (b.dataset.a === 'favbar') setFavBar(!FB.show); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
+  m.onclick = ev => { const b = ev.target.closest('[data-a]'); if (!b) return; close(); if (b.dataset.a === 'reset') resetChart(); else if (b.dataset.a === 'style') openChartStyle(); else if (b.dataset.a === 'copyp') copyText(String(ctxPrice), 'Precio copiado: ' + fmt(ctxPrice)); else if (b.dataset.a === 'alertp') alertAtPrice(ctxPrice); else if (b.dataset.a === 'favbar') setFavBar(!FB.show); else { priceMan = null; updateAutoBtn(); scheduleRender(); } };
 });
 function syncFullscreenLabel() {} // los botones Expandir y Ajustar ya no existen (se hace con el doble toque y el botón A)
 const setPaneScale = v => { paneScale = Math.max(.6, Math.min(3, Math.round(v * 100) / 100)); try { localStorage.setItem('cct_paneScale', String(paneScale)); } catch {} syncUi(); scheduleRender(); toast(`Altura de paneles ${Math.round(paneScale * 100)}%`); };
