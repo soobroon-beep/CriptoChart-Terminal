@@ -65,7 +65,7 @@ test('el tiempo total limita también las descargas progresivas',async()=>{
   const h=harness(),p=h.run();
   h.workers[0].onmessage({data:{id:1,type:'progress',stage:'load',message:'Descargando 15%'}});
   h.clock.fire(180000);
-  await assert.rejects(p,/3 minutos/);
+  await assert.rejects(p,/tiempo máximo/);
   assert.equal(h.api.isBusy(),false);
   assert.equal(h.workers[0].terminated,true);
 });

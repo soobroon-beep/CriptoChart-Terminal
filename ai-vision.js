@@ -3,7 +3,7 @@
   'use strict';
   if (typeof document === 'undefined') return;
   let worker = null, job = null, seq = 0;
-  const MODELS = Object.freeze({smol:'SmolVLM-256M',qwen:'Qwen3-VL-2B',qwen08:'Qwen3.5-VL-0.8B',qwen35:'Qwen3.5-VL-2B',qwen35pro:'Qwen3.5-VL-4B'});
+  const MODELS = Object.freeze({smol:'SmolVLM-256M',qwen:'Qwen3-VL-2B',qwen08:'Qwen3.5-VL-0.8B',qwen08cpu:'Qwen3.5 0.8B (CPU)',qwen35:'Qwen3.5-VL-2B',qwen35pro:'Qwen3.5-VL-4B'});
   const label = id => MODELS[id] || MODELS.qwen08;
   const short = s => String(s || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 100);
   // Prompt visual conciso: Qwen recibe los píxeles reales; los cálculos
@@ -85,7 +85,7 @@
     if (words.length>=18 && new Set(words).size / words.length < .54) return null;
     if (words.length >= 22 && new Set(words).size / words.length < .47) return null;
     // «El gráfico muestra la tendencia del precio» no es un análisis del gráfico.
-    const evidence = /\b(bajista|alcista|baja|bajan|cae|caen|cayo|caida|descenso|retroceso|rompe|rompio|ruptura|sube|suben|subida|rebote|rebotan|lateral|laterales|consolidacion|nube|rectangulo|dibujad|marcad|linea|lineas|senal|flecha|volumen|poc|vela|velas|canal|zona|zonas|vela roja|vela verde)\b/i;
+    const evidence = /\b(arriba|abajo|bajista|alcista|baja|bajan|cae|caen|cayo|caida|descenso|retroceso|rompe|rompio|ruptura|sube|suben|subida|rebote|rebotan|lateral|laterales|consolidacion|nube|rectangulo|dibujad|marcad|linea|lineas|senal|flecha|volumen|poc|vela|velas|canal|zona|zonas|vela roja|vela verde)\b/i;
     const vague = /\b(el grafico muestra (?:la )?tendencia|muestra la tendencia del precio|el precio de la moneda|el par de divisas)\b/i;
     if (!evidence.test(norm) || (vague.test(norm) && sentences.length <= 1)) return null;
     return s.split(/\s+/).slice(0, 75).join(' ').trim();
@@ -95,6 +95,7 @@
   const MAX_TOTAL_MS = 180000;
   const MAX_QUIET_MS = 45000;
   const MAX_GENERATION_MS = 45000;
+  const MAX_CPU_GENERATION_MS = 110000;
   function endJob(current, error, result) {
     if (!current || job !== current) return;
     job = null;
@@ -115,7 +116,8 @@
   function watchdog(j, phase) {
     if (job !== j) return;
     clearTimeout(j.silenceTimer);
-    const ms = phase === 'inference' ? MAX_GENERATION_MS : MAX_QUIET_MS;
+    const ms = j.model === 'qwen08cpu' ? (phase === 'inference' ? MAX_CPU_GENERATION_MS : 70000) :
+      (phase === 'inference' ? MAX_GENERATION_MS : MAX_QUIET_MS);
     j.silenceTimer = setTimeout(() => cancel(phase === 'inference'
       ? 'La interpretación visual tardó demasiado y fue detenida. El análisis técnico continúa disponible.'
       : 'La IA visual dejó de responder; se detuvo para no bloquear Vortex.'), ms);
@@ -160,9 +162,10 @@
     if (job) return Promise.reject(Error('Hay una interpretación visual en curso. Puedes cancelarla.'));
     return new Promise((resolve,reject) => {
       let w; try { w=getWorker(); } catch (e) { reject(e); return; }
-      const j={id:++seq,resolve,reject,onProgress,ctx,totalTimer:null,silenceTimer:null,lastProgress:'',stage:'load'};
+      const j={id:++seq,resolve,reject,onProgress,ctx,model,totalTimer:null,silenceTimer:null,lastProgress:'',stage:'load'};
       job=j;
-      j.totalTimer=setTimeout(()=>cancel('La IA visual superó el límite de 3 minutos y se detuvo. Los datos del gráfico siguen disponibles.'),MAX_TOTAL_MS);
+      j.totalTimer=setTimeout(()=>cancel('La IA visual superó su tiempo máximo y se detuvo. Los datos del gráfico siguen disponibles.'),
+        model === 'qwen08cpu' ? 240000 : MAX_TOTAL_MS);
       watchdog(j,'load');
       if (typeof onProgress === 'function') onProgress('Captura recibida. Preparando '+label(model)+'…');
       try { w.postMessage({id:j.id,type:'analyze',which:model,screenshot,

@@ -113,3 +113,22 @@ test('la captura mostrada en miniatura es la misma cadena PNG que recibió el Wo
   assert.equal(image.src,h.pending[0].opts.screenshot);
   assert.match(preview.children[0].textContent,/captura real enviada/i);
 });
+
+test('al fallar WebGPU reintenta lectura del mismo PNG con CPU sin bloquear', async()=>{
+  const h=harness(); h.st.vision='qwen08';
+  await h.module.ask('Analiza el gráfico');
+  assert.equal(h.pending.length,1);
+  assert.equal(h.pending[0].opts.model,'qwen08');
+  h.pending[0].reject(Error('La GPU no respondió en tiempo'));
+  await Promise.resolve();await Promise.resolve();await Promise.resolve();
+  assert.equal(h.pending.length,2,'Debe iniciar reintento real CPU');
+  assert.equal(h.pending[1].opts.model,'qwen08cpu');
+  assert.equal(h.pending[1].opts.screenshot,h.pending[0].opts.screenshot);
+  assert.equal(h.st.busy,false,'El chat debe seguir libre');
+  h.pending[1].resolve({model:'Qwen3.5 0.8B (CPU)',text:
+    'Las velas terminan más abajo y se observan barras de volumen bajo el gráfico.'});
+  await Promise.resolve();await Promise.resolve();await Promise.resolve();
+  const bot=h.log.find(x=>x.role==='bot');
+  assert.match(bot.innerHTML,/Observación visual/);
+  assert.match(bot.innerHTML,/velas terminan/);
+});

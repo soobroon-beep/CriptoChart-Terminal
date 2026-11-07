@@ -10,6 +10,7 @@ const MODELS = Object.freeze({
   smol: 'HuggingFaceTB/SmolVLM-256M-Instruct',
   qwen: 'onnx-community/Qwen3-VL-2B-Instruct-ONNX',
   qwen08: 'onnx-community/Qwen3.5-0.8B-ONNX',
+  qwen08cpu: 'onnx-community/Qwen3.5-0.8B-ONNX',
   qwen35: 'huggingworld/Qwen3.5-2B-ONNX',
   qwen35pro: 'huggingworld/Qwen3.5-4B-ONNX'
 });
@@ -27,7 +28,7 @@ async function load(which, id) {
       throw Error('Este equipo no tiene WebGPU disponible. El análisis de trading por datos sigue funcionando sin descargar un modelo.');
     }
     report(id, 'Preparando el motor abierto de visión…');
-    const T = await import(which === 'qwen08' || which === 'qwen35' || which === 'qwen35pro' ? LIBRARY_QWEN35 : LIBRARY);
+    const T = await import(which === 'qwen08' || which === 'qwen08cpu' || which === 'qwen35' || which === 'qwen35pro' ? LIBRARY_QWEN35 : LIBRARY);
     const modelId = MODELS[which];
     const onProgress = info => {
       if (info && (info.status === 'progress' || info.status === 'downloading')) {
@@ -37,25 +38,31 @@ async function load(which, id) {
     };
     const processor = await T.AutoProcessor.from_pretrained(modelId, {progress_callback:onProgress});
     let model, device;
-    if (which === 'qwen08' || which === 'qwen35' || which === 'qwen35pro') {
-      if (typeof navigator.gpu.requestAdapter === 'function') {
-        const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
-        if (!adapter) throw Error('No hay un adaptador WebGPU disponible. Se conserva la lectura por datos.');
+    if (which === 'qwen08' || which === 'qwen08cpu' || which === 'qwen35' || which === 'qwen35pro') {
+      const onCpu = which === 'qwen08cpu';
+      if (!onCpu) {
+        if (!self.navigator || !navigator.gpu) throw Error('WebGPU no está disponible; puede usarse Qwen con CPU.');
+        if (typeof navigator.gpu.requestAdapter === 'function') {
+          const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
+          if (!adapter) throw Error('No hay adaptador WebGPU. Se puede probar Qwen en modo CPU.');
+        }
       }
-      // Modelo Apache-2.0 de visión y lenguaje (NO requiere clave API).
-      // No se descarga automáticamente en equipos sin WebGPU.
-      if (!self.navigator || !navigator.gpu) throw Error(
-        'Qwen3.5 necesita WebGPU en este navegador. Puedes seguir usando el análisis de trading por datos, sin IA visual.'
-      );
       const Class = T.Qwen3_5ForConditionalGeneration;
-      if (!Class) throw Error('El motor instalado no reconoce Qwen3.5. Se conserva el análisis técnico por datos.');
-      report(id, 'Preparando Qwen3.5 con visión; la primera carga necesita descargar varios archivos…');
+      if (!Class) throw Error('El motor no reconoce Qwen3.5.');
+      if (onCpu && T.env?.backends?.onnx?.wasm) {
+        // La CPU del navegador funciona también sin SharedArrayBuffer.
+        T.env.backends.onnx.wasm.numThreads=1;
+      }
+      report(id, onCpu
+        ? 'Cargando Qwen3.5 para CPU; esta primera descarga puede tardar…'
+        : 'Cargando Qwen3.5 con WebGPU…');
       model = await Class.from_pretrained(modelId, {
-        device:'webgpu',
-        dtype:{embed_tokens:'q4',vision_encoder:'fp16',decoder_model_merged:'q4'},
+        device: onCpu ? 'wasm' : 'webgpu',
+        dtype: onCpu ? {embed_tokens:'fp16',vision_encoder:'fp16',decoder_model_merged:'q4'} :
+          {embed_tokens:'q4',vision_encoder:'fp16',decoder_model_merged:'q4'},
         progress_callback:onProgress
       });
-      device = 'webgpu';
+      device = onCpu ? 'wasm' : 'webgpu';
     } else if (which === 'qwen') {
       if (!self.navigator || !navigator.gpu) throw Error('Qwen3-VL requiere WebGPU y memoria gráfica. Prueba SmolVLM en este equipo.');
       const Class = T.Qwen3VLForConditionalGeneration || T.AutoModelForVision2Seq;
@@ -119,7 +126,7 @@ async function infer({id, which, screenshot, prompt}) {
         img.width < 100 || img.height < 80) throw Error('La captura llegó vacía o no pudo decodificarse.');
     report(id, 'PNG recibido: ' + img.width + ' × ' + img.height + ' píxeles. Preparando imagen…', 'load');
     // Reducir imagen para evitar consumo excesivo de memoria con gráficos ultrapanorámicos.
-    const limit = which === 'qwen08' ? 768 : which === 'qwen35' ? 896 : which === 'qwen35pro' ? 1024 : which === 'qwen' ? 1024 : 768; // conserva más detalle de paneles y dibujos
+    const limit = which === 'qwen08cpu' ? 480 : which === 'qwen08' ? 640 : which === 'qwen35' ? 896 : which === 'qwen35pro' ? 1024 : which === 'qwen' ? 1024 : 768; // conserva más detalle de paneles y dibujos
     const factor = Math.min(1, limit / Math.max(img.width, img.height));
     const picture = factor < 1 ? await img.resize(Math.max(1, Math.round(img.width * factor)),
       Math.max(1, Math.round(img.height * factor))) : img;
@@ -129,7 +136,7 @@ async function infer({id, which, screenshot, prompt}) {
         {type:'text',text:String(prompt || 'Describe el gráfico visible en español brevemente.').slice(0, 1300)}
       ]
     }];
-    const isQwen35 = which === 'qwen08' || which === 'qwen35' || which === 'qwen35pro';
+    const isQwen35 = which === 'qwen08' || which === 'qwen08cpu' || which === 'qwen35' || which === 'qwen35pro';
     const formatted = state.processor.apply_chat_template(messages,
       isQwen35 ? {add_generation_prompt:true,enable_thinking:false} : {tokenize:false,add_generation_prompt:true});
     // Qwen3.5 usa la firma processor(texto, imagen). Los modelos previos
@@ -146,13 +153,13 @@ async function infer({id, which, screenshot, prompt}) {
           skip_prompt:true, skip_special_tokens:true,
           callback_function: part => {
             emitted += typeof part === 'string' ? part.length : 0;
-            if (emitted >= lastTick + 48) {
+            if (emitted >= lastTick + 18) {
               lastTick = emitted;
               report(id, 'Qwen está leyendo los detalles del gráfico…', 'inference');
             }
           }
         }) : null;
-    const maxTokens = which === 'qwen08' ? 110 : isQwen35 ? 105 : which === 'qwen' ? 110 : 80;
+    const maxTokens = which === 'qwen08cpu' ? 58 : which === 'qwen08' ? 64 : isQwen35 ? 85 : which === 'qwen' ? 90 : 80;
     const output = await state.model.generate({
       ...inputs, max_new_tokens:maxTokens, do_sample:false,
       ...(streamer ? {streamer} : {})

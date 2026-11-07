@@ -5,9 +5,9 @@
   const AI = window.CCTAICore; if (!AI) return;
   const $ = (s, e) => (e || document).querySelector(s), esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const ls = {get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} }};
-  const st = {hist: [], busy: false, calendar: null, calAt: 0, key: ls.get('cct_ai_key') || '', model: ls.get('cct_ai_model') || 'claude-sonnet-5-5', proxy: ls.get('cct_ai_proxy') || '', mode: ls.get('cct_ai_mode') || 'local', vision: (!ls.get('cct_ai_vision_migrated_v119') &&
-      (!ls.get('cct_ai_vision') || ['smol','qwen35'].includes(ls.get('cct_ai_vision'))))
-      ? 'qwen08' : ls.get('cct_ai_vision') || 'qwen08'};
+  const st = {hist: [], busy: false, calendar: null, calAt: 0, key: ls.get('cct_ai_key') || '', model: ls.get('cct_ai_model') || 'claude-sonnet-5-5', proxy: ls.get('cct_ai_proxy') || '', mode: ls.get('cct_ai_mode') || 'local', vision: (!ls.get('cct_ai_vision_migrated_v120') &&
+      (!ls.get('cct_ai_vision') || ['smol','qwen35','qwen08'].includes(ls.get('cct_ai_vision'))))
+      ? 'qwen08cpu' : ls.get('cct_ai_vision') || 'qwen08cpu'};
   let root;
   function md(t) { // Markdown mínimo y seguro: ###, **negrita**, _cursiva_, listas, párrafos
     const out = []; let list = false;
@@ -26,12 +26,12 @@
     try { const r = await fetch('calendar-data.json?_=' + Math.floor(Date.now() / 6e4), {cache: 'no-store'}); if (r.ok) { const j = await r.json(); st.calendar = j.events || []; st.calAt = Date.now(); } } catch {}
     return st.calendar;
   }
-  const modeLabel = () => st.vision === 'qwen08' ? 'Qwen3.5 0.8B local' : st.vision.startsWith('qwen35') ? 'Qwen3.5 local' : st.vision !== 'off' ? 'Visión gratuita' : st.mode === 'claude' && (st.key || st.proxy) ? 'Claude' : 'Local';
+  const modeLabel = () => st.vision === 'qwen08cpu' ? 'Qwen3.5 0.8B CPU' : st.vision === 'qwen08' ? 'Qwen3.5 0.8B local' : st.vision.startsWith('qwen35') ? 'Qwen3.5 local' : st.vision !== 'off' ? 'Visión gratuita' : st.mode === 'claude' && (st.key || st.proxy) ? 'Claude' : 'Local';
   function shell() {
     root.innerHTML = `
       <div class="ai-top"><div class="ai-badge" id="aiBadge"></div><div class="ai-top-r"><button class="ai-brief" id="aiBrief" type="button" title="Resumen del día con tu análisis"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a2 2 0 0 1 2 2v13a1 1 0 0 0 1 1H7a2 2 0 0 1-2-2z"/><path d="M18 9h2a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2"/><path d="M9 8h5M9 12h5M9 16h3"/></svg>Brief del día</button><button class="ai-gear" id="aiGear" aria-label="Ajustes de la IA" title="Ajustes de la IA">${CCTI.svg('gear', 16)}</button></div></div>
       <div class="ai-cfg" id="aiCfg" hidden>
-        <label class="ai-row"><span>Modo</span><select id="aiMode"><option value="local">Local (gratis, sin clave)</option><option value="claude">Claude (preguntas libres)</option></select></label>\n        <label class="ai-row"><span>Visión gratis para analizar el gráfico</span><select id="aiVision"><option value="qwen08">Qwen3.5 0.8B · lectura visual ligera (recomendada)</option><option value="qwen35">Qwen3.5 2B · análisis visual avanzado (GPU potente)</option><option value="qwen35pro">Qwen3.5 4B · más potente (GPU con memoria)</option><option value="qwen">Qwen3-VL 2B · alternativa (WebGPU)</option><option value="smol">SmolVLM · básica (compatibilidad)</option><option value="off">Sin IA visual · análisis técnico por datos</option></select></label>\n        <p class="ai-note">Los modelos abiertos se descargan <b>solo al analizar el gráfico</b>, se ejecutan en este dispositivo y no necesitan claves ni cuentas. Qwen3.5 0.8B necesita WebGPU y descarga menos archivos que las versiones de 2B o 4B. La primera descarga usa tu conexión a Internet; luego puede reutilizar la caché. No existe un modelo gratis que garantice buenas señales de trading: las observaciones visuales se comparan con velas, EMAs, volumen, POC y tus dibujos. Si la GPU no permite usarlo, el análisis por datos sigue disponible.</p>
+        <label class="ai-row"><span>Modo</span><select id="aiMode"><option value="local">Local (gratis, sin clave)</option><option value="claude">Claude (preguntas libres)</option></select></label>\n        <label class="ai-row"><span>Visión gratis para analizar el gráfico</span><select id="aiVision"><option value="qwen08cpu">Qwen3.5 0.8B · CPU probada (recomendada)</option><option value="qwen08">Qwen3.5 0.8B · GPU experimental (más rápida si funciona)</option><option value="qwen35">Qwen3.5 2B · análisis visual avanzado (GPU potente)</option><option value="qwen35pro">Qwen3.5 4B · más potente (GPU con memoria)</option><option value="qwen">Qwen3-VL 2B · alternativa (WebGPU)</option><option value="smol">SmolVLM · básica (compatibilidad)</option><option value="off">Sin IA visual · análisis técnico por datos</option></select></label>\n        <p class="ai-note">Los modelos abiertos se descargan <b>solo al analizar el gráfico</b>, se ejecutan en este dispositivo y no necesitan claves ni cuentas. Qwen3.5 0.8B en CPU ya pasó una prueba completa en Chromium sin WebGPU. La primera descarga puede ser grande y el análisis más lento; la opción GPU sigue disponible y, si falla, intentará CPU. La primera descarga usa tu conexión a Internet; luego puede reutilizar la caché. No existe un modelo gratis que garantice buenas señales de trading: las observaciones visuales se comparan con velas, EMAs, volumen, POC y tus dibujos. Si la GPU no permite usarlo, el análisis por datos sigue disponible.</p>
         <label class="ai-row"><span>Clave de Anthropic</span><input id="aiKey" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"></label>
         <label class="ai-row"><span>Modelo</span><input id="aiModel" placeholder="claude-sonnet-5-5" autocomplete="off" spellcheck="false"></label>
         <label class="ai-row"><span>Servidor propio (opcional)</span><input id="aiProxy" placeholder="https://tu-worker.workers.dev" autocomplete="off" spellcheck="false"></label>
@@ -205,9 +205,19 @@
     });
     const model = st.vision; // Modelo elegido cuando se capturó este gráfico.
     label.textContent = 'Captura PNG verificada y enviada al motor de visión; procesando…';
-    vision.analyze({
-      ctx, screenshot, model, question:q,
+    const runModel = name => vision.analyze({
+      ctx, screenshot, model:name, question:q,
       onProgress:text => { if (status.isConnected) label.textContent = String(text || 'Analizando la captura…'); }
+    });
+    runModel(model).catch(error => {
+      const reason=String(error && error.message || error);
+      // Si WebGPU falla o se atasca, usa automáticamente la ruta CPU.
+      // Cancelaciones voluntarias no reinician la inferencia.
+      if (model === 'qwen08' && !/cancelad/i.test(reason)) {
+        label.textContent = 'La generación WebGPU no terminó. Probando Qwen con CPU (puede tardar)…';
+        return runModel('qwen08cpu');
+      }
+      throw error;
     }).then(response => {
       if (!message.isConnected) return;
       const observation = String(response.text || '').trim();
@@ -278,14 +288,16 @@
   }
   function init() {
     root = document.getElementById('aiRoot'); if (!root) return; shell();
-    ls.set('cct_ai_vision_migrated_v119', '1'); ls.set('cct_ai_vision', st.vision);
+    ls.set('cct_ai_vision_migrated_v119', '1');
+    ls.set('cct_ai_vision_migrated_v120','1');
+    ls.set('cct_ai_vision', st.vision);
     if (window.CCTAIUI) window.CCTAIUI.analyzeVisibleChart = () => ask('Analiza el gráfico', 'Analizar gráfico con IA');
     push('bot', 'Hola. Puedes usar **Analizar gráfico con IA** para intentar una lectura real de la captura con un modelo abierto gratuito en tu dispositivo. También puedo consultar los datos del gráfico, noticias y calendario económico.');
     root.addEventListener('click', e => {
       if (e.target.closest('#aiBrief')) { ask(BRIEF_Q, 'Brief del día'); return; }
       const q = e.target.closest('[data-q]'); if (q) { ask(q.dataset.q); return; }
       if (e.target.closest('#aiGear')) { $('#aiCfg').hidden = !$('#aiCfg').hidden; return; }
-      if (e.target.closest('#aiSave')) { st.vision = $('#aiVision').value; ls.set('cct_ai_vision', st.vision); st.mode = $('#aiMode').value; st.key = $('#aiKey').value.trim(); st.model = $('#aiModel').value.trim() || 'claude-sonnet-5-5'; st.proxy = $('#aiProxy').value.trim(); ls.set('cct_ai_mode', st.mode); ls.set('cct_ai_key', st.key || null); ls.set('cct_ai_model', st.model); ls.set('cct_ai_proxy', st.proxy || null); $('#aiCfg').hidden = true; badge(); push('bot', st.mode === 'claude' && (st.key || st.proxy) ? 'Modo **Claude** activado: ahora puedo responder preguntas libres sobre cripto usando los datos de tu gráfico.' : 'Modo Local guardado. Visión para gráficos: **' + (st.vision === 'off' ? 'desactivada' : st.vision === 'qwen08' ? 'Qwen3.5 0.8B' : st.vision === 'qwen35' ? 'Qwen3.5 2B' : st.vision === 'qwen35pro' ? 'Qwen3.5 4B' : st.vision === 'qwen' ? 'Qwen3-VL' : 'SmolVLM') + '**. No necesitas una clave para el análisis visual gratuito.'); return; }
+      if (e.target.closest('#aiSave')) { st.vision = $('#aiVision').value; ls.set('cct_ai_vision', st.vision); st.mode = $('#aiMode').value; st.key = $('#aiKey').value.trim(); st.model = $('#aiModel').value.trim() || 'claude-sonnet-5-5'; st.proxy = $('#aiProxy').value.trim(); ls.set('cct_ai_mode', st.mode); ls.set('cct_ai_key', st.key || null); ls.set('cct_ai_model', st.model); ls.set('cct_ai_proxy', st.proxy || null); $('#aiCfg').hidden = true; badge(); push('bot', st.mode === 'claude' && (st.key || st.proxy) ? 'Modo **Claude** activado: ahora puedo responder preguntas libres sobre cripto usando los datos de tu gráfico.' : 'Modo Local guardado. Visión para gráficos: **' + (st.vision === 'off' ? 'desactivada' : st.vision === 'qwen08cpu' ? 'Qwen3.5 0.8B CPU' : st.vision === 'qwen08' ? 'Qwen3.5 0.8B' : st.vision === 'qwen35' ? 'Qwen3.5 2B' : st.vision === 'qwen35pro' ? 'Qwen3.5 4B' : st.vision === 'qwen' ? 'Qwen3-VL' : 'SmolVLM') + '**. No necesitas una clave para el análisis visual gratuito.'); return; }
       if (e.target.closest('#aiClear')) { st.key = ''; $('#aiKey').value = ''; ls.set('cct_ai_key', null); badge(); }
     });
     $('#aiForm').addEventListener('submit', e => { e.preventDefault(); const i = $('#aiInput'), v = i.value; i.value = ''; ask(v); });
