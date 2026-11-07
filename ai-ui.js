@@ -5,7 +5,7 @@
   const AI = window.CCTAICore; if (!AI) return;
   const $ = (s, e) => (e || document).querySelector(s), esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const ls = {get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} }};
-  const st = {hist: [], busy: false, calendar: null, calAt: 0, key: ls.get('cct_ai_key') || '', model: ls.get('cct_ai_model') || 'claude-sonnet-5-5', proxy: ls.get('cct_ai_proxy') || '', mode: ls.get('cct_ai_mode') || 'local'};
+  const st = {hist: [], busy: false, calendar: null, calAt: 0, key: ls.get('cct_ai_key') || '', model: ls.get('cct_ai_model') || 'claude-sonnet-5-5', proxy: ls.get('cct_ai_proxy') || '', mode: ls.get('cct_ai_mode') || 'local', vision: ls.get('cct_ai_vision') || 'smol'};
   let root;
   function md(t) { // Markdown mínimo y seguro: ###, **negrita**, _cursiva_, listas, párrafos
     const out = []; let list = false;
@@ -24,12 +24,12 @@
     try { const r = await fetch('calendar-data.json?_=' + Math.floor(Date.now() / 6e4), {cache: 'no-store'}); if (r.ok) { const j = await r.json(); st.calendar = j.events || []; st.calAt = Date.now(); } } catch {}
     return st.calendar;
   }
-  const modeLabel = () => st.mode === 'claude' && (st.key || st.proxy) ? 'Claude' : 'Local';
+  const modeLabel = () => st.vision !== 'off' ? 'Visión gratuita' : st.mode === 'claude' && (st.key || st.proxy) ? 'Claude' : 'Local';
   function shell() {
     root.innerHTML = `
       <div class="ai-top"><div class="ai-badge" id="aiBadge"></div><div class="ai-top-r"><button class="ai-brief" id="aiBrief" type="button" title="Resumen del día con tu análisis"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a2 2 0 0 1 2 2v13a1 1 0 0 0 1 1H7a2 2 0 0 1-2-2z"/><path d="M18 9h2a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2"/><path d="M9 8h5M9 12h5M9 16h3"/></svg>Brief del día</button><button class="ai-gear" id="aiGear" aria-label="Ajustes de la IA" title="Ajustes de la IA">${CCTI.svg('gear', 16)}</button></div></div>
       <div class="ai-cfg" id="aiCfg" hidden>
-        <label class="ai-row"><span>Modo</span><select id="aiMode"><option value="local">Local (gratis, sin clave)</option><option value="claude">Claude (preguntas libres)</option></select></label>
+        <label class="ai-row"><span>Modo</span><select id="aiMode"><option value="local">Local (gratis, sin clave)</option><option value="claude">Claude (preguntas libres)</option></select></label>\n        <label class="ai-row"><span>Visión gratis para analizar el gráfico</span><select id="aiVision"><option value="smol">SmolVLM · ligera (recomendada)</option><option value="qwen">Qwen3-VL · potente (WebGPU)</option><option value="off">Desactivada · solo lectura de datos</option></select></label>\n        <p class="ai-note">Los modelos abiertos se descargan <b>solo al analizar el gráfico</b>, se ejecutan en este dispositivo y no necesitan claves ni cuentas. Primera descarga: SmolVLM aproximadamente 150–300 MB; Qwen3-VL puede ocupar varios GB. La compatibilidad depende del navegador, memoria y GPU; el modelo puede equivocarse.</p>
         <label class="ai-row"><span>Clave de Anthropic</span><input id="aiKey" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"></label>
         <label class="ai-row"><span>Modelo</span><input id="aiModel" placeholder="claude-sonnet-5-5" autocomplete="off" spellcheck="false"></label>
         <label class="ai-row"><span>Servidor propio (opcional)</span><input id="aiProxy" placeholder="https://tu-worker.workers.dev" autocomplete="off" spellcheck="false"></label>
@@ -40,7 +40,7 @@
       <div class="ai-chips" id="aiChips">${['Analiza el gráfico', '¿Cuál es la tendencia?', 'Soportes y resistencias', '¿Cómo van mis indicadores?', 'Noticias que me afectan', 'Calendario económico', '¿Qué escenarios ves?', 'Gestión de riesgo'].map(q => `<button data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
       <form class="ai-form" id="aiForm"><input id="aiInput" placeholder="Pregunta sobre tu gráfico, indicadores o el mercado cripto…" autocomplete="off" maxlength="600"><button class="ai-send" id="aiSend" aria-label="Enviar">${CCTI.svg('send', 16)}</button></form>
       <p class="ai-disc">Análisis educativo basado en tus datos. No es asesoría financiera.</p>`;
-    $('#aiMode').value = st.mode; $('#aiKey').value = st.key; $('#aiModel').value = st.model; $('#aiProxy').value = st.proxy; badge();
+    $('#aiMode').value = st.mode; $('#aiVision').value = st.vision; $('#aiKey').value = st.key; $('#aiModel').value = st.model; $('#aiProxy').value = st.proxy; badge();
   }
   function badge() { const el = $('#aiBadge'); if (!el) return; const c = window.CCT_getAIContext && window.CCT_getAIContext(); el.innerHTML = `<span class="ai-dot"></span>${c ? esc(c.symbol) + ' · ' + esc(c.interval) : 'Sin gráfico cargado'} <i>${modeLabel()}</i>`; }
   function push(role, text, extra) {
@@ -72,7 +72,7 @@
   async function ask(q, shown) {
     q = String(q || '').trim(); if (!q || st.busy) return; st.busy = true; $('#aiSend').disabled = true; push('user', shown || q);
     const isBrief = AI.intent(q) === 'brief', isVisual = !!(AI.isVisualChartRequest && AI.isVisualChartRequest(q));
-    const ctx = window.CCT_getAIContext && window.CCT_getAIContext(), news = window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [], cal = await loadCalendar(), market = isBrief && window.CCT_getMarketSnapshot ? await window.CCT_getMarketSnapshot() : [], extra = {news, calendar: cal || [], market, now: Date.now()};
+    const ctx = window.CCT_getAIContext && window.CCT_getAIContext(), news = !isVisual && window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [], cal = isVisual ? [] : await loadCalendar(), market = isBrief && window.CCT_getMarketSnapshot ? await window.CCT_getMarketSnapshot() : [], extra = {news, calendar: cal || [], market, now: Date.now()};
     // La lectura visual usa siempre una captura real del gráfico; el modo Local no interpreta píxeles.
     if (ctx && isVisual) {
       extra.chartSnapshotMode = true;
@@ -84,6 +84,18 @@
     try {
       if (!ctx && isBrief) out = AI.briefLocal(null, extra);
       else if (!ctx) out = 'Aún no hay un gráfico con velas cargadas. Abre la pestaña **Gráfico**, espera a que cargue y pregúntame de nuevo.';
+      else if (isVisual && st.vision !== 'off' && window.CCTFreeVision) {
+        try {
+          const response = await window.CCTFreeVision.analyze({
+            ctx, screenshot: extra.screenshot, model: st.vision,
+            onProgress: message => { if (typing.isConnected) typing.textContent = message; }
+          });
+          out = '**' + ctx.symbol + ' · ' + ctx.interval + ' · ' + response.model + '**\n\n' + response.text;
+        } catch (e) {
+          out = AI.visualSummaryLocal(ctx) + '\n\n*No se completó la visión gratuita: ' +
+            String(e && e.message || e).slice(0, 180) + '*';
+        }
+      }
       else if (useClaude && AI.intent(q) !== 'off') { try { out = await AI.askClaude({key: st.key, model: st.model, proxy: st.proxy}, ctx, st.hist, q, extra); } catch (e) { out = isVisual ? 'No pude completar la lectura visual: ' + (e.message || 'No se pudo consultar a Claude') + '\n\n' + AI.visualSummaryLocal(ctx) : 'Atención: ' + (e.message || 'No se pudo consultar a Claude') + '\n\nTe respondo con el análisis local:\n\n' + AI.answerLocal(q, ctx, extra); } }
       else out = isVisual ? AI.visualSummaryLocal(ctx) : AI.answerLocal(q, ctx, extra);
     } catch (e) { out = 'Ocurrió un error al analizar: ' + (e.message || e); }
@@ -93,12 +105,12 @@
   function init() {
     root = document.getElementById('aiRoot'); if (!root) return; shell();
     if (window.CCTAIUI) window.CCTAIUI.analyzeVisibleChart = () => ask('Analiza el gráfico', 'Analizar gráfico con IA');
-    push('bot', 'Hola. Soy tu **analista de gráficos cripto**. Leo tu gráfico abierto con los indicadores que tengas activados, las noticias y el calendario económico.\n\nToca una sugerencia o escríbeme tu pregunta.');
+    push('bot', 'Hola. Puedes usar **Analizar gráfico con IA** para intentar una lectura real de la captura con un modelo abierto gratuito en tu dispositivo. También puedo consultar los datos del gráfico, noticias y calendario económico.');
     root.addEventListener('click', e => {
       if (e.target.closest('#aiBrief')) { ask(BRIEF_Q, 'Brief del día'); return; }
       const q = e.target.closest('[data-q]'); if (q) { ask(q.dataset.q); return; }
       if (e.target.closest('#aiGear')) { $('#aiCfg').hidden = !$('#aiCfg').hidden; return; }
-      if (e.target.closest('#aiSave')) { st.mode = $('#aiMode').value; st.key = $('#aiKey').value.trim(); st.model = $('#aiModel').value.trim() || 'claude-sonnet-5-5'; st.proxy = $('#aiProxy').value.trim(); ls.set('cct_ai_mode', st.mode); ls.set('cct_ai_key', st.key || null); ls.set('cct_ai_model', st.model); ls.set('cct_ai_proxy', st.proxy || null); $('#aiCfg').hidden = true; badge(); push('bot', st.mode === 'claude' && (st.key || st.proxy) ? 'Modo **Claude** activado: ahora puedo responder preguntas libres sobre cripto usando los datos de tu gráfico.' : 'Modo **Local** activo (sin clave, sin enviar datos).'); return; }
+      if (e.target.closest('#aiSave')) { st.vision = $('#aiVision').value; ls.set('cct_ai_vision', st.vision); st.mode = $('#aiMode').value; st.key = $('#aiKey').value.trim(); st.model = $('#aiModel').value.trim() || 'claude-sonnet-5-5'; st.proxy = $('#aiProxy').value.trim(); ls.set('cct_ai_mode', st.mode); ls.set('cct_ai_key', st.key || null); ls.set('cct_ai_model', st.model); ls.set('cct_ai_proxy', st.proxy || null); $('#aiCfg').hidden = true; badge(); push('bot', st.mode === 'claude' && (st.key || st.proxy) ? 'Modo **Claude** activado: ahora puedo responder preguntas libres sobre cripto usando los datos de tu gráfico.' : 'Modo Local guardado. Visión para gráficos: **' + (st.vision === 'off' ? 'desactivada' : st.vision === 'qwen' ? 'Qwen3-VL' : 'SmolVLM') + '**. No necesitas una clave para el análisis visual gratuito.'); return; }
       if (e.target.closest('#aiClear')) { st.key = ''; $('#aiKey').value = ''; ls.set('cct_ai_key', null); badge(); }
     });
     $('#aiForm').addEventListener('submit', e => { e.preventDefault(); const i = $('#aiInput'), v = i.value; i.value = ''; ask(v); });
