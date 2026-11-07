@@ -4062,7 +4062,7 @@ const scriptsKey = () => uid ? `${SCRIPTS_KEY}_${uid}` : SCRIPTS_KEY;
 const readScripts = () => { const o = readLocal(scriptsKey()); return Array.isArray(o.items) ? o.items : []; };
 const catalogScripts = () => (window.CCTCatalog || []).map(c => ({id: 'cat:' + c.id, name: c.name, code: c.code, size: 0, lines: c.code.split('\n').length, addedAt: 0, builtin: true}));
 const withCatalog = arr => catalogScripts().concat((Array.isArray(arr) ? arr : []).filter(x => x && !x.builtin && !String(x.id).startsWith('cat:')));
-const userScripts = () => scripts.filter(x => !x.builtin);
+const userScripts = () => scripts.filter(x => !x.builtin && !x.temp); // los de prueba del Laboratorio IA (temp) no se guardan
 let scripts = withCatalog(readScripts()), viewScriptId = null, scriptsRemote = '', scriptsTimer = 0;
 const scriptsBytes = arr => arr.reduce((a, x) => a + (x.size || 0), 0);
 function saveScripts() {
@@ -4828,6 +4828,33 @@ window.CCT_host = {
     if (!state.symbols.includes(sym)) state.symbols.push(sym);
     renderFrames(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); selectSymbol(sym);
   }
+};
+/* ───────── Ganchos para la pestaña IA (solo lectura del gráfico + motor Pine existente; no cambian nada más) ───────── */
+window.CCT_ai = {
+  capture(maxW) { // captura PNG/JPEG del gráfico tal como se ve (velas, indicadores, dibujos, alertas); null si no hay lienzo visible
+    try {
+      const cv = $('#priceCanvas'); if (!cv || !cv.width || !cv.height || !candles.length) return null;
+      const k = Math.min(1, (maxW || 1100) / cv.width), w = Math.round(cv.width * k), h = Math.round(cv.height * k), o = document.createElement('canvas'); o.width = w; o.height = h;
+      const g2 = o.getContext('2d'), bg = getComputedStyle(document.body).getPropertyValue('--bg').trim() || '#0b0e11'; g2.fillStyle = bg; g2.fillRect(0, 0, w, h); g2.drawImage(cv, 0, 0, w, h);
+      return {url: o.toDataURL('image/jpeg', .82), w, h, symbol: symOf(state.symbol), interval: state.interval, at: Date.now()};
+    } catch { return null; }
+  },
+  candles: () => candles.slice(),
+  async run(code, name) { if (!candles.length) return {ok: false, error: {msg: 'Abre un gráfico y espera a que carguen las velas.'}}; return pineRunFull(code, {interval: state.interval, symbol: symOf(state.symbol), name: name || 'Indicador IA', timeLimitMs: 12000}); },
+  msg: (res, code) => pineMsgHtml(res, code),
+  list: () => scripts.filter(x => x.ai).map(x => ({id: x.id, name: x.name, code: x.code, temp: !!x.temp, on: state.pine.some(p => p.sid === x.id && p.on)})),
+  tryOnChart(code, name, res, replaceId) { // pone el indicador en el gráfico sin guardarlo (temp); reemplaza la prueba anterior
+    if (replaceId) this.remove(replaceId, true);
+    if (activePine().length >= PINE_MAX) { toast(`Máximo ${PINE_MAX} scripts activos`); return null; }
+    const m = code.match(/indicator\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/), sid = 'ai' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
+    scripts.push({id: sid, name: (m ? m[1] : name || 'Indicador IA').slice(0, 80), code, size: new Blob([code]).size, lines: code.split('\n').length, addedAt: Date.now(), temp: true, ai: true});
+    if (res && res.ok && candles.length) { res._key = `${state.symbol}|${state.interval}|${candles[0].t}`; pineRes[sid] = res; }
+    state.pine.push({sid, on: true, inputs: {}}); save(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); scheduleRender(); return sid;
+  },
+  keep(sid) { const x = scripts.find(y => y.id === sid); if (!x) return false; if (scriptsBytes(scripts.filter(y => !y.temp)) + x.size > SCRIPTS_MAX) { toast('Se pasa del límite de scripts por cuenta'); return false; } x.temp = false; saveScripts(); renderScripts(); toast('Indicador guardado'); return true; },
+  remove(sid, quiet) { scripts = scripts.filter(y => y.id !== sid); state.pine = state.pine.filter(q => q.sid !== sid); delete pineRes[sid]; save(); if (!quiet) { saveScripts(); renderScripts(); } else renderIndicators(); countIndicators(); scheduleRender(); },
+  toggle(sid, on) { const p = state.pine.find(q => q.sid === sid); if (p) p.on = on; else if (on) state.pine.push({sid, on: true, inputs: {}}); save(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); scheduleRender(); },
+  res: sid => pineRes[sid] || null
 };
 /* ───────── Instantánea del mercado para el «Brief del día» de la IA (las 25 monedas con más volumen en Binance Spot) ───────── */
 window.CCT_getMarketSnapshot = async function () {
