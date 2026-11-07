@@ -1,0 +1,37 @@
+name: Pruebas IA del gráfico
+on:
+  pull_request:
+    paths:
+      - 'ai-*.js'
+      - 'app.js'
+      - 'tests/ai-*.test.js'
+      - '.github/workflows/ai-vision-tests.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'ai-*.js'
+      - 'app.js'
+      - 'tests/ai-*.test.js'
+      - '.github/workflows/ai-vision-tests.yml'
+permissions:
+  contents: read
+jobs:
+  regression:
+    name: Captura y bloqueo IA
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxis de módulos IA
+        run: |
+          node --check ai-vision.js
+          node --check ai-vision-worker.js
+          node --check ai-ui.js
+          node --check ai-chart.js
+          node --check app.js
+      - name: Pruebas de captura, interacción y recuperación
+        run: node --test tests/ai-vision.test.js tests/ai-vision-timeouts.test.js tests/ai-ui-flow.test.js tests/ai-capture.test.js tests/ai-chart.test.js
