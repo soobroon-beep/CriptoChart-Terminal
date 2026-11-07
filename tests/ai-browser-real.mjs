@@ -55,7 +55,26 @@ try{
     if(progress.length<=12||progress.length%20===0)console.log('Estado:',msg);
    }
   });
-  return {response,elapsedMs:Date.now()-started,progress:progress.slice(-8)};
+  const upCanvas=document.createElement('canvas');upCanvas.width=440;upCanvas.height=310;
+  const up=upCanvas.getContext('2d');
+  up.fillStyle='#0b1020';up.fillRect(0,0,440,310);
+  up.strokeStyle='#5878a8';up.beginPath();up.moveTo(10,140);up.lineTo(430,140);up.stroke();
+  for(let i=0;i<32;i++){
+   const x=18+i*12,y=245-i*5.2+5*Math.sin(i);
+   up.fillStyle=i%7===0?'#ed4864':'#20b7a4';up.fillRect(x,y,7,11);
+   up.fillRect(x+3,y-5,1,22);
+   up.fillStyle='#315079';up.fillRect(x,242,7,7+(i*13)%26);
+  }
+  const upCandles=candles.map((c,i)=>({...c,c:60+i,o:60+i,h:65+i,l:55+i}));
+  const upCtx={...ctx,candles:upCandles,chart:{...ctx.chart,candles:upCandles}};
+  const secondStart=Date.now();
+  const second=await window.CCTFreeVision.analyze({
+   ctx:upCtx,screenshot:upCanvas.toDataURL('image/png'),model:'qwen08cpu',
+   question:'Analiza el gráfico',
+   onProgress:msg=>{if(/generando|Qwen está leyendo/.test(msg))console.log('Segundo análisis:',msg);}
+  });
+  return {response,second,elapsedMs:Date.now()-started,
+    secondElapsedMs:Date.now()-secondStart,progress:progress.slice(-8)};
  });
  console.log('LECTURA VISUAL COMPLETA EN CHROME:',JSON.stringify(result));
  assert.ok(result.response.text.length>=15,'No se generó una observación visual');
@@ -63,5 +82,11 @@ try{
   'El Worker no leyó el descenso de las velas');
  assert.match(result.response.model,/Qwen3.5/);
  assert.equal(result.response.device,'wasm');
+ assert.ok(result.second.text.length>=15,'No se generó segunda lectura');
+ assert.match(result.response.text,/abajo|baja|descen|cae/i,'El modelo no reconoció caída');
+ assert.match(result.second.text,/arriba|sube|ascend|alcista|más alto/i,
+   'El modelo no reconoció subida en imagen diferente');
+ assert.equal(result.second.device,'wasm');
+ console.log('PASS: El mismo Worker distingue dos gráficos de direcciones opuestas.');
  console.log('PASS: Vortex leyó un gráfico y completó model.generate en navegador Chromium, sin API ni mocks.');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
