@@ -26,7 +26,7 @@ console.log('Cargando modelo REAL:',modelId,'para inferencia visual en CPU');
 const processor=await AutoProcessor.from_pretrained(modelId);
 const conversation=[{role:'user',content:[
  {type:'image'},
- {type:'text',text:'Mira esta captura de un gráfico de velas. Describe brevemente en español si las últimas velas suben o bajan y si hay volumen debajo del precio.'}
+ {type:'text',text:'Sin saludos, títulos ni listas. Observa esta imagen de velas de trading de izquierda a derecha. Responde únicamente en dos frases breves en español: 1) ¿El precio termina más arriba o más abajo que al inicio? 2) ¿Se ven barras de volumen debajo de las velas? No inventes precios.'}
 ]}];
 const formatted=processor.apply_chat_template(conversation,{add_generation_prompt:true,enable_thinking:false});
 const inputs=await processor(formatted,img);
@@ -42,13 +42,16 @@ const model=await Qwen3_5ForConditionalGeneration.from_pretrained(modelId,{
 });
 console.log('MODELO CARGADO; GENERANDO DESDE IMAGEN REAL…');
 const started=Date.now();
-const output=await model.generate({...inputs,max_new_tokens:55,do_sample:false});
+const output=await model.generate({...inputs,max_new_tokens:110,do_sample:false});
 const inputLength=inputs.input_ids.dims.at(-1);
 const decoded=processor.batch_decode(output.slice(null,[inputLength,null]),{skip_special_tokens:true});
 const answer=String(decoded?.[0]||'').trim();
 console.log('RESPUESTA VISUAL REAL:',answer);
 console.log('Duración de generación (ms):',Date.now()-started);
 assert.ok(answer.length>=12,'La salida fue vacía o demasiado corta');
+assert.match(answer,/velas?|baj|sub|descend|ascend|precio|volumen/i,
+  'No hizo una observación de velas, movimiento ni volumen');
+
 assert.ok(!/^\s*(?:undefined|null)\s*$/i.test(answer));
 console.log('PASS: Un modelo auténtico ha generado una respuesta a partir de un PNG de velas.');
 await model.dispose?.();
