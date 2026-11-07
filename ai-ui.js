@@ -47,6 +47,14 @@
     const log = $('#aiLog'); const d = document.createElement('div'); d.className = 'ai-msg ' + role + (extra ? ' ' + extra : '');
     d.innerHTML = role === 'user' ? `<p>${esc(text)}</p>` : md(text); log.appendChild(d); log.scrollTo({top: log.scrollHeight, behavior: 'smooth'}); return d;
   }
+  // Los modelos remotos también pueden incumplir el idioma solicitado.
+  // Solo se permite mostrar inglés cuando sea el nombre técnico de un indicador/activo.
+  function mostlyEnglish(text) {
+    const t = String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const en = (t.match(/\b(the|chart|shows|price|currency|pair|trend|with|from|going|market|last|and|this|that|there|is|are|have|has|should|will|moving|falling|rising|analysis|support|resistance)\b/g) || []).length;
+    const es = (t.match(/\b(el|la|los|las|de|del|en|que|se|por|con|y|precio|grafico|velas|tendencia|analisis|zona|movimiento|datos|indicadores|bajista|alcista|noticias|calendario|mercado|una|un|esta|son)\b/g) || []).length;
+    return en >= 5 && en > es * 0.8;
+  }
   const BRIEF_Q = 'Brief del día: resume el mercado cripto de hoy tomando en cuenta el segmento completo, las noticias, el calendario económico y mi gráfico, y dime hacia dónde es más probable que vaya el mercado, con tu propio análisis.';
   // La app dibuja velas, indicadores, paneles y dibujos manuales en priceCanvas.
   // Se copia su última imagen real (aunque la vista Gráfico esté oculta al abrir IA).
@@ -92,13 +100,22 @@
           });
           out = '**' + ctx.symbol + ' · ' + ctx.interval + ' · ' + response.model + '**\n\n' + response.text;
         } catch (e) {
-          out = AI.visualSummaryLocal(ctx) + '\n\n*No se completó la visión gratuita: ' +
-            String(e && e.message || e).slice(0, 180) + '*';
+          const message = String(e && e.message || e);
+          // El modelo pequeño puede contestar en inglés o repetir texto.
+          // Jamás mostrar esa respuesta: usar un resumen español verificable.
+          out = AI.visualSummaryLocal(ctx) +
+            '\n\n*Lectura basada en los datos del gráfico' +
+            (/respuesta visual no fue fiable/i.test(message) ? '; el modelo visual no distinguió detalles suficientes.' :
+              '; la visión gratuita no pudo completarse: ' + message.slice(0, 110) + '.') + '*';
         }
       }
       else if (useClaude && AI.intent(q) !== 'off') { try { out = await AI.askClaude({key: st.key, model: st.model, proxy: st.proxy}, ctx, st.hist, q, extra); } catch (e) { out = isVisual ? 'No pude completar la lectura visual: ' + (e.message || 'No se pudo consultar a Claude') + '\n\n' + AI.visualSummaryLocal(ctx) : 'Atención: ' + (e.message || 'No se pudo consultar a Claude') + '\n\nTe respondo con el análisis local:\n\n' + AI.answerLocal(q, ctx, extra); } }
       else out = isVisual ? AI.visualSummaryLocal(ctx) : AI.answerLocal(q, ctx, extra);
     } catch (e) { out = 'Ocurrió un error al analizar: ' + (e.message || e); }
+    // Una respuesta externa en inglés nunca se muestra al usuario.
+    if (mostlyEnglish(out)) out = ctx
+      ? (isVisual ? AI.visualSummaryLocal(ctx) : AI.answerLocal(q, ctx, extra))
+      : (isBrief ? AI.briefLocal(null, extra) : 'No pude obtener una respuesta en español. Intenta nuevamente.');
     typing.remove(); push('bot', out); st.hist.push({role: 'user', text: q}, {role: 'assistant', text: out}); if (st.hist.length > 16) st.hist.splice(0, 2);
     st.busy = false; $('#aiSend').disabled = false; badge(); $('#aiInput').focus({preventScroll: true});
   }
