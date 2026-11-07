@@ -38,7 +38,7 @@ function facts(ctx){
  const volumes=last20.map(x=>x.v).filter(ok),avgVol=volumes.length>7?volumes.reduce((a,b)=>a+b,0)/volumes.length:null;
  const volRatio=ok(cur.v)&&ok(avgVol)&&avgVol>0?cur.v/avgVol:null;
  const emaKeys=['ema20','ema50','sma200','wma20','vwap'];
- const ema=emaKeys.filter(k=>active.includes(k)&&ok(vals[k])).map(k=>({key:k,name:safe((view.names||[])[active.indexOf(k)]||(k==='ema20'?'EMA':k==='ema50'?'EMA 50':k==='sma200'?'SMA 200':k==='wma20'?'WMA':'VWAP')),value:vals[k]}));
+ const ema=emaKeys.filter(k=>active.includes(k)&&ok(vals[k])).map(k=>({key:k,name:safe((view.names||[])[active.indexOf(k)]||(k==='ema20'?'EMA principal':k==='ema50'?'EMA 50':k==='sma200'?'SMA 200':k==='wma20'?'WMA':'VWAP')),value:vals[k]}));
  const cloud=nova&&active.includes('nnEma')&&ok(nova.top)&&ok(nova.bot)?[Math.min(nova.bot,nova.top),Math.max(nova.bot,nova.top)]:null;
  const points=[],add=(p,origin,weight)=>{if(ok(p)&&p>0)points.push({p,origin,weight})};
  for(const d of draw){
