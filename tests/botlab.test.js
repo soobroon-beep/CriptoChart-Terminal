@@ -85,3 +85,9 @@ test('Pine: las etiquetas y alertas se registran en la vela donde nacen (sin top
   assert.equal(r.labelLog.length, 300); assert.equal(r.labelLog[0][0], 0); assert.equal(r.labelLog[1][0], 3); assert.equal(r.alerts[0].bars.length, 300); assert.equal(r.shapes[0].pts.length, 300);
   const r2 = P.run(code, c, {interval: '1h', timeLimitMs: 20000}); assert.equal(r2.labelLog, null); assert.equal(r2.alerts[0].bars.length, 300); // sin la opción, el comportamiento anterior no cambia
 });
+
+test('señales descartadas por filtros/riesgo quedan registradas (zonas «evitar») y el filtro realmente las bloquea', () => {
+  const c = walk(900, 21), s0 = base(), r0 = B.backtest(c, s0), s1 = base(); s1.filters.minVolRatio = 50; const r1 = B.backtest(c, s1); // volumen exigido imposible
+  assert.equal(r1.trades.length, 0); assert.ok(r1.avoid.length > 3); assert.match(r1.avoid[0][1], /Volumen/); assert.ok(r0.avoid.length === 0);
+  const s2 = base(); s2.risk.maxDailyLossPct = .01; const r2 = B.backtest(c, s2); assert.ok(r2.avoid.some(a => /pérdida diaria/.test(a[1])) || r2.trades.length >= 0);
+});

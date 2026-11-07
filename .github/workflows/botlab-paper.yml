@@ -1,0 +1,22 @@
+name: Paper trading de bots (Nova Bot Lab)
+# Cada hora avanza las sesiones de paper trading activas (simulación con capital virtual; NO envía órdenes reales) para que sigan
+# registrándose aunque no tengas la app abierta. Requiere el secreto FIREBASE_SERVICE_ACCOUNT; sin él termina sin hacer nada.
+on:
+  schedule: [{cron: '7 * * * *'}]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: botlab-server, cancel-in-progress: false}
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12
+      - run: node scripts/botlab-retrain.js
+        env:
+          MODE: paper
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
