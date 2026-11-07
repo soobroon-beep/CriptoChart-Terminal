@@ -92,6 +92,9 @@
       } else mode(b.dataset.aiMode);
     });
     panel.addEventListener('click', click);
+    // El atajo original de Brief también debe mostrar la conversación si se estaba en Laboratorio.
+    const briefShortcut = root.querySelector('#aiBrief');
+    if (briefShortcut) briefShortcut.addEventListener('click', () => mode('brief'));
     renderSaved();
   }
   function setBusy(on) {
