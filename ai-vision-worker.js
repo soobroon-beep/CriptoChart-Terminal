@@ -58,7 +58,8 @@ async function load(which, id) {
         : 'Cargando Qwen3.5 con WebGPU…');
       model = await Class.from_pretrained(modelId, {
         device: onCpu ? 'wasm' : 'webgpu',
-        dtype:{embed_tokens:'q4',vision_encoder:'fp16',decoder_model_merged:'q4'},
+        dtype: onCpu ? {embed_tokens:'fp16',vision_encoder:'fp16',decoder_model_merged:'q4'} :
+          {embed_tokens:'q4',vision_encoder:'fp16',decoder_model_merged:'q4'},
         progress_callback:onProgress
       });
       device = onCpu ? 'wasm' : 'webgpu';
