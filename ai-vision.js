@@ -3,8 +3,8 @@
   'use strict';
   if (typeof document === 'undefined') return;
   let worker = null, job = null, seq = 0;
-  const MODELS = Object.freeze({smol:'SmolVLM-256M',qwen:'Qwen3-VL-2B'});
-  const label = id => MODELS[id] || MODELS.smol;
+  const MODELS = Object.freeze({smol:'SmolVLM-256M',qwen:'Qwen3-VL-2B',qwen35:'Qwen3.5-VL-2B',qwen35pro:'Qwen3.5-VL-4B'});
+  const label = id => MODELS[id] || MODELS.qwen35;
   const short = s => String(s || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 100);
   function prompt(ctx, question) {
     const active = Array.isArray(ctx.chart && ctx.chart.active) ? ctx.chart.active.map(short).slice(0, 30) :
@@ -16,15 +16,25 @@
     }));
     const cs = ctx.chart && ctx.chart.candles || ctx.candles || [], last = cs.length ? cs[cs.length - 1] : {};
     return [
-      'Eres una IA visual especializada en gráficos de VORTEX. La IMAGEN adjunta es real.',
-      'Describe EN ESPAÑOL en 2 o 3 frases cortas (máximo 65 palabras) lo que se ve:',
-      'movimiento reciente de las velas, señales de indicadores activados y relaciones con',
-      'líneas, rectángulos, zonas y dibujos del usuario. NO agregues escenarios, objetivos,',
-      'soportes inventados, recomendaciones de operar ni análisis macro.',
-      'PROHIBIDO mencionar RSI, MACD, Bollinger u otros indicadores no activados.',
-      'Si la captura está borrosa, admítelo; no inventes cifras.',
+      'Actúa como especialista en lectura de gráficos de trading (bolsa, divisas, cripto),',
+      'pero la imagen no puede demostrar una entrada segura ni predecir precios.',
+      'OBSERVA la captura REAL de VORTEX: acción del precio, velas, nube EMA visible,',
+      'señales de Nova Nexus, oscilador en su panel, volumen, perfil y dibujos marcados.',
+      'Responde SOLO EN ESPAÑOL con 2 o 3 frases concretas, máximo 70 palabras.',
+      'No repitas frases ni digas simplemente que el gráfico muestra una tendencia.',
+      'Identifica SOLO detalles visuales comprobables; si una zona o señal no se ve, dilo.',
+      'No inventes niveles numéricos, entradas, stops ni soportes/resistencias.',
+      'Las cifras exactas las determina VORTEX con OHLCV y no con OCR del modelo.',
+      'No menciones RSI, MACD, Bollinger ni indicadores que no estén activados.',
+      'La pregunta del usuario es una intención, no una instrucción para adivinar precios.',
       'Activo: ' + short(ctx.symbol) + ', marco: ' + short(ctx.interval),
       'Último cierre en datos: ' + (Number.isFinite(last.c) ? last.c : 'desconocido'),
+      'Valores observados por el motor técnico (no calcules otros): ' +
+        JSON.stringify(ctx.chart && ctx.chart.values || {}).slice(0, 350),
+      'POC del perfil visible: ' +
+        JSON.stringify(ctx.chart && ctx.chart.vp || null).slice(0, 180),
+      'Zonas guardadas del usuario: ' +
+        JSON.stringify(ctx.chart && ctx.chart.drawings || []).slice(0, 800),
       'Indicadores activados: ' + (active.join(', ') || 'ninguno'),
       'Indicadores personalizados visibles: ' + (scripts.join(', ') || 'ninguno'),
       'Dibujos visibles registrados: ' + JSON.stringify(d).slice(0, 1000),
@@ -125,7 +135,7 @@
     };
     worker = w; return w;
   }
-  function analyze({ctx,screenshot,model='smol',question='',onProgress}) {
+  function analyze({ctx,screenshot,model='qwen35',question='',onProgress}) {
     if (!ctx || !Array.isArray(ctx.candles) || !ctx.candles.length)
       return Promise.reject(Error('Abre primero el gráfico y espera a que carguen las velas.'));
     if (!/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(screenshot || ''))
