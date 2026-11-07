@@ -4856,7 +4856,7 @@ window.CCT_host = {
 /* ───────── Nova Bot Lab: ganchos mínimos (historial de velas, guardado en la cuenta y marcadores en el gráfico) ───────── */
 window.CCT_bot = {
   key: () => 'cct_botlab_v1' + (uid ? '_' + uid : ''),
-  cloud: () => (uid && db && fbUser) ? {get: async () => { const sn = await db.doc(`users/${uid}/data/botlab`).get(); return sn.exists ? (sn.data().items || null) : null; }, set: str => db.doc(`users/${uid}/data/botlab`).set({items: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()})} : null,
+  cloud: () => (uid && db && fbUser) ? {get: async () => { const sn = await db.doc(`users/${uid}/data/botlab`).get(); return sn.exists ? (sn.data().items || null) : null; }, set: str => db.doc(`users/${uid}/data/botlab`).set({items: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}), server: async () => { const sn = await db.doc(`users/${uid}/data/botlab_server`).get(); return sn.exists ? (sn.data().results || null) : null; }} : null,
   chart: () => ({symbol: symOf(state.symbol), interval: state.interval, n: candles.length, from: candles.length ? candles[0].t : null, to: candles.length ? candles[candles.length - 1].t : null}),
   seek(t) { if (!candles.length) return; pan = Math.max(0, Math.round(candles.length - 1 - idxOfTime(t) + visible * .25)); scheduleRender(); },
   async history(sym, itv, count) { // velas CERRADAS de Binance Spot, paginadas hacia atrás (máx. 6000)
@@ -4871,6 +4871,11 @@ window.CCT_bot = {
   open(sym, itv, t) { // muestra el gráfico del bot (y centra la operación si está en las velas cargadas)
     const go = () => { if (t && candles.length) { const i = idxOfTime(t); pan = Math.max(0, Math.round(candles.length - 1 - i - visible / 2)); } scheduleRender(); };
     if (symOf(state.symbol) !== sym || state.interval !== itv) { if (INTERVALS.includes(itv)) state.interval = itv; renderFrames(); selectSymbol(sym); setTimeout(go, 1800); setTimeout(go, 3500); } else { switchView('chartView'); setTimeout(go, 150); }
+  },
+  scripts: () => scripts.filter(x => x.code && !x.temp).map(x => ({id: x.id, name: x.name, lines: x.lines, own: !x.builtin})).sort((a, b) => b.own - a.own), // indicadores Pine del usuario (solo lectura)
+  async runPine(sid, sym, itv, cs) { // ejecuta un indicador del usuario sobre las velas dadas (no toca el gráfico ni sus indicadores)
+    const x = scripts.find(y => y.id === sid); if (!x) return {ok: false, error: {msg: 'No encuentro ese indicador'}}; const inst = state.pine.find(p => p.sid === sid);
+    return pineRunFull(x.code, {cs, inputs: inst && inst.inputs, interval: itv, symbol: sym, name: x.name, timeLimitMs: 30000, alertCap: 30000, logLabels: true});
   },
   toast: m => toast(m)
 };

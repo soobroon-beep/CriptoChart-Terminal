@@ -1,0 +1,25 @@
+name: Reentrenar bots (Nova Bot Lab)
+# Corre cada día el optimizador walk-forward de los bots que activaron el «ciclo automático».
+# No cambia versiones principales: solo guarda resultados y propuestas en tu cuenta para que las apruebes en la app.
+# Requiere el secreto FIREBASE_SERVICE_ACCOUNT (ver INSTALL.md → «Reentrenamiento programado»). Sin él, el trabajo termina sin hacer nada.
+on:
+  schedule: [{cron: '17 6 * * *'}]
+  workflow_dispatch:
+    inputs:
+      force: {description: 'Reentrenar ahora todos los bots con ciclo activo (ignora la frecuencia)', required: false, default: ''}
+permissions:
+  contents: read
+concurrency: {group: botlab-retrain, cancel-in-progress: false}
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: npm install --no-save --no-audit --no-fund firebase-admin@12
+      - run: node scripts/botlab-retrain.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FORCE: ${{ github.event.inputs.force && '1' || '' }}
