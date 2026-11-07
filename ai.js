@@ -416,12 +416,15 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
     } else if (/volumen/.test(t) && /ruptura|breakout/.test(t)) {
       name = 'IA Ruptura y Volumen'; code = [
         'indicator("IA Ruptura y Volumen", overlay=true)',
-        'techo = ta.highest(high, 20)',
-        'suelo = ta.lowest(low, 20)',
+        'techo = ta.highest(high[1], 20)',
+        'suelo = ta.lowest(low[1], 20)',
         'vol = ta.sma(volume, 20)',
-        'plot(techo, title="Techo 20", color=color.red)',
-        'plot(suelo, title="Piso 20", color=color.lime)',
-        'plot(volume > vol * 1.5 ? close : na, title="Volumen elevado", color=color.yellow)'
+        'alcista = close > techo and volume > vol * 1.5',
+        'bajista = close < suelo and volume > vol * 1.5',
+        'plot(techo, title="Resistencia previa", color=color.red)',
+        'plot(suelo, title="Soporte previo", color=color.lime)',
+        'plot(alcista ? close : na, title="Ruptura alcista", color=color.aqua)',
+        'plot(bajista ? close : na, title="Ruptura bajista", color=color.orange)'
       ];
     }
     return name ? {name, code:v.concat(code).join('\n'), mode:'receta local', note:'Se generó una receta compatible de parámetros fijos. Revísala y valida sobre las velas reales; no es un backtest.'} : null;
