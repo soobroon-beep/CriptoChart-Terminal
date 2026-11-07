@@ -61,32 +61,56 @@
   // El gráfico de Vortex usa un solo canvas para velas, EMAs, bandas,
   // volumen, VPVR, osciladores, indicadores Pine y dibujos de usuario.
   // Capturamos todo su alto real: no se limita al panel de velas.
+  // Captura literal del canvas que Vortex acaba de pintar. Este canvas incluye
+  // las velas, indicadores de precio, volumen, osciladores, VPVR y dibujos.
+  // Dejamos una copia visible para comprobar exactamente qué imagen se envió.
   function captureChart(ctx) {
+    captureChart.lastMeta = null;
     try {
       const source = document.getElementById('priceCanvas');
       if (!ctx || !source || source.width < 300 || source.height < 200) return null;
-      const maxW = 1600, maxH = 1150;
-      const scale = Math.min(1, maxW/source.width, maxH/source.height);
-      const w = Math.round(source.width*scale), h = Math.round(source.height*scale);
+      // Redimensionar ANTES de codificar; el modelo no recibirá un PNG gigante.
+      const maxW = 1152, maxH = 832;
+      const scale = Math.min(1, maxW / source.width, (maxH - 58) / source.height);
+      const w = Math.max(1, Math.round(source.width * scale));
+      const h = Math.max(1, Math.round(source.height * scale));
       const labels = ctx.chart && ctx.chart.names || ctx.active || [];
       const scripts = ctx.chart && ctx.chart.pine || ctx.pine || [];
-      const names = labels.slice(0, 12).concat(scripts.map(x => x.name).slice(0, 5));
-      const title = String(ctx.symbol || 'Gráfico')+' · '+String(ctx.interval || '')+
+      const title = String(ctx.symbol || 'Gráfico') + ' · ' + String(ctx.interval || '') +
         (ctx.chart && ctx.chart.historical ? ' · tramo histórico visible' : '');
-      const shot = document.createElement('canvas'); shot.width = w; shot.height = h + 64;
-      const g = shot.getContext('2d'); if (!g) return null;
-      g.fillStyle = '#090e19'; g.fillRect(0, 0, w, h+64);
-      g.fillStyle = '#eff2ff'; g.font = 'bold 18px system-ui, Arial, sans-serif';
-      g.fillText(title, 12, 23, w-24);
-      g.fillStyle = '#9aadd7'; g.font = '12px system-ui, Arial, sans-serif';
-      const line = 'Indicadores visibles: ' + (names.join(' · ') || 'ninguno');
-      g.fillText(line.slice(0, 160), 12, 44, w-24);
-      g.drawImage(source, 0, 64, w, h);
-      // En condiciones normales una captura de líneas y velas PNG es pequeña.
-      // Si excede el límite del modelo no se envía una imagen truncada.
+      const shot = document.createElement('canvas');
+      shot.width = w; shot.height = h + 58;
+      const g = shot.getContext('2d', {willReadFrequently:true});
+      if (!g) return null;
+      g.fillStyle = '#090e19'; g.fillRect(0,0,shot.width,shot.height);
+      g.fillStyle = '#eff2ff'; g.font = 'bold 17px system-ui, Arial, sans-serif';
+      g.fillText(title, 10, 21, w - 20);
+      g.fillStyle = '#9aadd7'; g.font = '11px system-ui, Arial, sans-serif';
+      const names = labels.slice(0, 10).concat(scripts.map(x => x.name).slice(0, 4));
+      g.fillText(('Indicadores visibles: ' + (names.join(' · ') || 'ninguno')).slice(0, 140),10,43,w-20);
+      g.drawImage(source,0,58,w,h);
+      // Verificación de diversidad visual: evita enviar un lienzo negro/vacío.
+      // La lectura de píxeles puede no estar permitida en algunos dispositivos;
+      // en ese caso la previsualización permite comprobar el resultado.
+      if (typeof g.getImageData === 'function') {
+        try {
+          const pixels = g.getImageData(0,58,w,h).data;
+          const unique = new Set();
+          const stride = Math.max(1, Math.floor(w / 40));
+          const stepY = Math.max(1, Math.floor(h / 22));
+          for (let y=0;y<h;y+=stepY) for (let x=0;x<w;x+=stride) {
+            const i = (y*w+x)*4;
+            unique.add((pixels[i] >> 4)*256 + (pixels[i+1] >> 4)*16 + (pixels[i+2] >> 4));
+          }
+          if (unique.size <= 2) return null;
+        } catch {}
+      }
       const png = shot.toDataURL('image/png');
-      return /^data:image\/png;base64,/.test(png) && png.length < 3000000 ? png : null;
-    } catch { return null; }
+      if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(png) || png.length > 3000000) return null;
+      captureChart.lastMeta = {width:w,height:h+58,symbol:String(ctx.symbol || ''),
+        interval:String(ctx.interval || ''),indicatorCount:names.length};
+      return png;
+    } catch {return null;}
   }
   function uniqueVisualDetail(t, ctx, analyst) {
     const s = String(t || '').trim();
@@ -115,9 +139,46 @@
   }
   // La inferencia visual es OPCIONAL y asíncrona. Nunca bloquea el chat ni
   // el botón Analizar gráfico: el análisis del rango visible se entrega primero.
+  // La misma cadena PNG que recibe el Worker se muestra aquí, sin regenerarla.
+  // Así se puede comprobar moneda, temporalidad, volumen, oscilador y dibujos.
+  function screenshotPreview(screenshot, ctx) {
+    const details = document.createElement('details');
+    details.className = 'ai-screenshot-preview';
+    details.style.margin = '7px 0';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Ver captura real enviada al modelo';
+    summary.style.cursor = 'pointer';
+    summary.style.fontSize = '11px';
+    const info = document.createElement('div');
+    const meta = captureChart.lastMeta || {};
+    info.textContent = (meta.symbol || ctx.symbol || '') + ' · ' +
+      (meta.interval || ctx.interval || '') +
+      (meta.width ? ' · ' + meta.width + ' × ' + meta.height + ' píxeles' : '') +
+      ' · imagen PNG';
+    info.style.fontSize='10px'; info.style.margin='5px 0';
+    const image = document.createElement('img');
+    image.src = screenshot;
+    image.alt = 'Captura literal del gráfico y de los indicadores enviada a la IA visual';
+    image.style.width='100%'; image.style.maxHeight='270px';
+    image.style.objectFit='contain';
+    image.style.borderRadius='6px';
+    details.appendChild(summary);
+    details.appendChild(info);
+    details.appendChild(image);
+    return details;
+  }
   function launchVisual({message, core, ctx, screenshot, q, analyst, entry}) {
     const vision = window.CCTFreeVision;
-    if (!vision || !screenshot || st.vision === 'off') return;
+    if (!vision || st.vision === 'off') return;
+    if (!screenshot) {
+      const notice = document.createElement('p');
+      notice.className='ai-vision-progress';
+      notice.textContent='No se pudo capturar el lienzo del gráfico. Vuelve a abrir la pestaña Gráfico y prueba de nuevo.';
+      message.appendChild(notice);
+      return;
+    }
+    const preview = screenshotPreview(screenshot, ctx);
+    message.appendChild(preview);
     if (vision.isBusy && vision.isBusy()) {
       const note = document.createElement('p');
       note.className = 'ai-vision-progress';
@@ -141,6 +202,7 @@
       if (vision.cancel) vision.cancel();
     });
     const model = st.vision; // Modelo elegido cuando se capturó este gráfico.
+    label.textContent = 'Captura PNG verificada y enviada al motor de visión; procesando…';
     vision.analyze({
       ctx, screenshot, model, question:q,
       onProgress:text => { if (status.isConnected) label.textContent = String(text || 'Analizando la captura…'); }
@@ -150,6 +212,9 @@
       if (uniqueVisualDetail(observation,ctx,analyst)) {
         const final = core + '\n\n**Observación visual de ' + response.model + ':** ' + observation;
         message.innerHTML = md(final);
+        message.appendChild(preview);
+        label.textContent = 'Lectura visual completada. La imagen enviada está disponible arriba.';
+        message.appendChild(status);
         if (entry) entry.text = final;
       } else {
         label.textContent = 'La visión no encontró detalles adicionales fiables. Se conserva el análisis técnico.';

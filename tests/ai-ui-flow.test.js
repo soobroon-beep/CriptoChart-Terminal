@@ -6,7 +6,7 @@ const vm=require('node:vm');
 const {readFileSync}=require('node:fs');
 const {join}=require('node:path');
 const source=readFileSync(join(__dirname,'..','ai-ui.js'),'utf8');
-const start=source.indexOf('  function launchVisual('),end=source.indexOf('  function init() {',start);
+const start=source.indexOf('  function screenshotPreview('),end=source.indexOf('  function init() {',start);
 assert.ok(start>=0&&end>start,'El módulo debe exponer launchVisual y ask');
 
 function harness() {
@@ -82,7 +82,7 @@ test('al cancelar la visión se conserva el análisis calculado',async()=>{
   const h=harness();
   await h.module.ask('Analiza el gráfico');
   const bot=h.log.find(x=>x.role==='bot');
-  const status=bot.children[0], button=status.children.find(x=>x.tag==='button');
+  const status=bot.children.find(x=>x.className==='ai-vision-progress'), button=status.children.find(x=>x.tag==='button');
   assert.ok(button);
   button.handlers.click();
   await Promise.resolve();await Promise.resolve();await Promise.resolve();
@@ -99,4 +99,17 @@ test('un resultado visual válido en español actualiza la misma respuesta',asyn
   assert.match(bot.innerHTML,/Observación visual/);
   assert.match(bot.innerHTML,/velas caen/);
   assert.equal(h.st.busy,false);
+});
+
+
+test('la captura mostrada en miniatura es la misma cadena PNG que recibió el Worker',async()=>{
+  const h=harness();
+  await h.module.ask('Analiza el gráfico');
+  const bot=h.log.find(x=>x.role==='bot');
+  const preview=bot.children.find(x=>x.tag==='details');
+  assert.ok(preview,'Debe existir una previsualización real');
+  const image=preview.children.find(x=>x.tag==='img');
+  assert.ok(image);
+  assert.equal(image.src,h.pending[0].opts.screenshot);
+  assert.match(preview.children[0].textContent,/captura real enviada/i);
 });

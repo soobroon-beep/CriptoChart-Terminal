@@ -32,10 +32,12 @@ test('captura real del canvas completo con BTC, temporalidad, indicadores y dibu
  const actual=calls.find(x=>x[0]==='image');
  assert.equal(actual[1],canvas);
  assert.equal(actual[2],0);
- assert.equal(actual[3],64);
- assert.equal(actual[5],Math.round(canvas.height*Math.min(1,1600/canvas.width,1150/canvas.height)));
+ assert.equal(actual[3],58);
+ assert.equal(actual[5],Math.round(canvas.height*Math.min(1,1152/canvas.width,(832-58)/canvas.height)));
  const words=calls.filter(x=>x[0]==='text').map(x=>x[1]).join(' ');
  assert.match(words,/BTCUSDT/);assert.match(words,/1h/);
  assert.match(words,/Nova Oscillator/);assert.match(words,/Volumen/);
+ assert.ok(capture.lastMeta && capture.lastMeta.symbol === 'BTCUSDT');
+ assert.ok(capture.lastMeta && capture.lastMeta.interval === '1h');
  assert.ok(created[0].height>actual[5],'No debe recortar los paneles inferiores');
 });

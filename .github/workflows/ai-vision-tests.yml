@@ -5,6 +5,7 @@ on:
       - 'ai-*.js'
       - 'app.js'
       - 'tests/ai-*.test.js'
+      - 'tests/ai-processor-real.mjs'
       - '.github/workflows/ai-vision-tests.yml'
   push:
     branches:
@@ -13,6 +14,7 @@ on:
       - 'ai-*.js'
       - 'app.js'
       - 'tests/ai-*.test.js'
+      - 'tests/ai-processor-real.mjs'
       - '.github/workflows/ai-vision-tests.yml'
 permissions:
   contents: read
@@ -35,3 +37,17 @@ jobs:
           node --check app.js
       - name: Pruebas de captura, interacción y recuperación
         run: node --test tests/ai-vision.test.js tests/ai-vision-timeouts.test.js tests/ai-ui-flow.test.js tests/ai-capture.test.js tests/ai-chart.test.js
+
+  real_image_input:
+    name: PNG real en procesador Qwen3.5
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar procesador multimodal real
+        run: npm install --no-save --no-package-lock @huggingface/transformers@4.4.0-next.0 pngjs @napi-rs/canvas
+      - name: Decodificar imagen y preparar tensores Qwen3.5
+        run: node tests/ai-processor-real.mjs
