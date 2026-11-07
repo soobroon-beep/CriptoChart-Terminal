@@ -365,16 +365,29 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
     const values = {}, v = ctx.values || {};
     const allows = {vwap:'vwap', supertrend:'supertrend', trailTrend:'trail', stochK:'stoch', obvSlope:'obv'};
     for (const [name, key] of Object.entries(allows)) if (active.includes(key) && Number.isFinite(v[name])) values[name] = v[name];
-    const novaVisible = active.some(k => /^nn/i.test(k) || /nova|nexus/i.test(k));
+    let nova = null;
+    if (ctx.nova && active.some(k => /^nn/i.test(k))) {
+      nova = {};
+      if (active.includes('nnIa') && ctx.nova.last) nova.ultima_senal = ctx.nova.last;
+      if (active.includes('nnEma')) {
+        nova.nube_ema = {base:ctx.nova.base, superior:ctx.nova.top, inferior:ctx.nova.bot, ema200:ctx.nova.ema200};
+      }
+      if (active.includes('nnSmc')) nova.tendencia_smc = ctx.nova.smcTrend;
+      if (active.includes('nnIa') || active.includes('nnTrail')) {
+        nova.oscilador = ctx.nova.osc;
+        nova.flujo = ctx.nova.flux;
+        nova.adx = ctx.nova.adx;
+      }
+    }
     const fmtC = x => Number.isFinite(x) ? +x.toPrecision(8) : null;
     return JSON.stringify({
       activo:ctx.symbol, temporalidad:ctx.interval, exchange:ctx.exchange || null,
       ultima_vela:ctx.candles.length ? ctx.candles[ctx.candles.length - 1].t : null,
       indicadores_activados:active, valores_indicadores_activados:values,
-      nova_nexus: novaVisible ? ctx.nova : null,
-      indicadores_personalizados:(ctx.pine || []).slice(0, 8),
+      nova_nexus: nova, indicadores_personalizados:(ctx.pine || []).slice(0, 8),
       zonas_de_indicadores: active.some(k => /^(nnSR|nnOb|nnSmc)$/i.test(k)) ? ctx.zones : null,
       perfil_volumen: active.some(k => /^(vpvr|nnVP)$/i.test(k)) ? ctx.vp : null,
+      dibujos_del_usuario:(ctx.drawings || []).slice(0, 24),
       velas_ohlcv:(ctx.candles || []).slice(-45).map(c => [c.t,fmtC(c.o),fmtC(c.h),fmtC(c.l),fmtC(c.c),fmtC(c.v)])
     });
   }
@@ -385,10 +398,17 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
     const movement = diff > .25 ? 'subieron' : diff < -.25 ? 'bajaron' : 'se movieron de forma lateral';
     const active = Array.isArray(ctx.active) ? ctx.active : [];
     const labels = {nnIa:'Nova Nexus IA',nnEma:'Nova Nexus EMA',nnSmc:'Nova SMC',nnOb:'Nova OB',nnSR:'Nova S/R',nnVP:'Nova VP',vpvr:'perfil de volumen',volume:'volumen',rsi:'RSI',macd:'MACD',supertrend:'Supertrend'};
-    const shown = active.slice(0, 5).map(k => labels[k] || k).join(', ');
+    const shown = active.slice(0, 4).map(k => labels[k] || k).join(', ');
+    const ds = Array.isArray(ctx.drawings) ? ctx.drawings : [];
+    const types = {trend:'tendencia',horizontal:'horizontal',hray:'rayo horizontal',rect:'rectángulo',ray:'rayo',text:'texto',fib:'Fibonacci'};
+    const names = ds.slice(-3).map(d => d.label || types[d.type] || d.type).filter(Boolean);
+    const annotated = ds.length ? ' Dibujos registrados: ' + ds.length + (names.length ? ' (' + names.join(', ') + ')' : '') + '.' : '';
+    const nv = ctx.nova && ctx.nova.last;
+    const signal = active.includes('nnIa') && nv && Number.isFinite(nv.ago) && nv.ago <= 10 &&
+      (nv.side === 'buy' || nv.side === 'sell') ? ' Nova Nexus: última señal ' + (nv.side === 'buy' ? 'alcista' : 'bajista') + ' hace ' + nv.ago + ' velas.' : '';
     return '**' + ctx.symbol + ' · ' + ctx.interval + '**: último precio ' + fp(lastC.c) + '; las últimas velas ' + movement + '. ' +
-      (shown ? 'Indicadores activados: ' + shown + (active.length > 5 ? ' y otros' : '') + '. ' : 'No hay indicadores activos registrados. ') +
-      'Para interpretar visualmente los dibujos, las señales y su posición en la captura, activa un modelo con visión en Ajustes de IA; el modo Local no puede ver imágenes.';
+      (shown ? 'Activos: ' + shown + (active.length > 4 ? ' y otros' : '') + '.' : '') + signal + annotated +
+      ' Para interpretar la posición visual exacta de todos los dibujos y señales necesitas IA con visión; el modo Local no interpreta imágenes.';
   }
   const VISUAL_SYSTEM = 'Eres el lector VISUAL de gráficos de VORTEX. Responde SIEMPRE en español con máximo 75 palabras y entre 2 y 4 frases, sin listas ni títulos largos. Mira la captura auténtica del gráfico y describe únicamente velas, indicadores visibles y dibujos trazados por el usuario, y qué señalan. Usa la lista de indicadores activados solo para identificar los que aparecen en imagen, y OHLCV para confirmar cifras. NO menciones ni calcules RSI, MACD, Bollinger, medias ni indicadores que NO estén activos/visibles. NO agregues niveles, escenarios, objetivos, stops, noticias, calendario o explicaciones largas a menos que se pidan. Si una señal o dibujo no se distingue bien, dilo; nunca inventes una lectura visual. Es una descripción orientativa, no una orden de trading.';
 
