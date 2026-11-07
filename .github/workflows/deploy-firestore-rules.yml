@@ -1,0 +1,25 @@
+name: Publicar reglas de Firestore
+# Publica firestore.rules en Firebase cada vez que cambia en main (o a mano). Usa el mismo secreto FIREBASE_SERVICE_ACCOUNT que el reentrenamiento.
+# Sin el secreto no hace nada. La cuenta de servicio necesita permiso para administrar reglas de Firestore (rol «Administrador de reglas de Firebase»).
+on:
+  push:
+    branches: [main]
+    paths: ['firestore.rules', 'firebase.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: deploy-firestore-rules, cancel-in-progress: false}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publicar reglas
+        run: |
+          if [ -z "$SA" ]; then echo "FIREBASE_SERVICE_ACCOUNT no está configurado: no se publican las reglas."; exit 0; fi
+          umask 077; printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json" npx --yes firebase-tools@13 deploy --only firestore:rules --project criptochart-bd774 --non-interactive
+          rm -f "$RUNNER_TEMP/sa.json"
