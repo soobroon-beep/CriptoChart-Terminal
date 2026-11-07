@@ -49,3 +49,17 @@ Se inicia desde la pestaña **Paper trading** de cada bot (solo versión de PC).
 
 ## Panel de riesgo (cartera)
 En la biblioteca de Nova Bot Lab: «Panel de riesgo». Límites globales (pérdida diaria total, drawdown total, posiciones abiertas, exposición) e interruptor de emergencia. Vigila todas las sesiones de paper trading juntas y solo veta entradas nuevas; no cierra posiciones. El servidor (flujo de paper trading) aplica los mismos límites.
+## Avisos con la app cerrada (notificaciones push)
+En **Alertas → En tu celular → Avisos con la app cerrada**. El Worker de Cloudflare `vortex-push` (`worker/push-alerts.mjs`) revisa cada minuto tus **alertas de precio** y los **movimientos bruscos** del top 5, y manda una notificación Web Push aunque VORTEX esté cerrada. Las alertas con indicador siguen revisándose solo con la app abierta.
+
+- Gratis: plan gratuito de Workers + KV (`vortex-push`). Solo escribe en el KV cuando algo cambia.
+- Las claves VAPID se crean solas la primera vez y viven en el KV; no hay secretos que configurar en la app.
+- Si la alerta se cumple con la app abierta y también en el servidor, la notificación lleva la misma etiqueta y no se duplica.
+- Al abrir la app, las alertas que disparó el servidor se marcan como disparadas.
+
+Publicación (una sola vez):
+1. Cloudflare → My Profile → API Tokens → Create Token → plantilla **Edit Cloudflare Workers** → crear y copiar.
+2. GitHub → Settings → Secrets and variables → Actions → New repository secret: `CLOUDFLARE_API_TOKEN` = el token.
+3. GitHub → Actions → «Publicar servidor de avisos (vortex-push)» → Run workflow. Se vuelve a publicar solo cuando cambia `worker/push-alerts.mjs`.
+
+Android: Chrome necesita permiso de notificaciones y conviene quitarle la optimización de batería. iPhone (iOS 16.4+): solo desde la app añadida a la pantalla de inicio.

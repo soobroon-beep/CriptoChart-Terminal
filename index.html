@@ -190,10 +190,12 @@
         <button class="primary" id="alAdd" style="margin-top:0">＋ Crear alerta</button>
         <button class="small-button" id="alInd" style="padding:14px;font-size:14px">ƒx Crear alerta con indicador</button>
       </div>
+      <div class="section-label">EN TU CELULAR</div>
+      <div id="pushBox" class="settings-list"></div>
       <div class="section-label">MOVIMIENTOS BRUSCOS</div>
       <div id="moveBox" class="settings-list"></div>
       <div id="alertList" class="settings-list"></div>
-      <p class="small-note">Las alertas se revisan mientras la app está abierta (cada pocos segundos, o al instante con el gráfico en vivo). Avisan con mensaje, sonido y vibración; las notificaciones del sistema requieren tu permiso. No ejecutan órdenes. Se guardan en este dispositivo y en tu cuenta si iniciaste sesión.</p>
+      <p class="small-note">Con la app abierta las alertas se revisan cada pocos segundos (o al instante con el gráfico en vivo). Con «Avisos con la app cerrada» activado, el servidor revisa las de precio y los movimientos bruscos cada minuto aunque la app esté cerrada. Avisan con mensaje, sonido y vibración; las notificaciones del sistema requieren tu permiso. No ejecutan órdenes. Se guardan en este dispositivo y en tu cuenta si iniciaste sesión.</p>
     </section>
 
     <!-- Screener (panel lateral; en celular es una vista completa) -->
@@ -301,6 +303,7 @@
 <script src="screener.js"></script>
 <script src="discord-format.js"></script>
 <script src="discord.js"></script>
+<script src="push.js"></script>
 <script src="pwa.js"></script>
 </body>
 </html>
