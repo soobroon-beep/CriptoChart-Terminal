@@ -4856,7 +4856,7 @@ window.CCT_host = {
 /* ───────── Nova Bot Lab: ganchos mínimos (historial de velas, guardado en la cuenta y marcadores en el gráfico) ───────── */
 window.CCT_bot = {
   key: () => 'cct_botlab_v1' + (uid ? '_' + uid : ''),
-  cloud: () => (uid && db && fbUser) ? {get: async () => { const sn = await db.doc(`users/${uid}/data/botlab`).get(); return sn.exists ? (sn.data().items || null) : null; }, set: str => db.doc(`users/${uid}/data/botlab`).set({items: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}), server: async () => { const sn = await db.doc(`users/${uid}/data/botlab_server`).get(); return sn.exists ? (sn.data().results || null) : null; }} : null,
+  cloud: () => (uid && db && fbUser) ? {get: async () => { const sn = await db.doc(`users/${uid}/data/botlab`).get(); return sn.exists ? (sn.data().items || null) : null; }, set: str => db.doc(`users/${uid}/data/botlab`).set({items: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}), server: async () => { const sn = await db.doc(`users/${uid}/data/botlab_server`).get(); if (!sn.exists) return null; const d = sn.data(); return {results: d.results || null, paper: d.paper || null}; }} : null,
   chart: () => ({symbol: symOf(state.symbol), interval: state.interval, n: candles.length, from: candles.length ? candles[0].t : null, to: candles.length ? candles[candles.length - 1].t : null}),
   seek(t) { if (!candles.length) return; pan = Math.max(0, Math.round(candles.length - 1 - idxOfTime(t) + visible * .25)); scheduleRender(); },
   async history(sym, itv, count) { // velas CERRADAS de Binance Spot, paginadas hacia atrás (máx. 6000)

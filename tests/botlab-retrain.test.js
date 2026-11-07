@@ -21,3 +21,11 @@ test('sin FIREBASE_SERVICE_ACCOUNT sale sin error y sin tocar nada', () => {
   const r = require('child_process').spawnSync('node', ['scripts/botlab-retrain.js'], {env: Object.assign({}, process.env, {FIREBASE_SERVICE_ACCOUNT: ''}), encoding: 'utf8', cwd: require('path').join(__dirname, '..')});
   assert.equal(r.status, 0); assert.match(r.stdout, /no está configurado/);
 });
+
+test('paperBot: avanza sesiones activas del servidor con el mismo libro que la app (cadena de hashes continúa)', async () => {
+  const P = require('../botlab-paper.js'), C = walk(2600, 8), T = i => Date.UTC(2025, 0, 1) + i * 3600e3, bot = mkBot(), sess = P.newSession({id: 's1', v: 1, spec: bot.versions[0].spec, capital: 10000, startT: T(1000)}); bot.paper = [sess];
+  await P.step(sess, async (s, i, n) => C.slice(0, 1800).slice(-n), null, T(1800)); const before = sess.ledger.length, firstH = sess.ledger.map(t => t.h);
+  const out = await R.paperBot(bot, [], async (s, i, n) => C.slice(-n), T(2600)); assert.equal(out.length, 1); assert.ok(sess.ledger.length >= before); assert.deepEqual(sess.ledger.slice(0, before).map(t => t.h), firstH); assert.ok(P.verify(sess)); assert.equal(sess.by, 'servidor');
+  const solo = P.newSession({id: 's2', v: 1, spec: bot.versions[0].spec, capital: 10000, startT: T(1000)}); await P.step(solo, async (s, i, n) => C.slice(-n), null, T(2600)); assert.deepEqual(solo.ledger.map(t => t.h), sess.ledger.map(t => t.h)); // mismo resultado que de una vez
+  bot.paper[0].status = 'paused'; assert.equal((await R.paperBot(bot, [], async () => C, T(2600))).length, 0);
+});

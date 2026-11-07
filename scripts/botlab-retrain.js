@@ -6,7 +6,7 @@
    · La app te muestra la propuesta (si hay) y tú decides.
    · Sin la variable FIREBASE_SERVICE_ACCOUNT no hace nada (sale sin error). Nunca imprime secretos ni datos de usuarios. */
 'use strict';
-const B = require('../botlab-engine.js'), O = require('../botlab-optimizer.js');
+const B = require('../botlab-engine.js'), O = require('../botlab-optimizer.js'), P = require('../botlab-paper.js');
 try { require('../nova-nexus.js'); } catch {}
 let Pine = null; try { Pine = require('../pine.js'); } catch {}
 const BASES = ['https://data-api.binance.vision/api/v3', 'https://api.binance.com/api/v3']; // los runners de GitHub no siempre llegan a api.binance.com
@@ -44,25 +44,33 @@ async function retrainBot(bot, scripts, getCandles, now) {
       decision: opt.decision, reasons: opt.reasons, changes: opt.changes, folds: opt.folds, oos: opt.oos, holdout: opt.holdout, candidate: opt.candidate, dims: opt.dims};
   } catch (e) { return {at: now, v: bot.mainV, status: 'error', reason: String(e.message || e).slice(0, 300)}; }
 }
+async function paperBot(bot, scripts, getCandles, now) { // avanza las sesiones de paper trading activas (mismo motor que la app; no envía órdenes)
+  const out = []; for (const sess of bot.paper || []) {
+    if (sess.status !== 'running') continue; const iv = B.IV_MS[sess.spec.interval]; if (sess.last && now < sess.last.t + 2 * iv) continue; const ropts = {nova: globalThis.NovaNexus, user: null};
+    try { await P.step(sess, async (sym, itv, count) => { const C = await getCandles(sym, itv, count); const u = userSeries(sess.spec, C, scripts); ropts.user = Object.keys(u).length ? u : null; return C; }, ropts, now); sess.err = null; sess.checkedAt = now; sess.by = 'servidor'; }
+    catch (e) { sess.err = String(e.message || e).slice(0, 200); sess.checkedAt = now; sess.by = 'servidor'; }
+    const L = sess.ledger; for (let i = 0; i < L.length - 300; i++) { delete L[i].reasonIn; delete L[i].ctx; delete L[i].sl; delete L[i].tp; } out.push(sess);
+  } return out;
+}
 const due = (bot, prev, now, force) => { const c = bot.cycle; if (!c || !c.enabled || bot.status === 'paused' || bot.status === 'archived') return false; if (force) return true; const every = Math.max(6, Math.min(24 * 14, c.everyHours || 24)) * 36e5; return !prev || now - (prev.at || 0) >= every - 30 * 6e4; };
 
 async function main() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT; if (!raw) { console.log('FIREBASE_SERVICE_ACCOUNT no está configurado: no hay nada que reentrenar. (Ver INSTALL.md → Reentrenamiento programado)'); return; }
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT; if (!raw) { console.log('FIREBASE_SERVICE_ACCOUNT no está configurado: no hay nada que hacer. (Ver INSTALL.md → Reentrenamiento programado)'); return; }
+  const MODE = process.env.MODE || 'all'; // retrain | paper | all
   let admin; try { admin = require('firebase-admin'); } catch { console.log('Falta firebase-admin (npm i --no-save firebase-admin)'); process.exit(1); }
   admin.initializeApp({credential: admin.credential.cert(JSON.parse(raw))}); const db = admin.firestore(), now = Date.now(), force = process.env.FORCE === '1', cache = new Map();
   const getCandles = async (s, i, n) => { const k = s + '|' + i + '|' + n; if (!cache.has(k)) cache.set(k, await history(s, i, n)); return cache.get(k); };
-  const users = await db.collection('users').listDocuments(); let nb = 0, nr = 0, np = 0;
+  const users = await db.collection('users').listDocuments(); let nb = 0, nr = 0, np = 0, nps = 0;
   for (const u of users) {
-    const bd = await u.collection('data').doc('botlab').get(); if (!bd.exists) continue; let S; try { S = JSON.parse(bd.data().items || '{}'); } catch { continue; } const bots = (S.bots || []).filter(b => b && b.cycle && b.cycle.enabled); if (!bots.length) continue;
-    const sd = await u.collection('data').doc('botlab_server').get(), prev = sd.exists ? (sd.data().results || {}) : {}; let scripts = null, results = Object.assign({}, prev), changed = false;
-    for (const b of bots) {
-      nb++; if (!due(b, prev[b.id], now, force)) continue;
-      if (scripts === null) { try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(s.data().items || '[]') : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } }
-      const r = await retrainBot(b, scripts, getCandles, now); results[b.id] = r; changed = true; nr++; if (r.decision === 'propuesta') np++;
-    }
-    if (changed) { for (const id of Object.keys(results)) if (!(S.bots || []).some(b => b.id === id)) delete results[id]; await u.collection('data').doc('botlab_server').set({results, updatedAt: admin.firestore.FieldValue.serverTimestamp()}); }
+    const bd = await u.collection('data').doc('botlab').get(); if (!bd.exists) continue; let S; try { S = JSON.parse(bd.data().items || '{}'); } catch { continue; }
+    const all = S.bots || [], cyc = MODE !== 'paper' ? all.filter(b => b && b.cycle && b.cycle.enabled) : [], pap = MODE !== 'retrain' ? all.filter(b => b && (b.paper || []).some(x => x.status === 'running')) : []; if (!cyc.length && !pap.length) continue;
+    const sd = await u.collection('data').doc('botlab_server').get(), prev = sd.exists ? sd.data() : {}, results = Object.assign({}, prev.results || {}), paper = Object.assign({}, prev.paper || {}); let scripts = null, changed = false;
+    const loadScripts = async () => { if (scripts !== null) return; try { const s = await u.collection('data').doc('scripts').get(); scripts = s.exists ? JSON.parse(s.data().items || '[]') : []; if (!Array.isArray(scripts)) scripts = scripts.items || []; } catch { scripts = []; } };
+    for (const b of cyc) { nb++; if (!due(b, results[b.id], now, force)) continue; await loadScripts(); const r = await retrainBot(b, scripts, getCandles, now); results[b.id] = r; changed = true; nr++; if (r.decision === 'propuesta') np++; }
+    for (const b of pap) { await loadScripts(); const ss = await paperBot(b, scripts, getCandles, now); if (ss.length) { paper[b.id] = (b.paper || []).filter(x => x.status === 'running').map(x => x); changed = true; nps += ss.length; } }
+    if (changed) { for (const id of Object.keys(results)) if (!all.some(b => b.id === id)) delete results[id]; for (const id of Object.keys(paper)) if (!all.some(b => b.id === id)) delete paper[id]; await u.collection('data').doc('botlab_server').set({results, paper, updatedAt: admin.firestore.FieldValue.serverTimestamp()}); }
   }
-  console.log(`Bots con ciclo activo: ${nb} · reentrenados: ${nr} · con propuesta: ${np}`);
+  console.log(`Modo ${MODE} · ciclos: ${nb} · reentrenados: ${nr} · con propuesta: ${np} · sesiones paper avanzadas: ${nps}`);
 }
 if (require.main === module) main().catch(e => { console.error('Error:', String(e.message || e).slice(0, 200)); process.exit(1); });
-module.exports = {retrainBot, due, history, userSeries};
+module.exports = {retrainBot, paperBot, due, history, userSeries};

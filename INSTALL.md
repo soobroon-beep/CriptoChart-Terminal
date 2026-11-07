@@ -45,4 +45,4 @@ Configuración (una sola vez):
 Sin el secreto el flujo termina sin hacer nada (no falla). Los datos de velas se descargan de `data-api.binance.vision`.
 
 ## Paper trading
-Se inicia desde la pestaña **Paper trading** de cada bot (solo versión de PC). Es una simulación hacia adelante con capital virtual: no envía órdenes reales. Por ahora se actualiza al abrir el laboratorio (se pone al día con las velas reales); no corre en servidor.
+Se inicia desde la pestaña **Paper trading** de cada bot (solo versión de PC). Es una simulación hacia adelante con capital virtual: no envía órdenes reales. Se actualiza al abrir el laboratorio (se pone al día con las velas reales) y, con el secreto `FIREBASE_SERVICE_ACCOUNT` configurado, el flujo «Paper trading de bots» (`botlab-paper.yml`) lo avanza cada hora aunque no tengas la app abierta.

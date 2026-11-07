@@ -113,7 +113,8 @@
     const C = candles, N = C.length, r = spec.risk, fee = spec.costs.feePct / 100, slip = spec.costs.slipPct / 100, ctx = {cache: {}, nova: opts.nova || root.NovaNexus, novaOpts: opts.novaOpts, user: opts.user || null};
     if (N < 60) throw new Error('Hacen falta al menos 60 velas para evaluar una estrategia');
     const atrS = series(C, {k: 'atr', n: r.atrLen}, ctx), ema200 = series(C, {k: 'ema', n: 200}, ctx), volR = series(C, {k: 'volRatio', n: 20}, ctx);
-    const trades = [], eq = new Array(N).fill(0), warnings = []; let cash = r.capital, pos = null, pend = null, peak = opts.peak || r.capital, halted = false, tradeFrom = opts.tradeFrom | 0, dayKey = -1, dayStartCash = cash, dayBlocked = false, start = -1;
+    const trades = [], avoid = [], eq = new Array(N).fill(0), warnings = []; let cash = r.capital, pos = null, pend = null, peak = opts.peak || r.capital, halted = false, tradeFrom = opts.tradeFrom | 0, dayKey = -1, dayStartCash = cash, dayBlocked = false, start = -1;
+    const wouldEnter = i => (spec.sides !== 'short' && spec.entry.long.length && spec.entry.long.every(cd => condOk(cd, i, C, ctx))) ? 'long' : (spec.sides !== 'long' && spec.entry.short.length && spec.entry.short.every(cd => condOk(cd, i, C, ctx))) ? 'short' : null; // para marcar señales que se DESCARTARON
     const entryReason = side => (side === 'long' ? spec.entry.long : spec.entry.short).map(condText).join(' Y ');
     const close = (px, i, why, flagOpen) => { // cierra la posición con costos
       const dir = pos.side === 'long' ? 1 : -1, exitFee = px * pos.qty * fee, gross = (px - pos.entry) * pos.qty * dir; cash += gross - exitFee;
@@ -169,13 +170,13 @@
             const tryS = side => { const L = side === 'long' ? spec.entry.long : spec.entry.short; return L.length && L.every(cd => condOk(cd, i, C, ctx)); };
             const mk = side => ({type: 'enter', side, atr: atrS[i], reason: entryReason(side), ctx: {trend: isNum(ema200[i]) ? (c.c > ema200[i] ? 'alcista' : 'bajista') : 'sin dato', vol: ap == null ? 'sin dato' : ap < .3 ? 'baja' : ap < .8 ? 'media' : 'alta', hour: hr}});
             if (spec.sides !== 'short' && tryS('long')) pend = mk('long'); else if (spec.sides !== 'long' && tryS('short')) pend = mk('short');
-          }
-        }
+          } else if (avoid.length < 400 && i >= tradeFrom) { const w = wouldEnter(i); if (w) avoid.push([c.t, f.minVolRatio && !(volR[i] >= f.minVolRatio) ? 'Volumen por debajo del mínimo' : (f.minAtrPct && !(ap >= f.minAtrPct)) || (f.maxAtrPct && !(ap <= f.maxAtrPct)) ? 'Volatilidad fuera de rango' : 'Fuera del horario permitido', w]); }
+        } else if (avoid.length < 400 && i >= tradeFrom) { const w = wouldEnter(i); if (w) avoid.push([c.t, halted ? 'Bot detenido por límite de drawdown' : 'Límite de pérdida diaria alcanzado', w]); }
       }
     }
     if (start < 0) start = Math.min(N - 1, 1);
     if (tradeFrom > start) start = Math.min(N - 1, tradeFrom);
-    const out = {spec, bars: N, from: C[0].t, to: C[N - 1].t, trades, equity: eq.map((e, i) => ({t: C[i].t, e: i === 0 ? r.capital : e})), warnings, halted, capital: r.capital, interval: spec.interval, symbol: spec.symbol};
+    const out = {avoid, spec, bars: N, from: C[0].t, to: C[N - 1].t, trades, equity: eq.map((e, i) => ({t: C[i].t, e: i === 0 ? r.capital : e})), warnings, halted, capital: r.capital, interval: spec.interval, symbol: spec.symbol};
     out.metrics = metrics(trades, out.equity, r.capital, C, start); out.segments = segments(C, trades, out.equity, r.capital, start); out.buyHold = buyHold(C, start, r.capital, fee, slip); out.daily = dailyStats(out.equity, trades); out.breakdown = breakdown(trades);
     if (trades.length < 30) warnings.push(`Solo ${trades.length} operaciones: la muestra es demasiado pequeña para sacar conclusiones fiables.`);
     out.verdict = verdict(out); return out;
