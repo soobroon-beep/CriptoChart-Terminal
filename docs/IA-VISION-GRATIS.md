@@ -28,7 +28,7 @@ El chat de IA admite preguntas como «¿Es buena zona para entrar en long o shor
 - Una EMA, Bollinger, RSI o MACD oculto **no se introduce** en el análisis, aunque sus series puedan existir internamente.
 - Si la captura no puede interpretarse, el análisis por datos **sigue funcionando** y no hace falta descargar un modelo para obtener un resumen.
 
-**Limitación de la visión:** SmolVLM-256M es demasiado pequeño para confiar en su lectura financiera. Qwen3.5 tiene mejor capacidad multimodal, pero **no es un modelo afinado específicamente para trading ni puede garantizar precisión o rentabilidad**. La comprensión de pantallas complejas y las recomendaciones basadas en imágenes pueden fallar. Por eso Vortex antepone el análisis por datos de las velas reales y muestra la visión solo como complemento. Qwen3.5 requiere WebGPU; la versión preliminar de Transformers.js también puede tener problemas en algunos navegadores.
+**Limitación de la visión:** SmolVLM-256M es demasiado pequeño para confiar en su lectura financiera. Qwen3.5 tiene mejor capacidad multimodal, pero **no es un modelo afinado específicamente para trading ni puede garantizar precisión o rentabilidad**. La comprensión de pantallas complejas y las recomendaciones basadas en imágenes pueden fallar. Por eso Vortex antepone el análisis por datos de las velas reales y muestra la visión solo como complemento. Qwen3.5 puede ejecutarse con CPU/WASM o WebGPU según la opción seleccionada; la ruta CPU ocupa más memoria y la biblioteca preliminar puede tener problemas en algunos navegadores.
 
 ## Corrección del bloqueo de Qwen y pruebas (noviembre 2026)
 
@@ -41,7 +41,7 @@ Si la aplicación mostraba «Interpretando la captura de tu gráfico…» sin te
 - distingue una subida corta de un descenso pronunciado de las últimas 80 velas, y reconoce trayectorias dibujadas como **hipótesis**, no predicciones confirmadas.
 
 Pruebas automatizadas del proyecto en Node 22:
-\`node --test tests/ai-vision.test.js tests/ai-vision-timeouts.test.js tests/ai-ui-flow.test.js tests/ai-capture.test.js tests/ai-chart.test.js\`
+`node --test tests/ai-vision.test.js tests/ai-vision-timeouts.test.js tests/ai-ui-flow.test.js tests/ai-capture.test.js tests/ai-chart.test.js`
 
 Estas verifican cancelación, límite de tiempo, fallo del Worker, capturas PNG, cambio de preguntas, datos técnicos y cálculos de tendencia; además hay un flujo de GitHub Actions dedicado a IA.
 
@@ -53,11 +53,11 @@ El flujo anterior solo demostraba que el PNG llegaba a los tensores del modelo. 
 
 La salida debe interpretarse como una prueba de lectura de una imagen sintética, no como evaluación de precisión financiera ni como garantía para otros gráficos. La prueba se ejecuta en GitHub Actions y solo se considera aprobada si termina y supera las verificaciones de contenido.
 
-La opción predeterminada migra una vez de la antigua Qwen3.5 2B a Qwen3.5 0.8B para reducir uso de memoria y bloqueos. Es posible volver manualmente a 2B/4B desde Ajustes de IA. Toda lectura en el navegador sigue sujeta a WebGPU y memoria disponible.
+La opción predeterminada migra una vez de Qwen3.5 GPU a Qwen3.5 0.8B CPU/WASM, cuya generación se ha probado en Chromium. Es posible volver manualmente a GPU, 2B o 4B desde Ajustes de IA. Toda lectura en el navegador sigue sujeta a memoria suficiente y a la descarga de pesos.
 
 ## Comprobación real en Chrome con el código de producción
 
-El test \`tests/ai-browser-real.mjs\` inicia **Chromium real**, carga \`ai-vision.js\` y \`ai-vision-worker.js\` originales (sin sustituirlos), crea un gráfico PNG y comprueba que el modelo Qwen3.5 genera una respuesta en español usando **CPU/WASM**. Esta prueba se diferencia de las que solo preparaban tensores o de las que generaban en Node.
+El test `tests/ai-browser-real.mjs` inicia **Chromium real**, carga `ai-vision.js` y `ai-vision-worker.js` originales (sin sustituirlos), crea un gráfico PNG y comprueba que el modelo Qwen3.5 genera una respuesta en español usando **CPU/WASM**. Esta prueba se diferencia de las que solo preparaban tensores o de las que generaban en Node.
 
 - El primer análisis en el navegador de prueba tardó cerca de **108 segundos**, incluyendo descarga, preprocesamiento e inferencia; en otras máquinas puede ser mucho más lento o fallar por memoria.
 - La ruta de CPU es la selección inicial. La versión WebGPU sigue en Ajustes para quien prefiera probarla. Si WebGPU se bloquea o falla, se reintenta una sola vez usando CPU; el chat nunca queda ocupado por esa operación y el usuario puede cancelarla.
@@ -78,7 +78,7 @@ El test \`tests/ai-browser-real.mjs\` inicia **Chromium real**, carga \`ai-visio
 
 Vortex está publicado como un sitio estático en GitHub Pages: **no ejecuta Python, un servidor Ollama ni un proceso GPU permanente**. Los modelos especializados en trading que requieren PyTorch/servidor no se pueden instalar simplemente con una clave en el sitio sin disponer de una máquina que los ejecute. Esto no se solucionaría con un CDN gratuito público de inferencia ilimitada.
 
-Qwen3.5 puede interpretar imágenes **en el navegador del usuario** mediante WebGPU, sin pagos por consulta ni API keys; para analizar gráficos financieros, el motor propio de Vortex aporta los cálculos de EMA, volumen, POC, indicadores y soportes, y evita depender del reconocimiento visual de cifras. No hay promesa de exactitud predictiva, compatibilidad con todos los dispositivos ni disponibilidad perpetua de pesos alojados por terceros.
+Qwen3.5 puede interpretar imágenes **en el navegador del usuario** mediante CPU/WASM o WebGPU, sin pagos por consulta ni API keys; para analizar gráficos financieros, el motor propio de Vortex aporta los cálculos de EMA, volumen, POC, indicadores y soportes, y evita depender del reconocimiento visual de cifras. No hay promesa de exactitud predictiva, compatibilidad con todos los dispositivos ni disponibilidad perpetua de pesos alojados por terceros.
 
 Documentación de Qwen3.5 y código abierto:
 - https://huggingface.co/huggingworld/Qwen3.5-2B-ONNX
