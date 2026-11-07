@@ -392,23 +392,67 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
     });
   }
   function visualSummaryLocal(ctx) {
-    if (!ctx || !ctx.candles || !ctx.candles.length) return 'Abre primero un gráfico con velas cargadas y vuelve a analizarlo.';
-    const cs = ctx.candles, lastC = cs[cs.length - 1], prev = cs[Math.max(0, cs.length - 9)];
-    const diff = prev && prev.c ? (lastC.c - prev.c) / prev.c * 100 : 0;
-    const movement = diff > .25 ? 'subieron' : diff < -.25 ? 'bajaron' : 'se movieron de forma lateral';
+    if (!ctx || !Array.isArray(ctx.candles) || ctx.candles.length < 12)
+      return 'Abre un gráfico con al menos 12 velas cargadas para analizarlo.';
+    const cs = ctx.candles, n = cs.length, latest = cs[n - 1], price = latest.c;
+    if (!Number.isFinite(price) || price <= 0) return 'El precio del gráfico no está disponible todavía.';
+    const change = (from, to) => Number.isFinite(from) && from > 0 ? (to - from) / from * 100 : 0;
+    const delta = change(cs[n - 12].c, price);
+    const shortMove = change(cs[n - 5].c, price);
+    const trend = delta < -1 ? 'presión bajista marcada' : delta < -.25 ? 'sesgo bajista' :
+      delta > 1 ? 'impulso alcista marcado' : delta > .25 ? 'sesgo alcista' : 'movimiento lateral';
+    const recent = Math.abs(shortMove) < .2 ? 'las últimas velas se estabilizan' :
+      shortMove > .25 ? 'las últimas velas muestran recuperación' :
+      shortMove < -.25 ? 'las últimas velas siguen retrocediendo' : 'las últimas velas muestran poco impulso';
     const active = Array.isArray(ctx.active) ? ctx.active : [];
-    const labels = {nnIa:'Nova Nexus IA',nnEma:'Nova Nexus EMA',nnSmc:'Nova SMC',nnOb:'Nova OB',nnSR:'Nova S/R',nnVP:'Nova VP',vpvr:'perfil de volumen',volume:'volumen',rsi:'RSI',macd:'MACD',supertrend:'Supertrend'};
-    const shown = active.slice(0, 4).map(k => labels[k] || k).join(', ');
-    const ds = Array.isArray(ctx.drawings) ? ctx.drawings : [];
-    const types = {trend:'tendencia',horizontal:'horizontal',hray:'rayo horizontal',rect:'rectángulo',ray:'rayo',text:'texto',fib:'Fibonacci'};
-    const names = ds.slice(-3).map(d => d.label || types[d.type] || d.type).filter(Boolean);
-    const annotated = ds.length ? ' Dibujos registrados: ' + ds.length + (names.length ? ' (' + names.join(', ') + ')' : '') + '.' : '';
-    const nv = ctx.nova && ctx.nova.last;
-    const signal = active.includes('nnIa') && nv && Number.isFinite(nv.ago) && nv.ago <= 10 &&
-      (nv.side === 'buy' || nv.side === 'sell') ? ' Nova Nexus: última señal ' + (nv.side === 'buy' ? 'alcista' : 'bajista') + ' hace ' + nv.ago + ' velas.' : '';
-    return '**' + ctx.symbol + ' · ' + ctx.interval + '**: último precio ' + fp(lastC.c) + '; las últimas velas ' + movement + '. ' +
-      (shown ? 'Activos: ' + shown + (active.length > 4 ? ' y otros' : '') + '.' : '') + signal + annotated +
-      ' Para interpretar la posición visual exacta de todos los dibujos y señales necesitas IA con visión; el modo Local no interpreta imágenes.';
+    const parts = ['**' + (ctx.symbol || 'Gráfico') + ' · ' + (ctx.interval || '') + '**: ' + trend + '; ' + recent + '.'];
+    const details = [];
+    const nn = ctx.nova || {};
+    if (active.includes('nnEma') && Number.isFinite(nn.top) && Number.isFinite(nn.bot)) {
+      const hi = Math.max(nn.top, nn.bot), lo = Math.min(nn.top, nn.bot);
+      details.push('Nube Nova Nexus: precio ' + (price < lo ? 'por debajo' : price > hi ? 'por encima' : 'dentro') + ' de la nube');
+    }
+    if (active.includes('nnIa') && nn.last && Number.isFinite(nn.last.ago) && nn.last.ago >= 0 && nn.last.ago <= 5 &&
+        (nn.last.side === 'buy' || nn.last.side === 'sell')) {
+      details.push('señal Nova Nexus ' + (nn.last.side === 'buy' ? 'alcista' : 'bajista') + ' hace ' + nn.last.ago + ' velas');
+    }
+    const pine = Array.isArray(ctx.pine) ? ctx.pine : [];
+    const osc = pine.find(x => /nova.*oscil|oscil.*nova/i.test(x.name || ''));
+    if (osc) {
+      const pl = (osc.plots || []).find(p => Number.isFinite(p.value) && /osc|mom|hist|señal|signal/i.test(p.title || '')) ||
+        (osc.plots || []).find(p => Number.isFinite(p.value));
+      if (pl) details.push('Nova Oscillator: ' + (pl.title ? pl.title + ' ' : '') + fmt(pl.value));
+      else details.push('Nova Oscillator activo, sin lectura numérica disponible');
+    }
+    if ((active.includes('vpvr') || active.includes('nnVP')) && ctx.vp && Number.isFinite(ctx.vp.poc)) {
+      const gap = Math.abs(change(ctx.vp.poc, price));
+      if (gap >= .15) details.push('perfil de volumen: precio ' + (price < ctx.vp.poc ? 'bajo' : 'sobre') + ' el POC');
+      else details.push('perfil de volumen: precio cerca del POC');
+    }
+    if (details.length) parts.push(details.slice(0, 2).join('; ') + '.');
+    const drawings = Array.isArray(ctx.drawings) ? ctx.drawings : [];
+    const pos = drawings.filter(d => d && (d.type === 'long' || d.type === 'short') &&
+      d.a && Number.isFinite(d.a.p)).sort((x, y) => Math.abs(x.a.p - price) - Math.abs(y.a.p - price))[0];
+    const horizontal = drawings.filter(d => d && (d.type === 'horizontal' || d.type === 'hray') &&
+      d.a && Number.isFinite(d.a.p)).sort((x, y) => Math.abs(x.a.p - price) - Math.abs(y.a.p - price))[0];
+    const region = drawings.filter(d => d && d.type === 'rect' && d.a && d.b &&
+      Number.isFinite(d.a.p) && Number.isFinite(d.b.p)).sort((x, y) => Math.min(
+        Math.abs(x.a.p - price), Math.abs(x.b.p - price)) - Math.min(Math.abs(y.a.p - price), Math.abs(y.b.p - price)))[0];
+    const annotations = [];
+    if (pos) {
+      const gap = change(pos.a.p, price);
+      const relative = Math.abs(gap) < .15 ? 'cerca de su entrada' : gap < 0 ? 'con el precio bajo la entrada' : 'con el precio sobre la entrada';
+      annotations.push('posición ' + (pos.type === 'long' ? 'larga' : 'corta') + ' dibujada ' + relative);
+    }
+    if (region) {
+      const low = Math.min(region.a.p, region.b.p), high = Math.max(region.a.p, region.b.p);
+      annotations.push('precio ' + (price >= low && price <= high ? 'dentro' : price < low ? 'debajo' : 'encima') + ' de una zona marcada');
+    } else if (horizontal && Math.abs(change(horizontal.a.p, price)) < 2.5) {
+      annotations.push('línea horizontal marcada en ' + fp(horizontal.a.p));
+    }
+    if (annotations.length) parts.push('En tus dibujos: ' + annotations.slice(0, 2).join('; ') + '.');
+    else if (drawings.length) parts.push('Hay ' + drawings.length + ' dibujo' + (drawings.length === 1 ? '' : 's') + ' guardado' + (drawings.length === 1 ? '' : 's') + ' en el gráfico.');
+    return parts.join(' ');
   }
   const VISUAL_SYSTEM = 'Eres el lector VISUAL de gráficos de VORTEX. Responde SIEMPRE en español con máximo 75 palabras y entre 2 y 4 frases, sin listas ni títulos largos. Mira la captura auténtica del gráfico y describe únicamente velas, indicadores visibles y dibujos trazados por el usuario, y qué señalan. Usa la lista de indicadores activados solo para identificar los que aparecen en imagen, y OHLCV para confirmar cifras. NO menciones ni calcules RSI, MACD, Bollinger, medias ni indicadores que NO estén activos/visibles. NO agregues niveles, escenarios, objetivos, stops, noticias, calendario o explicaciones largas a menos que se pidan. Si una señal o dibujo no se distingue bien, dilo; nunca inventes una lectura visual. Es una descripción orientativa, no una orden de trading.';
 
