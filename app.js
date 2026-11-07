@@ -4857,9 +4857,9 @@ window.CCT_ai = {
   res: sid => pineRes[sid] || null
 };
 /* ───────── Instantánea del mercado para el «Brief del día» de la IA (las 25 monedas con más volumen en Binance Spot) ───────── */
-window.CCT_getMarketSnapshot = async function () {
+window.CCT_getMarketSnapshot = async function (n) {
   try { if (!popAll.length) await loadPopTickers(); } catch {}
-  return popAll.slice(0, 25).map(t => ({symbol: base(t.symbol), price: +t.lastPrice, chg24h: +t.priceChangePercent, volUsd: +t.quoteVolume}));
+  return popAll.slice(0, n || 25).map(t => ({symbol: base(t.symbol), price: +t.lastPrice, chg24h: +t.priceChangePercent, volUsd: +t.quoteVolume}));
 };
 /* ───────── Contexto para la IA: lo que el usuario ve en el gráfico ───────── */
 window.CCT_getAIContext = function () {
