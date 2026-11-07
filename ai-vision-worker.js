@@ -99,9 +99,19 @@ async function infer({id, which, screenshot, prompt}) {
   try {
     const state = await load(which, id);
     report(id, 'Decodificando el PNG del gráfico…', 'load');
-    const decode = state.T.RawImage.read || state.T.RawImage.fromURL;
-    if (typeof decode !== 'function') throw Error('El motor de visión no tiene decodificador PNG.');
-    const img = await decode.call(state.T.RawImage, screenshot);
+    // No pasar data:image/png;base64 a fromURL(): en Node y algunos
+    // entornos de navegador intenta acceder a esa cadena como URL (404).
+    // Entregar los bytes reales como Blob es la ruta multimodal compatible.
+    const b64=screenshot.slice(screenshot.indexOf(',')+1);
+    const binary=atob(b64),bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const blob=new Blob([bytes],{type:'image/png'});
+    const raw=state.T.RawImage;
+    const img=typeof raw.fromBlob==='function'
+      ? await raw.fromBlob(blob)
+      : typeof raw.read==='function' ? await raw.read(blob)
+      : typeof raw.fromURL==='function' ? await raw.fromURL(screenshot)
+      : null;
     if (!img || !Number.isFinite(img.width) || !Number.isFinite(img.height) ||
         img.width < 100 || img.height < 80) throw Error('La captura llegó vacía o no pudo decodificarse.');
     report(id, 'PNG recibido: ' + img.width + ' × ' + img.height + ' píxeles. Preparando imagen…', 'load');
