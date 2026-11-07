@@ -3,6 +3,8 @@
    El test NO equivale a validar WebGPU en una computadora específica. */
 import assert from 'node:assert/strict';
 import {createCanvas} from '@napi-rs/canvas';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
 import {AutoProcessor,Qwen3_5ForConditionalGeneration,RawImage} from '@huggingface/transformers';
 
 const WIDTH=448,HEIGHT=320;
@@ -24,9 +26,19 @@ assert.equal(img.width,WIDTH);assert.equal(img.height,HEIGHT);
 const modelId='onnx-community/Qwen3.5-0.8B-ONNX';
 console.log('Cargando modelo REAL:',modelId,'para inferencia visual en CPU');
 const processor=await AutoProcessor.from_pretrained(modelId);
+// Usar el MISMO prompt que Vortex envía al usuario, no un prompt del test.
+const w={};
+runInNewContext(readFileSync('ai-vision.js','utf8'),{window:w,document:{}});
+const prompt=w.CCTFreeVision.prompt({
+  symbol:'BTCUSDT',interval:'1h',
+  chart:{active:['volume'],names:['Volumen'],pine:[]}
+},'Analiza el gráfico');
+assert.match(prompt,/Activo: BTCUSDT/);
+assert.match(prompt,/Temporalidad: 1h/);
+console.log('Probando PROMPT REAL de Vortex:',prompt.slice(0,220)+'…');
 const conversation=[{role:'user',content:[
  {type:'image'},
- {type:'text',text:'Sin saludos, títulos ni listas. Observa esta imagen de velas de trading de izquierda a derecha. Responde únicamente en dos frases breves en español: 1) ¿El precio termina más arriba o más abajo que al inicio? 2) ¿Se ven barras de volumen debajo de las velas? No inventes precios.'}
+ {type:'text',text:prompt}
 ]}];
 const formatted=processor.apply_chat_template(conversation,{add_generation_prompt:true,enable_thinking:false});
 const inputs=await processor(formatted,img);
