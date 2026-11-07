@@ -139,9 +139,46 @@
   }
   // La inferencia visual es OPCIONAL y asíncrona. Nunca bloquea el chat ni
   // el botón Analizar gráfico: el análisis del rango visible se entrega primero.
+  // La misma cadena PNG que recibe el Worker se muestra aquí, sin regenerarla.
+  // Así se puede comprobar moneda, temporalidad, volumen, oscilador y dibujos.
+  function screenshotPreview(screenshot, ctx) {
+    const details = document.createElement('details');
+    details.className = 'ai-screenshot-preview';
+    details.style.margin = '7px 0';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Ver captura real enviada al modelo';
+    summary.style.cursor = 'pointer';
+    summary.style.fontSize = '11px';
+    const info = document.createElement('div');
+    const meta = captureChart.lastMeta || {};
+    info.textContent = (meta.symbol || ctx.symbol || '') + ' · ' +
+      (meta.interval || ctx.interval || '') +
+      (meta.width ? ' · ' + meta.width + ' × ' + meta.height + ' píxeles' : '') +
+      ' · imagen PNG';
+    info.style.fontSize='10px'; info.style.margin='5px 0';
+    const image = document.createElement('img');
+    image.src = screenshot;
+    image.alt = 'Captura literal del gráfico y de los indicadores enviada a la IA visual';
+    image.style.width='100%'; image.style.maxHeight='270px';
+    image.style.objectFit='contain';
+    image.style.borderRadius='6px';
+    details.appendChild(summary);
+    details.appendChild(info);
+    details.appendChild(image);
+    return details;
+  }
   function launchVisual({message, core, ctx, screenshot, q, analyst, entry}) {
     const vision = window.CCTFreeVision;
-    if (!vision || !screenshot || st.vision === 'off') return;
+    if (!vision || st.vision === 'off') return;
+    if (!screenshot) {
+      const notice = document.createElement('p');
+      notice.className='ai-vision-progress';
+      notice.textContent='No se pudo capturar el lienzo del gráfico. Vuelve a abrir la pestaña Gráfico y prueba de nuevo.';
+      message.appendChild(notice);
+      return;
+    }
+    const preview = screenshotPreview(screenshot, ctx);
+    message.appendChild(preview);
     if (vision.isBusy && vision.isBusy()) {
       const note = document.createElement('p');
       note.className = 'ai-vision-progress';
@@ -165,6 +202,7 @@
       if (vision.cancel) vision.cancel();
     });
     const model = st.vision; // Modelo elegido cuando se capturó este gráfico.
+    label.textContent = 'Captura PNG verificada y enviada al motor de visión; procesando…';
     vision.analyze({
       ctx, screenshot, model, question:q,
       onProgress:text => { if (status.isConnected) label.textContent = String(text || 'Analizando la captura…'); }
@@ -174,6 +212,9 @@
       if (uniqueVisualDetail(observation,ctx,analyst)) {
         const final = core + '\n\n**Observación visual de ' + response.model + ':** ' + observation;
         message.innerHTML = md(final);
+        message.appendChild(preview);
+        label.textContent = 'Lectura visual completada. La imagen enviada está disponible arriba.';
+        message.appendChild(status);
         if (entry) entry.text = final;
       } else {
         label.textContent = 'La visión no encontró detalles adicionales fiables. Se conserva el análisis técnico.';
