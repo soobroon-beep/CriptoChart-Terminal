@@ -7,10 +7,12 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null
                             && request.auth.uid == userId
-                            && docId in ['cct_mobile', 'scripts']
+                            && docId in ['cct_mobile', 'scripts', 'botlab']
                             && request.resource.size() < 1000000;   // tope de Firestore: 1 MiB por documento
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
+
+    // Nova Bot Lab: 'botlab' (tus bots) lo escribe la app; 'botlab_server' (resultados del reentrenamiento) solo lo escribe el trabajo programado con credenciales de servicio (que ignora estas reglas); tú solo puedes leerlo.
 
     // Cualquier otra ruta, bloqueada.
     match /{document=**} {

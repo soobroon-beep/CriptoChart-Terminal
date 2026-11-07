@@ -25,7 +25,8 @@
     clearTimeout(cloudTimer); cloudTimer = setTimeout(async () => { const c = H.cloud && H.cloud(); if (!c) return; const s2 = JSON.stringify(S); if (s2 === cloudStr || s2.length > 900000) return; try { await c.set(s2); cloudStr = s2; } catch {} }, 1500);
   }
   async function pullCloud() {
-    const c = H.cloud && H.cloud(); if (!c) return; try { const str = await c.get(); if (str) { cloudStr = str; const m = merge(readLocal(), JSON.parse(str)); S = m; save(); if (view === 'lib') render(); } } catch {}
+    const c = H.cloud && H.cloud(); if (!c) return; try { const str = await c.get(); if (str) { cloudStr = str; const m = merge(readLocal(), JSON.parse(str)); S = m; save(); } } catch {}
+    try { if (c.server) { const r = await c.server(); if (r) mergeServer(r); } } catch {} if (view === 'lib') render();
   }
 
   /* ───────── Modelo de bot ───────── */
@@ -33,7 +34,7 @@
   function newBot(spec, method, desc) {
     const now = Date.now(); const sp = B.normalizeSpec(spec);
     return {id: uidOf(), name: sp.name, desc: desc || '', status: 'draft', method, createdAt: now, updatedAt: now, lastRunAt: null, mainV: 1,
-      versions: [{v: 1, spec: sp, at: now, note: 'Versión inicial', origin: 'usuario', state: 'principal'}], runs: [], chat: [], journal: [{t: now, kind: 'creación', text: `Bot creado (${method === 'nl' ? 'lenguaje natural' : method === 'nova' ? 'indicadores Nova' : 'constructor visual'}).`}], sweeps: {}};
+      versions: [{v: 1, spec: sp, at: now, note: 'Versión inicial', origin: 'usuario', state: 'principal'}], runs: [], chat: [], journal: [{t: now, kind: 'creación', text: `Bot creado (${method === 'nl' ? 'lenguaje natural' : method === 'nova' ? 'indicadores Nova' : method === 'indicador' ? 'un indicador propio' : 'constructor visual'}).`}], sweeps: {}};
   }
   const ver = (bot, v) => bot.versions.find(x => x.v === (v || bot.mainV)), mainSpec = bot => ver(bot).spec;
   const runOf = (bot, v) => { for (let i = bot.runs.length - 1; i >= 0; i--) if (bot.runs[i].v === (v || bot.mainV)) return bot.runs[i]; return null; };
@@ -50,9 +51,19 @@
       trades: res.trades.slice(-400).map(t => ({id: t.id, side: t.side, entryT: t.entryT, exitT: t.exitT, entry: t.entry, exit: t.exit, sl: t.sl, tp: t.tp, net: t.net, fees: t.fees, r: t.r, bars: t.bars, why: t.why, reasonIn: t.reasonIn, ctx: t.ctx, open: t.open})), tradesTotal: res.trades.length,
       equity: compact(res.equity, 240).map(p => [p.t, Math.round(p.e * 100) / 100]), bh: (res.bhCurve || []).map(p => [p[0], Math.round(p[1] * 100) / 100]), ext: ext(res)};
   }
+  /* ───────── Indicadores del usuario (Pine) → señales por vela ───────── */
+  const NAN = NaN, userCache = new Map();
+  const extractSources = (res, n) => window.CCTBotOpt.extractSources(res, n);
+  async function userSources(sid, sym, itv, bars) { // ejecuta el script del usuario sobre el historial (no toca el gráfico)
+    const candles = await candlesFor(sym, itv, bars), key = [sid, sym, itv, candles.length, candles[candles.length - 1].t].join('|'), hit = userCache.get(key); if (hit) return hit;
+    if (!H.runPine) throw new Error('Esta versión no puede ejecutar indicadores propios'); const res = await H.runPine(sid, sym, itv, candles);
+    if (!res || !res.ok) throw new Error('Tu indicador no se pudo ejecutar: ' + ((res && res.error && res.error.msg) || 'error desconocido')); const r = {sources: extractSources(res, candles.length), warnings: res.warnings || [], complete: res.complete !== false, n: candles.length}; userCache.set(key, r); if (userCache.size > 12) userCache.delete(userCache.keys().next().value); return r;
+  }
+  const userOps = sp => { const o = []; for (const g of [sp.entry, sp.exit]) for (const side of ['long', 'short']) for (const c of g[side] || []) for (const x of [c.a, c.b]) if (x && x.k === 'user') o.push(x); return o; };
   async function execute(spec, bars, extra) { // descarga velas cerradas y corre el backtest (en el navegador, sin tocar el gráfico)
     const sp = B.normalizeSpec(spec); const candles = await candlesFor(sp.symbol, sp.interval, bars); if (candles.length < 60) throw new Error(`Binance devolvió solo ${candles.length} velas de ${sp.symbol} ${sp.interval}`);
-    await new Promise(r => setTimeout(r, 20)); const res = B.backtest(candles, sp, Object.assign({nova: window.NovaNexus}, extra || {})); const t0 = res.equity[0].t, cs = candles.filter(c => c.t >= t0); if (cs.length) res.bhCurve = compact(cs.map(c => [c.t, sp.risk.capital * c.c / cs[0].o]), 240); return res;
+    const uo = userOps(sp), user = {}, uw = []; for (const sid of [...new Set(uo.map(x => x.sid))]) { const r = await userSources(sid, sp.symbol, sp.interval, bars); for (const x of uo.filter(y => y.sid === sid)) { const f = r.sources.find(q => q.src === x.src); if (!f) throw new Error(`Tu indicador «${x.sname || sid}» ya no produce la señal «${x.sl || x.src}» en ${sp.symbol} ${sp.interval}`); user[sid + '|' + x.src] = f.series; } if (!r.complete) uw.push(`Tu indicador «${(uo.find(y => y.sid === sid) || {}).sname || sid}» no se pudo ejecutar por completo (funciones no soportadas): sus señales pueden faltar.`); }
+    await new Promise(r => setTimeout(r, 20)); const res = B.backtest(candles, sp, Object.assign({nova: window.NovaNexus, user}, extra || {})); if (uo.length) res.warnings.push(...uw, `Este bot usa tu indicador «${uo[0].sname || uo[0].sid}». Cada señal se toma en la vela donde nace, sin mirar al futuro, pero el laboratorio no puede comprobar que tu script no repinte ni que no use datos futuros (por ejemplo con request.security). Confírmalo en paper trading antes de fiarte del resultado.`); const t0 = res.equity[0].t, cs = candles.filter(c => c.t >= t0); if (cs.length) res.bhCurve = compact(cs.map(c => [c.t, sp.risk.capital * c.c / cs[0].o]), 240); return res;
   }
   async function runBot(bot, v, bars) {
     const vv = ver(bot, v); bot.status = 'running'; save(); render();
@@ -99,7 +110,7 @@
     const list = S.bots.filter(b => showArch ? true : b.status !== 'archived').sort((a, b) => b.updatedAt - a.updatedAt), tested = S.bots.filter(b => runOf(b));
     root.innerHTML = head('NOVA BOT LAB', 'AI Trading Laboratory · backtest y simulación, sin dinero real') + `<div class="bl-actions"><button class="bl-btn" data-a="new">${IC.plus}Crear nuevo bot</button><button class="bl-btn ghost" data-a="import">Importar</button><button class="bl-btn ghost" data-a="cmp" ${sel.size >= 2 ? '' : 'disabled'}>Comparar (${sel.size})</button><label class="bl-chk"><input type="checkbox" id="blArch" ${showArch ? 'checked' : ''}> Archivados</label></div>
       <div class="bl-stats"><div><b>${S.bots.filter(b => b.status !== 'archived').length}</b><small>Bots</small></div><div><b>${tested.length}</b><small>Probados</small></div><div><b>${S.bots.reduce((a, b) => a + b.runs.length, 0)}</b><small>Backtests guardados</small></div><div><b>0</b><small>Simulando (paper)</small></div></div>
-      ${list.length ? list.map(b => { const v = mainSpec(b); return `<div class="bl-card ${b.status}"><label class="bl-sel"><input type="checkbox" data-sel="${b.id}" ${sel.has(b.id) ? 'checked' : ''}></label><div class="bl-card-m" data-a="open" data-id="${b.id}"><div class="bl-card-t"><b>${esc(b.name)}</b><span class="bl-chip s-${b.status}">${ST[b.status] || b.status}</span></div><small>${esc(v.symbol)} · ${esc(v.interval)} · v${b.mainV} · ${b.method === 'nl' ? 'lenguaje natural' : b.method === 'nova' ? 'Nova' : 'constructor'}${b.desc ? ' · ' + esc(b.desc.slice(0, 70)) : ''}</small><div class="bl-card-s">${miniStats(b)}</div></div><div class="bl-card-b"><button class="bl-mini" data-a="dup" data-id="${b.id}">Duplicar</button><button class="bl-mini" data-a="pause" data-id="${b.id}">${b.status === 'paused' ? 'Reanudar' : 'Pausar'}</button><button class="bl-mini" data-a="arch" data-id="${b.id}">${b.status === 'archived' ? 'Restaurar' : 'Archivar'}</button><button class="bl-mini" data-a="exp" data-id="${b.id}">Exportar</button><button class="bl-mini danger" data-a="del" data-id="${b.id}">Eliminar</button></div></div>`; }).join('') : `<div class="bl-empty">${IC.robot}<p><b>Aún no tienes bots.</b></p><p class="bl-dim">Crea uno escribiendo tu estrategia en español, armándola con el constructor o partiendo de Nova Nexus. Cada bot se prueba con datos históricos reales y se evalúa fuera de muestra.</p></div>`}
+      ${list.length ? list.map(b => { const v = mainSpec(b); return `<div class="bl-card ${b.status}"><label class="bl-sel"><input type="checkbox" data-sel="${b.id}" ${sel.has(b.id) ? 'checked' : ''}></label><div class="bl-card-m" data-a="open" data-id="${b.id}"><div class="bl-card-t"><b>${esc(b.name)}</b><span class="bl-chip s-${b.status}">${ST[b.status] || b.status}</span></div><small>${esc(v.symbol)} · ${esc(v.interval)} · v${b.mainV} · ${b.method === 'nl' ? 'lenguaje natural' : b.method === 'nova' ? 'Nova' : b.method === 'indicador' ? 'indicador propio' : 'constructor'}${b.desc ? ' · ' + esc(b.desc.slice(0, 70)) : ''}</small><div class="bl-card-s">${miniStats(b)}</div></div><div class="bl-card-b"><button class="bl-mini" data-a="dup" data-id="${b.id}">Duplicar</button><button class="bl-mini" data-a="pause" data-id="${b.id}">${b.status === 'paused' ? 'Reanudar' : 'Pausar'}</button><button class="bl-mini" data-a="arch" data-id="${b.id}">${b.status === 'archived' ? 'Restaurar' : 'Archivar'}</button><button class="bl-mini" data-a="exp" data-id="${b.id}">Exportar</button><button class="bl-mini danger" data-a="del" data-id="${b.id}">Eliminar</button></div></div>`; }).join('') : `<div class="bl-empty">${IC.robot}<p><b>Aún no tienes bots.</b></p><p class="bl-dim">Crea uno escribiendo tu estrategia en español, armándola con el constructor o partiendo de Nova Nexus. Cada bot se prueba con datos históricos reales y se evalúa fuera de muestra.</p></div>`}
       <p class="bl-foot">Fase 1: backtest profesional + validación por tramos. Paper trading, optimización automática y reentrenamiento programado llegan en las siguientes fases. Los resultados históricos no son una promesa de ganancia.</p>`;
   }
 
@@ -115,7 +126,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     root.innerHTML = head('Crear nuevo bot', 'Elige cómo quieres definir la estrategia', 'lib') + `<div class="bl-methods">
       <button class="bl-method" data-a="mA"><b>A · Escribirla en español</b><small>La IA la convierte en reglas ejecutables y te muestra exactamente qué hará antes de probarla. Si algo es ambiguo, te pregunta.</small></button>
       <button class="bl-method" data-a="mB"><b>B · Constructor visual</b><small>Elige indicadores, condiciones de entrada y salida, filtros, stop loss, take profit, trailing y gestión de capital sin programar.</small></button>
-      <button class="bl-method" data-a="mC"><b>C · Con indicadores de Vortex</b><small>Parte de plantillas con Nova Nexus, Nova Oscillator o indicadores clásicos. Los indicadores Nova se leen en modo solo lectura (no se modifican).</small></button></div>
+      <button class="bl-method" data-a="mC"><b>C · Con indicadores (Vortex o los tuyos)</b><small>Usa las señales de compra y venta de uno de TUS indicadores (por ejemplo tu Signals), o parte de plantillas con Nova Nexus y clásicos. Los indicadores se leen en modo solo lectura: nunca se modifican.</small></button></div>
       <p class="bl-dim">Plantillas rápidas:</p><div class="bl-chips">${[['emaRsi', 'EMA 20/50 + RSI'], ['novaNexus', 'Nova Nexus + volumen'], ['macdTrend', 'Tendencia + MACD']].map(x => `<button data-a="preset" data-k="${x[0]}">${x[1]}</button>`).join('')}</div>`;
   }
   function nlView() {
@@ -141,6 +152,26 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     nl.busy = false; nlView();
   }
 
+  /* ----- Método C: indicadores propios ----- */
+  let ind = {sym: 'BTCUSDT', itv: '1h', sid: '', busy: false, err: '', res: null, buy: '', sell: '', short: false};
+  const guess = (list, re, hint) => (list.find(x => x.kind === 'señal' && re.test(x.label)) || list.find(x => x.kind === 'señal' && x.hint === hint) || {}).src || '';
+  function indView() {
+    const sc = (H.scripts && H.scripts()) || [], r = ind.res, sig = r ? r.sources.filter(x => x.kind === 'señal') : [], opt = (sel, none) => `<option value="">${none}</option>` + sig.map(x => `<option value="${esc(x.src)}" ${x.src === sel ? 'selected' : ''}>${esc(x.label)} · ${x.count} señales</option>`).join('');
+    root.innerHTML = head('Método C · Con indicadores', 'Usa las señales de tus indicadores; no se modifican', 'newBack') +
+      `<div class="bl-box"><h4>1 · Elige tu indicador</h4>${sc.length ? `<div class="bl-grid">${fld('Indicador', `<select id="indSid"><option value="">Elige uno…</option>${[[true, 'Mis indicadores'], [false, 'Catálogo de Vortex']].map(([o, t]) => sc.some(x => x.own === o) ? `<optgroup label="${t}">${sc.filter(x => x.own === o).map(x => `<option value="${esc(x.id)}" ${x.id === ind.sid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</optgroup>` : '').join('')}</select>`)}${fld('Moneda', `<input id="indSym" list="blCoins2" value="${esc(ind.sym)}"><datalist id="blCoins2">${COINS.map(c => `<option value="${c}">`).join('')}</datalist>`)}${fld('Temporalidad', `<select id="indItv">${INTS.map(i => `<option ${i === ind.itv ? 'selected' : ''}>${i}</option>`).join('')}</select>`)}</div><div class="bl-actions"><button class="bl-btn" data-a="indScan" ${ind.busy || !ind.sid ? 'disabled' : ''}>${ind.busy ? 'Ejecutando tu indicador…' : 'Analizar sus señales'}</button></div>${note('Se ejecuta tu indicador sobre 3.000 velas históricas de Binance para ver qué señales produce. No se cambia nada en tu gráfico.')}` : note('Aún no tienes indicadores propios guardados en Vortex. Importa o crea uno en la sección de scripts/IA y vuelve aquí.')}${ind.err ? `<div class="bl-err">${esc(ind.err)}</div>` : ''}</div>` +
+      (r ? `<div class="bl-box"><h4>2 · Señales detectadas</h4>${r.sources.length ? `<div class="bl-scroll"><table class="bl-t"><thead><tr><th>Fuente</th><th>Tipo</th><th>Cuántas</th></tr></thead><tbody>${r.sources.map(x => `<tr><td>${esc(x.label)}</td><td>${x.kind}</td><td>${x.count}</td></tr>`).join('')}</tbody></table></div>` : note('Tu indicador no produjo ninguna señal, etiqueta, forma ni línea en este historial.')}${!r.complete ? note('⚠ Tu indicador usa funciones que el motor de Pine aún no soporta del todo: puede faltar información.', 'warn') : ''}</div>
+      ${sig.length ? `<div class="bl-box"><h4>3 · ¿Cuál es compra y cuál es venta?</h4><div class="bl-grid">${fld('Señal de COMPRA (entra largo)', `<select id="indBuy">${opt(ind.buy, 'Elige…')}</select>`)}${fld('Señal de VENTA (cierra el largo)', `<select id="indSell">${opt(ind.sell, 'Ninguna: saldrá por SL/TP')}</select>`)}</div><label class="bl-chk"><input type="checkbox" id="indShort" ${ind.short ? 'checked' : ''}> También operar en corto: vender con la señal de VENTA y cerrar con la de COMPRA</label>${note('Sugerí una asignación por los nombres; revísala. Stop loss y take profit empiezan en 2 ATR y 2R: puedes cambiarlos en el constructor.')}<div class="bl-actions"><button class="bl-btn" data-a="indOk" ${ind.buy ? '' : 'disabled'}>Crear bot y probar</button><button class="bl-btn ghost" data-a="indEdit" ${ind.buy ? '' : 'disabled'}>Ajustar en el constructor</button></div></div>` : ''}` : '');
+  }
+  function indSpec() {
+    const sc = (H.scripts() || []).find(x => x.id === ind.sid) || {name: 'Mi indicador'}, mkOp = src => { const f = ind.res.sources.find(x => x.src === src); return {k: 'user', sid: ind.sid, src, sname: sc.name, sl: f ? f.label : src}; }, sp = B.defaultSpec();
+    sp.name = sc.name + ' · bot'; sp.symbol = ind.sym; sp.interval = ind.itv; sp.sides = ind.short ? 'both' : 'long'; sp.entry.long = [{a: mkOp(ind.buy), op: 'is'}]; if (ind.sell) sp.exit.long = [{a: mkOp(ind.sell), op: 'is'}];
+    if (ind.short && ind.sell) { sp.entry.short = [{a: mkOp(ind.sell), op: 'is'}]; sp.exit.short = [{a: mkOp(ind.buy), op: 'is'}]; } return B.normalizeSpec(sp);
+  }
+  async function indScan() {
+    ind.busy = true; ind.err = ''; ind.res = null; indView();
+    try { ind.sym = String(ind.sym).toUpperCase().replace(/[^A-Z0-9]/g, ''); const r = await userSources(ind.sid, ind.sym, ind.itv, 3000); ind.res = r; ind.buy = guess(r.sources, /compra|buy|long|alcista|bull|up\b/i, 'buy'); ind.sell = guess(r.sources, /venta|sell|short|bajista|bear|down/i, 'sell'); if (ind.sell === ind.buy) ind.sell = ''; }
+    catch (e) { ind.err = String(e.message || e); } ind.busy = false; indView();
+  }
   /* ----- Extras de métricas (calculadas de la curva de capital completa) ----- */
   function ext(res) {
     const days = new Map(); for (const p of res.equity) days.set(Math.floor(p.t / 864e5), p.e); const keys = [...days.keys()].sort((a, b) => a - b), rets = []; let prev = res.capital;
@@ -157,7 +188,8 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
   const short = l => String(l).replace(/ \(.*/, '');
   function opndHTML(path, o) {
     const def = B.OPERANDS[o.k] || {}, nova = !window.NovaNexus && def.nova;
-    return `<span class="bl-opnd"><select data-p="${path}.k" data-re="k" aria-label="Indicador">${Object.entries(B.OPERANDS).map(([k, v]) => `<option value="${k}" ${k === o.k ? 'selected' : ''}>${esc(short(v.label))}</option>`).join('')}</select>${def.p ? Object.keys(def.p).map(pk => `<input type="number" step="any" data-p="${path}.${pk}" data-n="1" value="${o[pk] != null ? o[pk] : def.p[pk]}" aria-label="${pk}" title="${pk}">`).join('') : ''}${nova ? '<small class="bl-dim">Nova no cargado</small>' : ''}</span>`;
+    if (o.k === 'user') return `<span class="bl-opnd"><span class="bl-usr" title="Indicador propio (solo lectura)">${esc(o.sname || 'Indicador')} · ${esc(o.sl || o.src)}</span></span>`;
+    return `<span class="bl-opnd"><select data-p="${path}.k" data-re="k" aria-label="Indicador">${Object.entries(B.OPERANDS).filter(([k]) => k !== 'user').map(([k, v]) => `<option value="${k}" ${k === o.k ? 'selected' : ''}>${esc(short(v.label))}</option>`).join('')}</select>${def.p ? Object.keys(def.p).map(pk => `<input type="number" step="any" data-p="${path}.${pk}" data-n="1" value="${o[pk] != null ? o[pk] : def.p[pk]}" aria-label="${pk}" title="${pk}">`).join('') : ''}${nova ? '<small class="bl-dim">Nova no cargado</small>' : ''}</span>`;
   }
   function condRows(list, path) {
     const L = getP(draft, path) || []; return L.map((c, i) => `<div class="bl-cond">${opndHTML(`${path}.${i}.a`, c.a)}<select data-p="${path}.${i}.op" data-re="op">${Object.entries(B.OPS).map(([k, v]) => `<option value="${k}" ${c.op === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>${c.op === 'is' ? '' : opndHTML(`${path}.${i}.b`, c.b || {k: 'num', v: 0})}<button class="bl-ib sm" data-a="rmc" data-list="${path}" data-i="${i}" aria-label="Quitar condición">✕</button></div>`).join('') || '<p class="bl-dim">Sin condiciones.</p>';
@@ -200,14 +232,14 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
   }
 
   /* ----- Panel del bot ----- */
-  const TABS = [['sum', 'Resumen'], ['gr', 'Gráficos'], ['rob', 'Robustez'], ['diary', 'Diario'], ['ver', 'Versiones'], ['ai', 'Asistente'], ['est', 'Estrategia']];
+  const TABS = [['sum', 'Resumen'], ['gr', 'Gráficos'], ['rob', 'Robustez'], ['diary', 'Diario'], ['ver', 'Versiones'], ['cic', 'Reentrenar'], ['ai', 'Asistente'], ['est', 'Estrategia']];
   const metric = (l, v, c, tip) => `<div class="bl-m ${c || ''}" ${tip ? `title="${esc(tip)}"` : ''}><small>${l}</small><b>${v}</b></div>`;
   function botView() {
     const b = bot(); if (!b) { view = 'lib'; return render(); } const sp = mainSpec(b), run = runOf(b);
     root.innerHTML = head(b.name, `${sp.symbol} · ${sp.interval} · v${b.mainV} · ${ST[b.status] || ''}`, 'lib') + `<div class="bl-actions"><button class="bl-chip-btn ${marksOn ? 'on' : ''}" data-a="chartToggle">${marksOn ? 'Ocultar del gráfico' : 'Mostrar bot en el gráfico'}</button></div>` +
       (busyMsg ? `<div class="bl-busy"><span class="bl-spin"></span>${esc(busyMsg)}</div>` : '') + (marksOn ? replayBar() : '') +
       `<div class="bl-tabs" role="tablist">${TABS.map(([k, l]) => `<button role="tab" class="${tab === k ? 'on' : ''}" data-a="tab" data-k="${k}">${l}</button>`).join('')}</div><div id="blTab"></div>`;
-    ({sum: tabSum, gr: tabGr, rob: tabRob, diary: tabDiary, ver: tabVer, ai: tabAi, est: tabEst}[tab] || tabSum)(b, run);
+    ({sum: tabSum, gr: tabGr, rob: tabRob, diary: tabDiary, ver: tabVer, cic: tabCic, ai: tabAi, est: tabEst}[tab] || tabSum)(b, run);
   }
   const verdictChip = v => `<span class="bl-verdict v-${v.level}">${esc({insuficiente: 'Muestra insuficiente', pierde: 'Pierde en el histórico', consistente: 'Consistente fuera de muestra', 'no-confirmada': 'No confirmada fuera de muestra'}[v.level] || v.level)}</span>`;
   function segTable(r) {
@@ -272,6 +304,56 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const sp = mainSpec(b); $('#blTab').innerHTML = `<div class="bl-box"><h4>Reglas exactas de la versión principal (v${b.mainV})</h4>${mdLite(B.describeSpec(sp))}<div class="bl-actions"><button class="bl-btn" data-a="vedit" data-v="${b.mainV}">Editar (crea versión candidata)</button></div></div>${note('Los indicadores Nova se usan en solo lectura: el bot nunca los modifica.')}`;
   }
 
+
+  /* ----- Reentrenamiento: ciclo automático (servidor) + optimizar ahora (navegador) ----- */
+  const CYC = {enabled: false, everyHours: 24, bars: 4000};
+  const cyc = b => b.cycle || (b.cycle = Object.assign({}, CYC));
+  function pathLabel(spec, path) {
+    if (path === 'risk.sl.v') return 'Stop loss'; if (path === 'risk.tp.v') return 'Take profit';
+    const m = /^(entry|exit)\.(long|short)\.(\d+)\.(a|b)\.(\w+)$/.exec(path); if (!m) return path; const c = getP(spec, `${m[1]}.${m[2]}.${m[3]}`), o = c && c[m[4]]; return `${o && B.OPERANDS[o.k] ? short(B.OPERANDS[o.k].label) : 'Indicador'} (${m[1] === 'entry' ? 'entrada' : 'salida'} ${m[2] === 'long' ? 'compra' : 'venta'} #${+m[3] + 1}) · ${m[5] === 'n' ? 'periodo' : m[5]}`;
+  }
+  const decText = {propuesta: ['Propuesta lista para tu revisión', 'pos'], sin_mejora: ['Sin mejora comprobada: no se propone nada', ''], no_aplica: ['No aplicable', ''], error: ['No se pudo ejecutar', 'neg']};
+  function resultCard(b, r, who) {
+    if (!r) return '';
+    if (r.status === 'error') return `<div class="bl-box"><h4>Último intento (${who})</h4><small class="bl-dim">${dt(r.at)}</small><p class="neg">${esc(r.reason || 'Error')}</p></div>`;
+    const sp = mainSpec(b), d = decText[r.decision] || [r.decision, '']; const mo = r.monitor;
+    return `<div class="bl-box"><h4>Último reentrenamiento (${who})</h4><small class="bl-dim">${dt(r.at)} · ${r.bars} velas ${esc(r.interval || '')} · sobre la v${r.v}</small>
+      <div class="bl-vrow"><span class="bl-verdict ${r.decision === 'propuesta' ? 'v-consistente' : 'v-insuficiente'}">${esc(d[0])}</span></div>
+      ${mo ? `<p class="bl-dim">Versión actual con datos recientes: ${pct(mo.retPct)} · ${mo.n} op. · DD ${num(mo.maxDDPct, 1)} % · validación ${pct(mo.val)} · prueba ${pct(mo.test)} (comprar y mantener ${pct(mo.buyHold)}).</p>` : ''}
+      ${(r.reasons || []).length ? `<ul class="bl-log">${r.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+      ${(r.changes || []).length ? `<h4>Cambios propuestos</h4><ul class="bl-log">${r.changes.map(c => `<li>${esc(pathLabel(sp, c.path))}: <b>${num(c.from, 2)}</b> → <b>${num(c.to, 2)}</b></li>`).join('')}</ul>` : ''}
+      ${r.oos ? `<h4>Evidencia fuera de muestra</h4><p class="bl-dim">Procedimiento (ajustar con entrenamiento y medir en el tramo siguiente que no vio), ${r.oos.folds} tramos: candidata <b class="${cls(r.oos.cand.net)}">${money(r.oos.cand.net)}</b> (${r.oos.cand.n} op.) frente a la versión actual <b class="${cls(r.oos.base.net)}">${money(r.oos.base.net)}</b> (${r.oos.base.n} op.). Mejoró en ${r.oos.winsVsBase} de ${r.oos.folds}.</p>${r.holdout ? `<p class="bl-dim">Tramo reservado más reciente (${dd(r.holdout.from)} – ${dd(r.holdout.to)}, nunca usado para ajustar): candidata ${money(r.holdout.cand.net)} (${r.holdout.cand.n} op., DD ${num(r.holdout.cand.maxDDPct, 1)} %) · actual ${money(r.holdout.base.net)} (${r.holdout.base.n} op., DD ${num(r.holdout.base.maxDDPct, 1)} %).</p>` : ''}` : ''}
+      ${(r.folds || []).length ? `<div class="bl-scroll"><table class="bl-t"><thead><tr><th>Tramo de prueba</th><th>Ajuste (solo entrenamiento)</th><th>Candidata</th><th>Actual</th></tr></thead><tbody>${r.folds.map(f => `<tr><td>${dd(f.testFrom)} – ${dd(f.testTo)}</td><td>${f.params.length ? f.params.map(c => `${esc(pathLabel(sp, c.path))} ${num(c.to, 2)}`).join('<br>') : 'sin cambios'}</td><td class="${cls(f.cand.net)}">${money(f.cand.net)} <small>(${f.cand.n})</small></td><td class="${cls(f.base.net)}">${money(f.base.net)} <small>(${f.base.n})</small></td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${r.decision === 'propuesta' ? note('La candidata se agregó en la pestaña Versiones. No reemplaza a la principal: pruébala y decide tú.') : ''}</div>`;
+  }
+  function tabCic(b) {
+    const c = cyc(b), sv = b.server, lc = b.local, waiting = c.enabled && !sv && c.enabledAt && Date.now() - c.enabledAt > 48 * 36e5;
+    $('#blTab').innerHTML = `<div class="bl-box"><h4>Ciclo de reentrenamiento automático</h4>${note('Cada día, un trabajo programado en GitHub Actions (no depende de que tengas la app abierta) descarga velas recientes, re-evalúa la versión principal y busca mejoras con validación walk-forward: ajusta solo con datos de entrenamiento y mide en tramos que no vio. Si no hay mejora comprobada, no propone nada. Nunca cambia la versión principal por sí solo.')}
+      <label class="bl-chk"><input type="checkbox" id="cycOn" ${c.enabled ? 'checked' : ''}> Activar el ciclo automático para este bot</label>
+      <div class="bl-grid" style="margin-top:8px">${fld('Frecuencia', `<select id="cycEvery">${[[24, 'Cada día'], [72, 'Cada 3 días'], [168, 'Cada semana']].map(([v, l]) => `<option value="${v}" ${c.everyHours === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}${fld('Historial', `<select id="cycBars">${[[2500, '2.500 velas'], [4000, '4.000 velas'], [6000, '6.000 velas']].map(([v, l]) => `<option value="${v}" ${c.bars === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}</div>
+      ${c.enabled ? (sv ? note(`Servidor: último resultado ${dt(sv.at)}.`) : waiting ? note('⚠ Aún no hay resultados del servidor. Revisa que el flujo «Reentrenar bots» esté activo en GitHub y que el secreto FIREBASE_SERVICE_ACCOUNT esté configurado (INSTALL.md → Reentrenamiento programado).', 'warn') : note('Esperando al primer ciclo del servidor (corre a diario; también se puede lanzar a mano en GitHub → Actions).')) : ''}
+      ${!(H.cloud && H.cloud()) ? note('Inicia sesión para que el servidor pueda leer tus bots: sin cuenta solo funciona «Optimizar ahora».', 'warn') : ''}</div>
+      <div class="bl-box"><h4>Optimizar ahora (en este navegador)</h4>${note('Misma lógica que el servidor, ejecutada aquí con las velas actuales. Tarda unos segundos.')}<div class="bl-actions"><button class="bl-btn" data-a="optNow" ${busyMsg ? 'disabled' : ''}>Optimizar ahora</button></div></div>` + resultCard(b, sv, 'servidor') + resultCard(b, lc, 'este navegador') +
+      ((b.optHistory || []).length ? `<div class="bl-box"><h4>Historial de experimentos</h4><ul class="bl-log">${b.optHistory.slice().reverse().map(h => `<li><small>${dt(h.at)} · ${esc(h.who)}</small><br>${esc((decText[h.decision] || [h.decision])[0])}${h.oos != null ? ` · fuera de muestra: candidata ${money(h.oos)} vs actual ${money(h.base)}` : ''}</li>`).join('')}</ul></div>` : '');
+  }
+  function addCandidate(b, r, who) { // la propuesta entra como versión CANDIDATA: nunca reemplaza a la principal
+    if (!r || r.decision !== 'propuesta' || !r.candidate) return false; const nv = Math.max(...b.versions.map(x => x.v)) + 1, sp = B.normalizeSpec(r.candidate); if (!B.validateSpec(sp).ok) return false;
+    b.versions.push({v: nv, spec: sp, at: Date.now(), note: 'Reentrenamiento: ' + (r.changes || []).map(c => `${pathLabel(mainSpec(b), c.path)} ${num(c.from, 2)}→${num(c.to, 2)}`).join('; ').slice(0, 200), origin: who + ' (reentrenamiento)', state: 'candidata'}); log(b, 'reentrenamiento', `El ${who} propuso la v${nv} (candidata, pendiente de tu aprobación).`); return nv;
+  }
+  function noteHistory(b, r, who) { (b.optHistory = b.optHistory || []).push({at: r.at, who, decision: r.status === 'error' ? 'error' : r.decision, oos: r.oos ? r.oos.cand.net : null, base: r.oos ? r.oos.base.net : null}); if (b.optHistory.length > 12) b.optHistory.shift(); }
+  function mergeServer(res) { // resultados del trabajo programado → bots (sin tocar versiones principales)
+    let ch = false; for (const b of S.bots) { const r = res && res[b.id]; if (!r || (b.server && b.server.at === r.at)) continue; b.server = r; log(b, 'reentrenamiento', r.status === 'error' ? 'El servidor no pudo reentrenar: ' + r.reason : `Reentrenamiento del servidor: ${(decText[r.decision] || [r.decision])[0]}.`); noteHistory(b, r, 'servidor'); addCandidate(b, r, 'servidor'); ch = true; }
+    if (ch) save(); return ch;
+  }
+  async function optNow(b) {
+    const sp = mainSpec(b), bars = cyc(b).bars || 4000; busyMsg = 'Optimizando… preparando datos'; render();
+    try {
+      const candles = await candlesFor(sp.symbol, sp.interval, bars), uo = userOps(sp), user = {}; for (const sid of [...new Set(uo.map(x => x.sid))]) { const r = await userSources(sid, sp.symbol, sp.interval, bars); for (const x of uo.filter(y => y.sid === sid)) { const f = r.sources.find(q => q.src === x.src); if (!f) throw new Error('Tu indicador ya no produce la señal «' + (x.sl || x.src) + '»'); user[sid + '|' + x.src] = f.series; } }
+      const r = await window.CCTBotOpt.optimize(candles, sp, {seed: window.CCTBotOpt.hash(b.id + new Date().toISOString().slice(0, 10)), budget: 50, ropts: {nova: window.NovaNexus, user: uo.length ? user : null}, yield: () => new Promise(x => setTimeout(x, 0)), onProgress: (k, n, t) => { busyMsg = `Optimizando… ${t}`; const e = $('.bl-busy'); if (e) e.lastChild.textContent = busyMsg; }});
+      const res = Object.assign({}, r, {status: 'ok', v: b.mainV, symbol: sp.symbol, interval: sp.interval}); b.local = res; log(b, 'reentrenamiento', `Optimización en el navegador: ${(decText[res.decision] || [res.decision])[0]}.`); noteHistory(b, res, 'navegador'); addCandidate(b, res, 'navegador'); touch(b);
+    } catch (e) { toast('No se pudo optimizar: ' + (e.message || e)); b.local = {at: Date.now(), status: 'error', reason: String(e.message || e)}; touch(b); }
+    busyMsg = ''; if (view === 'bot') render();
+  }
   /* ----- Asistente del bot (IA con datos reales) ----- */
   function insights(b, run) { // preguntas y observaciones basadas SOLO en los números reales del último backtest
     if (!run) return ['Aún no hay resultados. ¿Quieres que ejecute primero un backtest para tener datos reales sobre los que preguntar?'];
@@ -348,7 +430,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
   /* ----- Eventos ----- */
   const ACT = {
     newBack() { view = 'new'; render(); }, wide() { wide = !wide; render(); }, new() { nl = {hist: [], spec: null, busy: false, msgs: []}; view = 'new'; render(); }, lib() { view = 'lib'; replay.on = false; clearInterval(replay.timer); replay.timer = 0; render(); },
-    mA() { view = 'nl'; nlView(); }, mB() { startDraft(B.defaultSpec(), {id: null, method: 'visual'}); }, mC() { view = 'new'; root.querySelector('.bl-chips').scrollIntoView({block: 'center'}); toast('Elige una plantilla Nova o clásica'); },
+    mA() { view = 'nl'; nlView(); }, mB() { startDraft(B.defaultSpec(), {id: null, method: 'visual'}); }, mC() { view = 'ind'; indView(); }, indScan, indOk() { const sp = indSpec(), v = B.validateSpec(sp); if (!v.ok) return toast(v.errors[0]); const b = newBot(sp, 'indicador', 'Señales de ' + (sp.entry.long[0].a.sname || 'mi indicador')); S.bots.push(b); touch(b); cur = b.id; tab = 'sum'; view = 'bot'; render(); runAndShow(b, 1); }, indEdit() { startDraft(indSpec(), {id: null, method: 'indicador'}); },
     preset(el) { const sp = B.PRESETS[el.dataset.k](); startDraft(sp, {id: null, method: el.dataset.k === 'novaNexus' ? 'nova' : 'visual'}); },
     nlOk() { const b = newBot(nl.spec, 'nl', nl.hist.filter(h => h.role === 'user').map(h => h.content).join(' / ').slice(0, 300)); S.bots.push(b); touch(b); cur = b.id; tab = 'sum'; view = 'bot'; render(); runAndShow(b, 1); },
     nlEdit() { startDraft(nl.spec, {id: null, method: 'nl'}); },
@@ -365,7 +447,7 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     vmain(el) { const b = bot(), v = +el.dataset.v, c = runOf(b, v), m = runOf(b); if (!c) { toast('Primero prueba esa versión'); return; } const bad = m && worse(c, m); if (!confirm(bad ? `La v${v} es PEOR que la principal en alguna métrica fuera de muestra o de riesgo. ¿Quieres convertirla en principal de todos modos?` : `¿Hacer principal la v${v}? Podrás volver a la anterior cuando quieras.`)) return; b.versions.forEach(x => { if (x.v === b.mainV) x.state = 'anterior'; }); ver(b, v).state = 'principal'; b.mainV = v; log(b, 'versión', `La v${v} pasó a ser la principal (decisión tuya).`); touch(b); render(); },
     vdisc(el) { const b = bot(); ver(b, +el.dataset.v).state = 'descartada'; log(b, 'versión', `Descartada la v${el.dataset.v}.`); touch(b); render(); },
     vedit(el) { const b = bot(); startDraft(ver(b, +el.dataset.v).spec, {id: b.id, note: 'Editada a partir de v' + el.dataset.v}); },
-    sweep() { doSweep(bot()); },
+    sweep() { doSweep(bot()); }, optNow() { optNow(bot()); },
     async costs() { const b = bot(), sp = mainSpec(b), run = runOf(b); $('#blCosts').innerHTML = note('Calculando…'); try { const res = await execute(Object.assign({}, sp, {costs: {feePct: sp.costs.feePct * 2, slipPct: sp.costs.slipPct * 2}}), run.reqBars); $('#blCosts').innerHTML = `<p>Con costes ×2: <b class="${cls(res.metrics.retPct)}">${pct(res.metrics.retPct)}</b> (${res.metrics.n} op.) frente a <b>${pct(run.metrics.retPct)}</b> con los costes normales.</p>`; } catch (e) { $('#blCosts').innerHTML = note('Error: ' + (e.message || e)); } },
     askq(el) { askAi(bot(), $('#blTab')._ins[+el.dataset.i]); }, accept(el) { acceptProposal(bot(), el.dataset.id); }, reject(el) { const b = bot(), m = b.chat.find(x => x.id === el.dataset.id); m.state = 'rejected'; log(b, 'experimento', 'Rechazaste una propuesta del asistente.'); touch(b); render(); },
     chartToggle() { const b = bot(); if (marksOn) { marksOn = false; replay.on = false; clearInterval(replay.timer); replay.timer = 0; replay.t = null; H.marks && H.marks(null); render(); } else chartShow(b); },
@@ -377,6 +459,8 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     root.addEventListener('change', e => {
       const el = e.target; if (el.id === 'blArch') { showArch = el.checked; return render(); } if (el.dataset.sel) { el.checked ? sel.add(el.dataset.sel) : sel.delete(el.dataset.sel); return render(); }
       if (el.id === 'rpSpd') { replay.speed = +el.value; if (replay.on) { clearInterval(replay.timer); replay.timer = setInterval(rpTick, 1100 / replay.speed); } return; } if (el.id === 'rpSeg') { replay.seg = el.value; replay.t = null; pushMarks(); return render(); } if (el.id === 'rpVer') { replay.ver = +el.value; replay.t = null; pushMarks(); return render(); } if (el.dataset.sh) { replay.show[el.dataset.sh] = el.checked; return pushMarks(); }
+      if (el.id === 'cycOn') { const b = bot(), c = cyc(b); c.enabled = el.checked; if (el.checked) c.enabledAt = Date.now(); log(b, 'ciclo', el.checked ? 'Ciclo automático de reentrenamiento ACTIVADO.' : 'Ciclo automático desactivado.'); touch(b); return render(); } if (el.id === 'cycEvery') { cyc(bot()).everyHours = +el.value; return touch(bot()); } if (el.id === 'cycBars') { cyc(bot()).bars = +el.value; return touch(bot()); }
+      if (el.id === 'indSid') { ind.sid = el.value; ind.res = null; ind.err = ''; return indView(); } if (el.id === 'indSym') { ind.sym = el.value.toUpperCase(); ind.res = null; return; } if (el.id === 'indItv') { ind.itv = el.value; ind.res = null; return; } if (el.id === 'indBuy') { ind.buy = el.value; return indView(); } if (el.id === 'indSell') { ind.sell = el.value; return; } if (el.id === 'indShort') { ind.short = el.checked; return; }
       onField(el);
     });
     root.addEventListener('submit', e => { e.preventDefault(); if (e.target.id === 'blNlForm') { const t = $('#blNlIn').value; nlSend(t); } else if (e.target.id === 'blBf') { const t = $('#blBi').value; $('#blBi').value = ''; askAi(bot(), t); } });
@@ -389,9 +473,9 @@ Reglas: símbolos de Binance Spot terminados en USDT; temporalidades 1m,3m,5m,15
     const rb = $('#rrBotLab'); rb && rb.addEventListener('click', open);
     const st = $('#blOpenFromSettings'); st && st.addEventListener('click', () => { open(); window.CCT_switchView && window.CCT_switchView('botLabView'); });
     setTimeout(pullCloud, 2500);
-    window.CCTBotLabUI = {state: () => S, open: id => ACT.open({dataset: {id}}), runBot, newBot, store: s => { S = s; save(); render(); }};
+    window.CCTBotLabUI = {mergeServer, state: () => S, open: id => ACT.open({dataset: {id}}), runBot, newBot, store: s => { S = s; save(); render(); }};
   }
   // La vista de lista usa las vistas «nl» como subvista de «new»
-  const _render = render; render = function () { if (view === 'nl') { stopReplayIf(); nlView(); document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches); return; } _render(); };
+  const _render = render; render = function () { if (view === 'ind') { stopReplayIf(); indView(); document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches); return; } if (view === 'nl') { stopReplayIf(); nlView(); document.body.classList.toggle('botlab-wide', wide && matchMedia('(min-width:1024px)').matches); return; } _render(); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

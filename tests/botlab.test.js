@@ -69,3 +69,19 @@ test('pocas velas o poca muestra: avisa en vez de inventar', () => {
   assert.throws(() => B.backtest(walk(30), base()), /60 velas/);
   const res = B.backtest(walk(200, 2, 0, .01), base()); assert.ok(res.warnings.some(w => /muestra/i.test(w)) || res.trades.length >= 30);
 });
+
+test('indicador propio: la señal entra en la apertura de la vela siguiente y exige la serie', () => {
+  const c = walk(400, 5), sig = c.map((_, i) => (i % 40 === 10 ? 1 : 0)), ex = c.map((_, i) => (i % 40 === 25 ? 1 : 0)), spec = B.defaultSpec(); spec.costs = {feePct: 0, slipPct: 0}; spec.risk.sl = null; spec.risk.tp = null; spec.risk.sizePct = 50;
+  const op = (src, label) => ({k: 'user', sid: 's1', src, sname: 'Mi Signals', sl: label}); spec.entry.long = [{a: op('b', 'Compra'), op: 'is'}]; spec.exit.long = [{a: op('s', 'Venta'), op: 'is'}];
+  assert.ok(B.validateSpec(spec).ok); assert.match(B.describeSpec(spec), /Mi Signals/);
+  assert.throws(() => B.backtest(c, spec), /Falta la serie/);
+  const res = B.backtest(c, spec, {user: {'s1|b': sig, 's1|s': ex}}); assert.ok(res.trades.length >= 5);
+  for (const t of res.trades) { assert.equal(sig[t.entryBar - 1], 1); assert.equal(t.entry, c[t.entryBar].o); }
+  const bad = JSON.parse(JSON.stringify(spec)); bad.entry.long[0].a.src = ''; assert.equal(B.validateSpec(bad).ok, false);
+});
+test('Pine: las etiquetas y alertas se registran en la vela donde nacen (sin tope de 50/400) para los bots', () => {
+  const P = require('../pine.js'), c = walk(900, 9), code = '//@version=5\nindicator("Sig", overlay=true)\nb = bar_index % 3 == 0\nif b\n    label.new(bar_index - 1, low, "BUY")\nalertcondition(b, "Compra", "x")\nplotshape(b, "Cmp", style=shape.triangleup, location=location.belowbar)\n';
+  const r = P.run(code, c, {interval: '1h', logLabels: true, alertCap: 30000, timeLimitMs: 20000}); assert.ok(r.ok, JSON.stringify(r.error));
+  assert.equal(r.labelLog.length, 300); assert.equal(r.labelLog[0][0], 0); assert.equal(r.labelLog[1][0], 3); assert.equal(r.alerts[0].bars.length, 300); assert.equal(r.shapes[0].pts.length, 300);
+  const r2 = P.run(code, c, {interval: '1h', timeLimitMs: 20000}); assert.equal(r2.labelLog, null); assert.equal(r2.alerts[0].bars.length, 300); // sin la opción, el comportamiento anterior no cambia
+});

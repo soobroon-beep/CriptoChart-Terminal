@@ -876,7 +876,7 @@ def('iff', ['cond', 'then', 'else'], a => truthy(a[0]) ? a[1] : a[2]);
 for (const nm of ['max_bars_back', 'log.info', 'log.warning', 'log.error', 'runtime.error']) def(nm, null, (a, c) => { if (nm === 'runtime.error') throw new PineError(String(a[0]), c.line); warn(c.ctx, c.line, `${nm}() se ignora`, 'ign:' + nm, 'info'); return null; }, {lenient: true});
 // Alertas: se registran por llamada (call-site) y la app las evalúa en la última vela cerrada (sin repintado)
 const alertSlot = (c, kind, title) => { const o = c.ctx.out; o.alerts = o.alerts || []; let s = c.st.al; if (!s) { s = c.st.al = {kind, title: title, message: '', bars: [], msgs: {}}; o.alerts.push(s); } return s; };
-const noteAlert = (s, c, msg) => { s.bars.push(c.ctx.bar); if (s.bars.length > 400) s.bars.shift(); if (msg !== undefined && msg !== null) { s.message = String(msg); s.msgs[c.ctx.bar] = s.message; const ks = Object.keys(s.msgs); if (ks.length > 8) delete s.msgs[ks[0]]; } };
+const noteAlert = (s, c, msg) => { s.bars.push(c.ctx.bar); if (s.bars.length > ((c.ctx.opts && c.ctx.opts.alertCap) || 400)) s.bars.shift(); if (msg !== undefined && msg !== null) { s.message = String(msg); s.msgs[c.ctx.bar] = s.message; const ks = Object.keys(s.msgs); if (ks.length > 8) delete s.msgs[ks[0]]; } };
 def('alertcondition', ['condition', 'title', 'message'], (a, c) => { const s = alertSlot(c, 'cond', a[1] === undefined || a[1] === null ? 'Condición ' + (c.ctx.out.alerts ? c.ctx.out.alerts.length + 1 : 1) : String(a[1])); if (a[2] !== undefined && a[2] !== null) s.message = String(a[2]); if (truthy(a[0])) noteAlert(s, c, a[2]); return null; }, {lenient: true});
 def('alert', ['message', 'freq'], (a, c) => { const s = alertSlot(c, 'call', 'alert()'); noteAlert(s, c, a[0]); return null; }, {lenient: true});
 
@@ -1204,6 +1204,7 @@ function keepLimit(ctx, list, key, max) {
 const dcol = (ctx, v, dflt) => pal(ctx, v === undefined ? dflt : v);
 def('label.new', ['x', 'y', 'text', 'xloc', 'yloc', 'color', 'style', 'textcolor', 'size', 'textalign', 'tooltip', 'text_font_family', 'force_overlay', 'text_formatting'], (a, c) => {
   const ctx = c.ctx, o = {_kind: 'label', x: isna(a[0]) ? ctx.bar : a[0], y: nv(a[1]), text: a[2] === undefined ? '' : String(a[2]), xloc: String(a[3] || 'bar_index'), yloc: String(a[4] || 'price'), ci: dcol(ctx, a[5], DEFCOL), style: String(a[6] || 'style_label_down').replace(/^style_/, ''), tci: dcol(ctx, a[7], hexCol('FFFFFF')), size: String(a[8] || 'normal')};
+  if (ctx.opts && ctx.opts.logLabels) { const lg = ctx.out.labelLog = ctx.out.labelLog || []; if (lg.length < 30000) lg.push([ctx.bar, o.text, o.style]); } // registro de etiquetas (vela donde nacen) para los bots
   keepLimit(ctx, ctx.out.labels, o, ctx.out.meta.maxLabels || 50); return o;
 }, {lenient: true});
 def('line.new', ['x1', 'y1', 'x2', 'y2', 'xloc', 'extend', 'color', 'style', 'width', 'force_overlay'], (a, c) => {
@@ -1651,7 +1652,7 @@ function run(code, candles, opts) {
   const polylines = o.polylines.filter(q => !q.deleted).map(q => ({pts: q.pts.map(pt => [pt.i !== null && q.xloc !== 'bar_time' ? pt.i : (pt.t !== null ? timeToIndex(ctx, pt.t) : pt.i), pt.p]), closed: q.closed, lci: q.lci, fci: q.fci, style: q.style, w: q.w}));
   const tables = o.tables.filter(t => !t.deleted).map(t => ({pos: t.pos, cols: t.cols, rows: t.rows, bci: t.bci, frame: t.frame, fw: t.fw, border: t.border, bw: t.bw, cells: [...t.cells.values()]}));
   const linefills = o.linefills.filter(f => !f.deleted && f.l1 && f.l2 && !f.l1.deleted && !f.l2.deleted).map(f => ({a: [f.l1.x1, f.l1.y1, f.l1.x2, f.l1.y2], b: [f.l2.x1, f.l2.y1, f.l2.x2, f.l2.y2], ci: f.ci}));
-  return {ok: true, version, meta: o.meta, polylines, tables, candles: o.candles, linefills, inputs: o.inputs, plots, hlines: o.hlines, fills, bgcolors: o.bgcolors, barcolors: o.barcolors, shapes: o.shapes, strategy: ctx.broker ? ctx.broker.result(ctx.candles) : null, alerts: (o.alerts || []).map(s => ({kind: s.kind, title: s.title, message: s.message, bars: s.bars, msgs: s.msgs})), labels, lines, boxes, palette: o.palette,
+  return {ok: true, version, meta: o.meta, polylines, tables, candles: o.candles, linefills, inputs: o.inputs, plots, hlines: o.hlines, fills, bgcolors: o.bgcolors, barcolors: o.barcolors, shapes: o.shapes, labelLog: o.labelLog || null, strategy: ctx.broker ? ctx.broker.result(ctx.candles) : null, alerts: (o.alerts || []).map(s => ({kind: s.kind, title: s.title, message: s.message, bars: s.bars, msgs: s.msgs})), labels, lines, boxes, palette: o.palette,
     warnings: ctx.warnings, needs: ctx.needs ? [...ctx.needs.values()] : [], complete: !ctx.incomplete, stats: {bars: n, ms: Date.now() - t0, steps: ctx.steps}};
 }
 

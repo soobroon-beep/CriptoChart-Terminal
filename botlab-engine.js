@@ -31,6 +31,7 @@
     bbUp: {label: 'Banda de Bollinger superior', p: {n: 20, d: 2}}, bbMid: {label: 'Banda de Bollinger media', p: {n: 20, d: 2}}, bbLo: {label: 'Banda de Bollinger inferior', p: {n: 20, d: 2}},
     volRatio: {label: 'Volumen ÷ su media', p: {n: 20}}, hh: {label: 'Máximo de las últimas N velas', p: {n: 20}}, ll: {label: 'Mínimo de las últimas N velas', p: {n: 20}}, num: {label: 'Número', p: {v: 0}},
     novaBuy: {label: 'Señal de COMPRA de Nova Nexus (1 = hay señal en esa vela)', nova: true}, novaSell: {label: 'Señal de VENTA de Nova Nexus (1 = hay señal)', nova: true},
+    user: {label: 'Indicador mío (señal o serie)', user: true},
     novaOsc: {label: 'Nova Oscillator', nova: true}, novaFlux: {label: 'Flujo de dinero de Nova Nexus', nova: true}, novaAdx: {label: 'ADX de Nova Nexus', nova: true}, novaBull: {label: 'Nova Nexus: precio sobre la nube EMA (1 = sí)', nova: true}
   };
   const OPS = {gt: 'es mayor que', lt: 'es menor que', gte: 'es mayor o igual que', lte: 'es menor o igual que', crossUp: 'cruza hacia ARRIBA a', crossDown: 'cruza hacia ABAJO a', is: 'está activa'};
@@ -46,6 +47,7 @@
       case 'bbUp': s = bb(cl(), P.n, P.d).up; break; case 'bbMid': s = bb(cl(), P.n, P.d).mid; break; case 'bbLo': s = bb(cl(), P.n, P.d).lo; break;
       case 'volRatio': { const m = sma(C.map(x => x.v), P.n); s = C.map((x, i) => m[i] ? x.v / m[i] : NA); break; }
       case 'hh': s = highest(C.map(x => x.h), P.n); break; case 'll': s = lowest(C.map(x => x.l), P.n); break; case 'num': s = C.map(() => +P.v); break;
+      case 'user': { const u = ctx.user && ctx.user[o.sid + '|' + o.src]; if (!u) throw new Error('Falta la serie del indicador «' + (o.sname || o.sid) + '». Ejecuta el backtest desde el laboratorio.'); s = u; break; }
       default:
         if (/^nova/.test(o.k)) {
           const nn = ctx.nova && ctx.nova.compute; if (!nn) throw new Error('Nova Nexus no está disponible en este entorno');
@@ -69,7 +71,7 @@
   }
 
   /* ───────── Especificación de estrategia ───────── */
-  const opText = o => { const d = OPERANDS[o.k] || {label: o.k}; if (o.k === 'num') return String(o.v); const P = Object.assign({}, d.p || {}, o); if (/^(ema|sma|rsi|atr|adx|volRatio|hh|ll)$/.test(o.k)) return `${d.label} ${P.n}`; if (/^macd/.test(o.k)) return `${d.label} (${P.f},${P.s},${P.g})`; if (/^bb/.test(o.k)) return `${d.label} (${P.n}, ${P.d}σ)`; return d.label; };
+  const opText = o => { const d = OPERANDS[o.k] || {label: o.k}; if (o.k === 'user') return `${o.sname || 'Indicador mío'} · ${o.sl || o.src}`; if (o.k === 'num') return String(o.v); const P = Object.assign({}, d.p || {}, o); if (/^(ema|sma|rsi|atr|adx|volRatio|hh|ll)$/.test(o.k)) return `${d.label} ${P.n}`; if (/^macd/.test(o.k)) return `${d.label} (${P.f},${P.s},${P.g})`; if (/^bb/.test(o.k)) return `${d.label} (${P.n}, ${P.d}σ)`; return d.label; };
   const condText = c => c.op === 'is' ? `${opText(c.a)}` : `${opText(c.a)} ${OPS[c.op]} ${opText(c.b)}`;
   function defaultSpec() {
     return {v: 1, name: 'Mi bot', symbol: 'BTCUSDT', interval: '1h', sides: 'long', entry: {long: [], short: []}, exit: {long: [], short: []},
@@ -79,7 +81,7 @@
   }
   function normalizeSpec(s) { const d = defaultSpec(), o = Object.assign({}, d, s || {}); o.filters = Object.assign({}, d.filters, o.filters); o.risk = Object.assign({}, d.risk, o.risk); o.costs = Object.assign({}, d.costs, o.costs); o.entry = Object.assign({long: [], short: []}, o.entry); o.exit = Object.assign({long: [], short: []}, o.exit); return o; }
   function validateSpec(spec) {
-    const s = normalizeSpec(spec), er = [], chkOp = (o, where) => { if (!o || !OPERANDS[o.k]) er.push(`${where}: indicador desconocido`); else for (const [k, v] of Object.entries(Object.assign({}, OPERANDS[o.k].p || {}, o))) if (k !== 'k' && typeof v === 'number' && (!Number.isFinite(v) || (k !== 'v' && k !== 'd' && v < 1) || v > 5000)) er.push(`${where}: valor fuera de rango (${k} = ${v})`); };
+    const s = normalizeSpec(spec), er = [], chkOp = (o, where) => { if (!o || !OPERANDS[o.k]) er.push(`${where}: indicador desconocido`); else if (o.k === 'user' && !(typeof o.sid === 'string' && o.sid && typeof o.src === 'string' && o.src)) er.push(`${where}: elige el indicador y su señal`); else for (const [k, v] of Object.entries(Object.assign({}, OPERANDS[o.k].p || {}, o))) if (k !== 'k' && typeof v === 'number' && (!Number.isFinite(v) || (k !== 'v' && k !== 'd' && v < 1) || v > 5000)) er.push(`${where}: valor fuera de rango (${k} = ${v})`); };
     const chk = (list, where) => list.forEach((c, i) => { if (!OPS[c.op]) er.push(`${where} #${i + 1}: operador inválido`); chkOp(c.a, `${where} #${i + 1}`); if (c.op !== 'is') chkOp(c.b, `${where} #${i + 1}`); });
     if (!/^[A-Z0-9]{5,20}$/.test(s.symbol)) er.push('Símbolo inválido (ej. BTCUSDT)'); if (!IV_MS[s.interval]) er.push('Temporalidad no soportada');
     if (!['long', 'short', 'both'].includes(s.sides)) er.push('Dirección inválida');
@@ -108,7 +110,7 @@
   const utcDay = t => Math.floor(t / 864e5);
   function backtest(candles, specIn, opts) {
     opts = opts || {}; const spec = normalizeSpec(specIn), v = validateSpec(spec); if (!v.ok) throw new Error('Estrategia inválida: ' + v.errors.join('; '));
-    const C = candles, N = C.length, r = spec.risk, fee = spec.costs.feePct / 100, slip = spec.costs.slipPct / 100, ctx = {cache: {}, nova: opts.nova || root.NovaNexus, novaOpts: opts.novaOpts};
+    const C = candles, N = C.length, r = spec.risk, fee = spec.costs.feePct / 100, slip = spec.costs.slipPct / 100, ctx = {cache: {}, nova: opts.nova || root.NovaNexus, novaOpts: opts.novaOpts, user: opts.user || null};
     if (N < 60) throw new Error('Hacen falta al menos 60 velas para evaluar una estrategia');
     const atrS = series(C, {k: 'atr', n: r.atrLen}, ctx), ema200 = series(C, {k: 'ema', n: 200}, ctx), volR = series(C, {k: 'volRatio', n: 20}, ctx);
     const trades = [], eq = new Array(N).fill(0), warnings = []; let cash = r.capital, pos = null, pend = null, peak = r.capital, halted = false, dayKey = -1, dayStartCash = cash, dayBlocked = false, start = -1;
