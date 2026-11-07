@@ -5,9 +5,12 @@
 'use strict';
 
 const LIBRARY = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2';
+const LIBRARY_QWEN35 = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.4.0-next.0';
 const MODELS = Object.freeze({
   smol: 'HuggingFaceTB/SmolVLM-256M-Instruct',
-  qwen: 'onnx-community/Qwen3-VL-2B-Instruct-ONNX'
+  qwen: 'onnx-community/Qwen3-VL-2B-Instruct-ONNX',
+  qwen35: 'huggingworld/Qwen3.5-2B-ONNX',
+  qwen35pro: 'huggingworld/Qwen3.5-4B-ONNX'
 });
 let current = null, loading = null, active = false;
 const report = (id, message) => self.postMessage({id, type:'progress', message});
@@ -18,8 +21,12 @@ async function load(which, id) {
   if (loading) return loading;
   loading = (async () => {
     if (!MODELS[which]) throw Error('Modelo de visión desconocido.');
+    if ((which === 'qwen35' || which === 'qwen35pro' || which === 'qwen') &&
+        (!self.navigator || !navigator.gpu)) {
+      throw Error('Este equipo no tiene WebGPU disponible. El análisis de trading por datos sigue funcionando sin descargar un modelo.');
+    }
     report(id, 'Preparando el motor abierto de visión…');
-    const T = await import(LIBRARY);
+    const T = await import(which === 'qwen35' || which === 'qwen35pro' ? LIBRARY_QWEN35 : LIBRARY);
     const modelId = MODELS[which];
     const onProgress = info => {
       if (info && (info.status === 'progress' || info.status === 'downloading')) {
@@ -29,7 +36,22 @@ async function load(which, id) {
     };
     const processor = await T.AutoProcessor.from_pretrained(modelId, {progress_callback:onProgress});
     let model, device;
-    if (which === 'qwen') {
+    if (which === 'qwen35' || which === 'qwen35pro') {
+      // Modelo Apache-2.0 de visión y lenguaje (NO requiere clave API).
+      // No se descarga automáticamente en equipos sin WebGPU.
+      if (!self.navigator || !navigator.gpu) throw Error(
+        'Qwen3.5 necesita WebGPU en este navegador. Puedes seguir usando el análisis de trading por datos, sin IA visual.'
+      );
+      const Class = T.Qwen3_5ForConditionalGeneration;
+      if (!Class) throw Error('El motor instalado no reconoce Qwen3.5. Se conserva el análisis técnico por datos.');
+      report(id, 'Preparando Qwen3.5 con visión; la primera carga necesita descargar varios archivos…');
+      model = await Class.from_pretrained(modelId, {
+        device:'webgpu',
+        dtype:{embed_tokens:'q4',vision_encoder:'fp16',decoder_model_merged:'q4'},
+        progress_callback:onProgress
+      });
+      device = 'webgpu';
+    } else if (which === 'qwen') {
       if (!self.navigator || !navigator.gpu) throw Error('Qwen3-VL requiere WebGPU y memoria gráfica. Prueba SmolVLM en este equipo.');
       const Class = T.Qwen3VLForConditionalGeneration || T.AutoModelForVision2Seq;
       if (!Class) throw Error('Esta versión del motor no admite Qwen3-VL.');
@@ -75,7 +97,7 @@ async function infer({id, which, screenshot, prompt}) {
     report(id, 'Interpretando la captura de tu gráfico…');
     const img = await state.T.RawImage.fromURL(screenshot);
     // Reducir imagen para evitar consumo excesivo de memoria con gráficos ultrapanorámicos.
-    const limit = which === 'qwen' ? 1152 : 896; // conserva más detalle de paneles y dibujos
+    const limit = which === 'qwen35' || which === 'qwen35pro' ? 1024 : which === 'qwen' ? 1152 : 896; // conserva más detalle de paneles y dibujos
     const factor = Math.min(1, limit / Math.max(img.width, img.height));
     const picture = factor < 1 ? await img.resize(Math.max(1, Math.round(img.width * factor)),
       Math.max(1, Math.round(img.height * factor))) : img;
@@ -85,10 +107,15 @@ async function infer({id, which, screenshot, prompt}) {
         {type:'text',text:String(prompt || 'Describe el gráfico visible en español brevemente.').slice(0, 3000)}
       ]
     }];
+    const isQwen35 = which === 'qwen35' || which === 'qwen35pro';
     const formatted = state.processor.apply_chat_template(messages,
-      {tokenize:false,add_generation_prompt:true});
-    const inputs = await state.processor(formatted, [picture], {return_tensors:'pt'});
-    const output = await state.model.generate({...inputs, max_new_tokens:which === 'qwen' ? 210 : 135, do_sample:false});
+      isQwen35 ? {add_generation_prompt:true} : {tokenize:false,add_generation_prompt:true});
+    // Qwen3.5 usa la firma processor(texto, imagen). Los modelos previos
+    // mantienen su propia ruta para no romper la compatibilidad existente.
+    const inputs = isQwen35
+      ? await state.processor(formatted, picture)
+      : await state.processor(formatted, [picture], {return_tensors:'pt'});
+    const output = await state.model.generate({...inputs, max_new_tokens:isQwen35 ? 190 : which === 'qwen' ? 210 : 135, do_sample:false});
     const inputLength = inputs.input_ids.dims[inputs.input_ids.dims.length - 1];
     const onlyNew = output.slice(null, [inputLength, null]);
     const decoded = await state.processor.batch_decode(onlyNew, {skip_special_tokens:true});
