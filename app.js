@@ -4862,8 +4862,17 @@ window.CCT_getAIContext = function () {
       if (r.osc && n >= 4) { const a = r.osc.slice(-3).filter(Number.isFinite); if (a.length === 3) nova.sig = a[0] / 3 + a[1] / 3 + a[2] / 3; } // media de 3 del oscilador = línea de señal
     }
   } catch (e) { nova = null; }
+  // Metadatos de los dibujos NO ocultos del activo. Es un resumen de solo lectura:
+  // no edita ni elimina trazos y acompaña la captura visual de la IA.
+  const xy = p => p && Number.isFinite(p.t) && Number.isFinite(p.p) ? {t: p.t, p: p.p} : null;
+  const drawings = DOPT.hide ? [] : getDrawings().filter(d => d && !d.hide).slice(-24).map(d => ({
+    type: String(d.type || '').slice(0, 24),
+    a: xy(d.a), b: xy(d.b), c: xy(d.c),
+    label: String(d.label || d.text || '').slice(0, 100),
+    points: Array.isArray(d.pts) ? d.pts.length : 0
+  }));
   const tk = tickers[state.symbol];
-  return {nova, symbol: symOf(state.symbol), exchange: exName(state.symbol), interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine};
+  return {nova, symbol: symOf(state.symbol), exchange: exName(state.symbol), interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine, drawings};
 };
 /* Laboratorio IA: puente mínimo al motor existente, sin cambiar indicadores originales. */
 window.CCTAILab = Object.freeze({
