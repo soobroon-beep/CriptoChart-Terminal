@@ -609,7 +609,7 @@ function alertBeep(force, tone) { // el sonido elegido en Configuración; force 
 function sysNotify(title, body, tag) {
   try {
     if (!window.Notification || Notification.permission !== 'granted') return;
-    const opts = {body, tag, renotify: true, icon: 'icons/i01-192.png', badge: 'icons/i01-192.png', vibrate: [200, 100, 200], data: {url: location.href.split('#')[0] + '#alerts'}};
+    const opts = {body, tag, renotify: true, icon: 'icons/i01-192.png', badge: 'icons/notif-badge-96.png', vibrate: [200, 100, 200], data: {url: location.href.split('#')[0] + '#alerts'}};
     if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.ready.then(r => r.showNotification(title, opts)).catch(() => {});
     else new Notification(title, opts);
   } catch {}

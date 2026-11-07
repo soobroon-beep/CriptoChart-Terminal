@@ -1,6 +1,6 @@
 'use strict';
 // Bump this version when changing cached application files. No API responses or account data are cached.
-const CACHE = 'cct-shell-v120';
+const CACHE = 'cct-shell-v121';
 const ROOT = new URL('./', self.location.href);
 const SHELL = ['index.html', 'style.css', 'glass.css', 'pwa.css', 'pwa-icons.js', 'pwa.js', 'icons.js',
   'app.js', 'screener.js', 'firebase-config.js', 'markets.js', 'indicators.js', 'patterns.js', 'channels.js', 'discord-format.js', 'discord.js', 'nova-nexus.js', 'catalog.js', 'pine.js',
@@ -41,8 +41,8 @@ self.addEventListener('fetch', event => {
 // Avisos con la app cerrada: el Worker «vortex-push» manda {title, body, tag, url} cifrado (ver worker/push-alerts.mjs y push.js)
 self.addEventListener('push', event => {
   let d = {}; try { d = event.data ? event.data.json() : {}; } catch { d = {body: event.data ? event.data.text() : ''}; }
-  const icon = new URL('icons/i01-192.png', ROOT).href;
-  event.waitUntil(self.registration.showNotification(d.title || 'VORTEX', {body: d.body || '', tag: d.tag || 'vortex', renotify: true, icon, badge: icon, vibrate: [200, 100, 200], data: {url: d.url || ROOT.href}}));
+  const icon = new URL('icons/i01-192.png', ROOT).href, badge = new URL('icons/notif-badge-96.png', ROOT).href; // badge: V blanca sobre transparente (Android solo usa la silueta en la barra de estado)
+  event.waitUntil(self.registration.showNotification(d.title || 'VORTEX', {body: d.body || '', tag: d.tag || 'vortex', renotify: true, icon, badge, vibrate: [200, 100, 200], data: {url: d.url || ROOT.href}}));
 });
 self.addEventListener('notificationclick', event => {
   event.notification.close();
