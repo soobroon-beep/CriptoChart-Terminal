@@ -12,7 +12,7 @@
   const OPEN = /mistral|llama|qwen|deepseek|gemma|phi|glm|gpt-oss|kimi|olmo|nemotron|smol|minimax/i;
   const VISION = /vision|(^|[-_:\s])vl([-_:\s]|$)|llava|pixtral|gemma-?3|mistral(-(small|medium|large))?$|llama-?4|llama-3\.2-(11|90)|minicpm-v|molmo|internvl|moondream|qwen.*vl|gpt-4o|gemini/i;
   const FALLBACK_FREE = ['mistral', 'llama', 'qwen-coder', 'deepseek'];
-  const DEF = {provider: 'free', compat: {url: 'http://localhost:11434/v1', key: '', model: 'qwen2.5vl:7b', vision: true}};
+  const DEF = {provider: 'free', lab: 'webllm', compat: {url: 'http://localhost:11434/v1', key: '', model: 'qwen2.5vl:7b', vision: true}};
 
   class LLMError extends Error { constructor(msg, kind, status) { super(msg); this.kind = kind || 'other'; this.status = status || 0; } }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -21,9 +21,10 @@
   /* ───────── Ajustes ───────── */
   function load() {
     let o = {}; try { o = JSON.parse(lsGet(KEY) || '{}') || {}; } catch {}
-    const c = o.compat || {};
-    return {provider: ['free', 'compat', 'webllm'].includes(o.provider) ? o.provider : DEF.provider,
-      compat: {url: String(c.url || DEF.compat.url).trim(), key: String(c.key || ''), model: String(c.model || DEF.compat.model).trim(), vision: c.vision !== false}};
+    const c = o.compat || {}, ok = x => ['free', 'compat', 'webllm'].includes(x);
+    let provider = ok(o.provider) ? o.provider : DEF.provider, lab = ok(o.lab) ? o.lab : null;
+    if (!lab) { lab = provider === 'compat' ? 'compat' : DEF.lab; if (provider === 'webllm') provider = 'free'; } // ajustes antiguos: lo general va por el servicio gratuito y el Laboratorio por el modelo en el navegador
+    return {provider, lab, compat: {url: String(c.url || DEF.compat.url).trim(), key: String(c.key || ''), model: String(c.model || DEF.compat.model).trim(), vision: c.vision !== false}};
   }
   const save = cfg => lsSet(KEY, JSON.stringify(cfg));
 
@@ -136,9 +137,11 @@
   /* ───────── Entrada principal ───────── */
   async function chat(messages, o) {
     o = o || {}; const cfg = o.cfg || load();
+    let prov = o.purpose === 'code' ? cfg.lab : cfg.provider; // el Laboratorio (código) puede usar otro proveedor que el resto
+    if (prov === 'webllm' && !(root.navigator && root.navigator.gpu)) prov = cfg.provider === 'webllm' ? 'free' : cfg.provider; // sin WebGPU no puede correr en el navegador
     try {
-      if (cfg.provider === 'compat') return await chatCompat(messages, o, cfg);
-      if (cfg.provider === 'webllm') return await chatWebllm(messages, o);
+      if (prov === 'compat') return await chatCompat(messages, o, cfg);
+      if (prov === 'webllm') return await chatWebllm(messages, o);
       return await chatFree(messages, o);
     } catch (e) { if (e instanceof LLMError) { e.message = friendly(e) + (e.kind === 'model' || e.kind === 'server' || e.kind === 'other' ? ' (' + String(e.message).slice(0, 120) + ')' : ''); throw e; } throw new LLMError(String(e && e.message || e), 'other'); }
   }

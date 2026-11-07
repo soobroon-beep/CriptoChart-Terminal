@@ -45,17 +45,25 @@
 
   /* ───────── Mensajes para el modelo ───────── */
   const SYS = AI.SYSTEM + `\nIDIOMA: responde SIEMPRE en español.\nHONESTIDAD: no inventes datos, horarios, noticias ni precios; si falta un dato, dilo. Distingue hechos confirmados, opiniones y rumores. Nunca prometas ganancias ni des órdenes de compra/venta: solo escenarios educativos.`;
-  const SYS_CHART = SYS + `\nTAREA: eres el analista del gráfico abierto del usuario. Recibirás los DATOS (JSON con velas, indicadores y zonas) y, si el modelo lo permite, una CAPTURA del gráfico. Identifica soportes y resistencias con PRECIOS concretos (apóyate en los datos numéricos; la imagen sirve para ver estructura, dibujos e indicadores), la tendencia, patrones visibles, y lo que dicen los indicadores activos. Usa solo precios que aparezcan en los datos o que se vean con claridad. Si NO recibes imagen, no digas que la viste. Responde con: ### Lectura general, ### Soportes, ### Resistencias, ### Indicadores, ### Escenarios e invalidación. Después queda disponible para preguntas de seguimiento.`;
-  const SYS_BRIEF = SYS + `\nTAREA: genera el BRIEFING DEL DÍA con EXACTAMENTE estas 10 secciones (### con número): 1 Resumen general del mercado; 2 Noticias y eventos económicos más importantes (de cada evento: qué significa, fecha/hora en la zona horaria indicada, por qué importa para BTC/cripto, escenarios posibles, ventana de cautela y condiciones de entrada; de cada noticia: fuente y fecha, y si es hecho, opinión o rumor); 3 Análisis técnico de la criptomoneda abierta (símbolo, precio, temporalidad, tendencia, soportes/resistencias, volumen); 4 Lectura de los indicadores activos (incluye Nova Nexus / Nova Oscillator si hay datos); 5 Evaluación de sentimiento y volatilidad; 6 Escenario alcista, bajista y neutral; 7 Niveles de precio importantes; 8 Horarios y eventos que conviene vigilar; 9 Condiciones que confirmarían o invalidarían posibles entradas; 10 Riesgos y grado de confianza. Usa SOLO los datos entregados (no inventes horarios ni noticias). Si no hay gráfico abierto, di que las secciones 3, 4, 7 dependen de abrir uno. Máximo ~700 palabras. Cierra con «Análisis educativo, no asesoría financiera.»`;
-  function dataBlock(ctx, extra) {
-    const A = ctx ? AI.analyze(ctx) : null;
-    return ctx ? AI.compactContext(ctx, A, extra) : JSON.stringify({sin_grafico: true});
+  const SYS_CHART = SYS + `\nTAREA: eres el analista del gráfico abierto del usuario. Recibirás una CAPTURA del gráfico (si el modelo la admite) y los DATOS de SUS indicadores (JSON: indicadores activos, valores, zonas, perfil de volumen, scripts Pine con sus líneas/tablas y las últimas velas).
+REGLA CLAVE: básate SOLO en los indicadores y niveles que el usuario realmente tiene en el gráfico (los que aparecen en los datos y en la captura). NO hables de EMA, RSI, MACD, medias móviles, Bollinger ni de ningún otro indicador que no esté en sus datos. Los números de los datos son los niveles reales; no inventes precios.
+FORMATO (RESUMEN BREVE, máximo ~170 palabras, viñetas cortas): ### Niveles clave (soportes y resistencias con precio, los más importantes, máximo 3 de cada uno) ### Niveles a vigilar (1-3, con qué pasaría si se pierden/rompen) ### Qué dicen mis indicadores (una línea por indicador: qué marca ahora) ### Lectura rápida (1-2 frases: sesgo y qué esperar). En preguntas de seguimiento responde corto y directo.`;
+  const SYS_BRIEF = SYS + `\nTAREA: genera un BRIEFING DEL DÍA en forma de RESUMEN CORTO (máximo ~300 palabras, viñetas de una línea; nada de párrafos largos ni listas exhaustivas). Usa SOLO los datos entregados. Secciones (### con título): Eventos importantes próximos (solo los 3-5 de impacto alto más cercanos: nombre, hora en la zona horaria indicada, y en una frase por qué importa para cripto; si no hay, dilo) · Noticias que mueven el mercado (máx. 4 viñetas, con fuente; distingue hecho, opinión o rumor) · Novedades de IA (máx. 3 viñetas sobre lo nuevo o futuro de la inteligencia artificial que aparezca en las noticias; si no hay, di que no hay novedades en las fuentes) · Criptos más populares hoy (3-4 monedas por volumen o variación en 24 h, y por qué se mueven SOLO si las noticias o los datos lo explican; si no, di solo el dato) · Tu gráfico (símbolo, precio, 2-3 niveles clave y qué marcan SUS indicadores; no menciones indicadores que no tenga) · Qué vigilar hoy (1-2 líneas de riesgo/cautela). Si no hay gráfico abierto, omite «Tu gráfico». Cierra con «Análisis educativo, no asesoría financiera.»`;
+  const NOVA_RE = /nova|oscillator|screener/i;
+  function userData(ctx) { // solo lo que el usuario realmente tiene en el gráfico (sin EMA/RSI/MACD calculados por la app)
+    const c = ctx.candles, r = x => x == null ? null : +(+x).toPrecision(7), hi = Math.max(...c.slice(-120).map(k => k.h)), lo = Math.min(...c.slice(-120).map(k => k.l));
+    const novaOn = (ctx.pine || []).some(p => NOVA_RE.test(p.name)) || (ctx.active || []).some(k => /^nn|nova/i.test(k));
+    return JSON.stringify({activo: ctx.symbol, marco: ctx.interval, precio: r(c[c.length - 1].c), cambio24h_pct: ctx.change24h, maximo_120_velas: r(hi), minimo_120_velas: r(lo),
+      indicadores_activos_del_usuario: ctx.active, valores_de_esos_indicadores: ctx.values, zonas_soporte_resistencia_dibujadas: ctx.zones, perfil_volumen: ctx.vp, scripts_pine_del_usuario: ctx.pine, nova_nexus: novaOn ? ctx.nova : undefined,
+      ultimas_velas_OHLC: c.slice(-30).map(k => [r(k.o), r(k.h), r(k.l), r(k.c)])});
   }
+  function dataBlock(ctx, extra) { return ctx ? userData(ctx) : JSON.stringify({sin_grafico: true}); }
   function briefExtras(extra) { // eventos y noticias con fecha/hora explícitas en la zona del usuario, para que el modelo no tenga que calcular horarios
     const now = extra.now, ev = (extra.calendar || []).filter(e => e.t > now - 3 * 36e5 && e.t < now + 72 * 36e5 && /high|medium|alto|medio/i.test(e.impact || '')).sort((a, b) => a.t - b.t).slice(0, 14);
     const evs = ev.map(e => `- ${hhmm(e.t)} (${tz()}) · ${e.country} · ${e.title} · impacto ${e.impact} · previsión ${e.forecast || '—'} · previo ${e.previous || '—'}${e.actual ? ' · REAL ' + e.actual : ''}`).join('\n') || '(sin eventos de impacto medio/alto en las próximas 72 h)';
-    const nws = (extra.news || []).filter(n => n.t > now - 36 * 36e5).slice(0, 12).map(n => `- ${hhmm(n.t)} · ${n.src || 'fuente'} · ${n.title}`).join('\n') || '(sin noticias recientes cargadas)';
-    return `AHORA: ${new Date(now).toLocaleString('es', {dateStyle: 'full', timeStyle: 'short'})} (${tz()})\nCALENDARIO ECONÓMICO (hora local ${tz()}):\n${evs}\nNOTICIAS RECIENTES (fuente y fecha):\n${nws}`;
+    const nws = (extra.news || []).filter(n => n.t > now - 36 * 36e5).slice(0, 24).map(n => `- ${hhmm(n.t)} · ${n.src || 'fuente'} · ${n.title}`).join('\n') || '(sin noticias recientes cargadas)';
+    const mk = (extra.market || []).slice(0, 12).map(m => `- ${m.symbol}: ${m.price} · 24 h ${m.chg24h >= 0 ? '+' : ''}${(+m.chg24h).toFixed(1)}% · volumen ${Math.round(m.volUsd / 1e6)} M USD`).join('\n') || '(sin datos de mercado)';
+    return `AHORA: ${new Date(now).toLocaleString('es', {dateStyle: 'full', timeStyle: 'short'})} (${tz()})\nCALENDARIO ECONÓMICO (hora local ${tz()}):\n${evs}\nNOTICIAS RECIENTES (fuente y fecha):\n${nws}\nMONEDAS CON MÁS VOLUMEN (Binance Spot):\n${mk}`;
   }
 
   /* ───────── Llamada con transmisión a una burbuja ───────── */
@@ -79,7 +87,7 @@
       <button class="aiv-card" data-act="chart">${ICONS.chart}<span><b>Analizar gráfico con IA</b><small>Toma una captura de tu gráfico (con indicadores y dibujos), marca soportes y resistencias, y puedes seguir preguntándole.</small></span></button>
       <button class="aiv-card" data-act="brief">${ICONS.brief}<span><b>Briefing del día</b><small>Calendario económico, noticias con fuente y fecha, y lectura de tu gráfico en 10 secciones.</small></span></button>
       <button class="aiv-card" data-act="lab">${ICONS.lab}<span><b>Laboratorio de indicadores IA</b><small>Describe un indicador con tus palabras; la IA lo programa, lo valida y lo prueba en tu gráfico.</small></span></button>
-    </div><p class="aiv-foot">Modelos abiertos y gratuitos · sin clave de Claude. Análisis educativo, no asesoría financiera.</p>`;
+    </div><p class="aiv-foot">Análisis y briefing: modelos abiertos gratuitos · Laboratorio: modelo en tu navegador · sin clave de Claude. Análisis educativo, no asesoría financiera.</p>`;
   }
 
   /* ───────── 1 · Analizar gráfico ───────── */
@@ -97,11 +105,11 @@
     const cap = window.CCT_ai && window.CCT_ai.capture(1100); st.chart.shot = cap;
     if (cap) bubble('user', `<img class="aiv-shot" alt="Captura del gráfico" src="${cap.url}"><p>Analiza mi gráfico ${esc(cap.symbol)} · ${esc(cap.interval)}</p>`);
     else bubble('user', `<p>Analiza mi gráfico ${esc(ctx.symbol)} · ${esc(ctx.interval)}</p>`);
-    const prompt = `Analiza este gráfico de ${ctx.symbol} en ${ctx.interval}. Marca soportes y resistencias con precios.\n\nDATOS (JSON, actualizados ahora):\n${dataBlock(ctx, g.extra)}`;
+    const prompt = `Resume este gráfico de ${ctx.symbol} en ${ctx.interval} usando solo mis indicadores (captura y datos).\n\nDATOS DE MIS INDICADORES (JSON, actualizados ahora):\n${dataBlock(ctx, g.extra)}`;
     const msgs = [{role: 'system', content: SYS_CHART}, cap ? LLM.imageMessage(prompt, cap.url) : {role: 'user', content: prompt}];
     const b = bubble('bot', note('Analizando…'), 'typing');
     try {
-      const r = await callLLM(msgs, {purpose: 'vision', needVision: !!cap, maxTokens: 1500}, b); b.classList.remove('typing');
+      const r = await callLLM(msgs, {purpose: 'vision', needVision: !!cap, maxTokens: 700}, b); b.classList.remove('typing');
       b.insertAdjacentHTML('beforeend', note(cap ? (r.image ? 'La IA recibió la captura del gráfico junto con los datos.' : 'Este modelo no lee imágenes: analizó los datos numéricos de tus velas e indicadores (la captura no se pudo usar).') : 'No se pudo tomar la captura (abre la pestaña Gráfico primero): analizó solo los datos numéricos.') + note('Modelo: ' + r.model));
       st.chart.hist.push({role: 'user', content: msgs[1].content, text: prompt, hidden: true}, {role: 'assistant', content: r.text, text: r.text});
     } catch (e) { b.classList.remove('typing'); b.innerHTML = md('**No pude consultar el modelo de IA.** ' + LLM.friendly(e) + '\n\nTe dejo el análisis local por reglas:\n\n' + AI.answerLocal('Analiza el gráfico', ctx, g.extra)); }
@@ -111,9 +119,9 @@
     q = String(q || '').trim(); if (!q || st.busy) return; if (!st.chart.hist.length) { await analyzeChart(); }
     const g = await gather(false), ctx = g.ctx; setBusy(true); bubble('user', `<p>${esc(q)}</p>`);
     if (!ctx) { bubble('bot', md('Abre un gráfico con velas para que pueda responderte con datos reales.')); setBusy(false); return; }
-    const text = `${q}\n\nDATOS ACTUALES (JSON):\n${dataBlock(ctx, g.extra)}`, hist = st.chart.hist.slice(-7);
+    const text = `${q}\n\nDATOS ACTUALES DE MIS INDICADORES (JSON):\n${dataBlock(ctx, g.extra)}`, hist = st.chart.hist.slice(-7);
     const msgs = [{role: 'system', content: SYS_CHART}, ...hist.map(m => ({role: m.role, content: m.content})), {role: 'user', content: text}], b = bubble('bot', note('Pensando…'), 'typing');
-    try { const r = await callLLM(msgs, {needVision: LLM.hasImage(msgs), maxTokens: 1200}, b); b.classList.remove('typing'); st.chart.hist.push({role: 'user', content: text, text: q, show: q, hidden: true}, {role: 'assistant', content: r.text, text: r.text}); }
+    try { const r = await callLLM(msgs, {needVision: LLM.hasImage(msgs), maxTokens: 600}, b); b.classList.remove('typing'); st.chart.hist.push({role: 'user', content: text, text: q, show: q, hidden: true}, {role: 'assistant', content: r.text, text: r.text}); }
     catch (e) { b.classList.remove('typing'); b.innerHTML = md('**El modelo no respondió.** ' + LLM.friendly(e) + '\n\nRespuesta local:\n\n' + AI.answerLocal(q, ctx, g.extra)); }
     setBusy(false);
   }
@@ -131,7 +139,7 @@
     if (st.busy) return; setBusy(true); const log = $('#aivLog'); log.innerHTML = `<div class="aiv-msg bot typing">${note('Reuniendo calendario, noticias, mercado y tu gráfico…')}</div>`;
     const g = await gather(true), b = log.firstChild, prompt = `Genera el briefing del día.\n\n${briefExtras(g.extra)}\n\nDATOS DEL GRÁFICO Y MERCADO (JSON):\n${dataBlock(g.ctx, g.extra)}`;
     try {
-      const r = await callLLM([{role: 'system', content: SYS_BRIEF}, {role: 'user', content: prompt}], {maxTokens: 2200, timeout: 120000}, b);
+      const r = await callLLM([{role: 'system', content: SYS_BRIEF}, {role: 'user', content: prompt}], {maxTokens: 900, timeout: 120000}, b);
       st.brief = {text: r.text, at: Date.now(), by: 'Modelo: ' + r.model, sym: g.ctx ? g.ctx.symbol : ''};
     } catch (e) {
       st.brief = {text: `**No pude consultar el modelo de IA** (${LLM.friendly(e)}). Este es el briefing por reglas con tus datos reales:\n\n` + AI.briefLocal(g.ctx, g.extra), at: Date.now(), by: 'Analista local por reglas (sin modelo)', sym: ''};
@@ -204,6 +212,7 @@
     const c = LLM.load(), prev = st.view; st.cfgPrev = prev; st.view = 'cfg';
     root.innerHTML = head('Ajustes de la IA', 'Proveedor del modelo') + `<div class="aiv-cfg">
       <label>Proveedor<select id="cfProv"><option value="free">Gratis · modelos abiertos (sin clave)</option><option value="compat">Mi servidor / Ollama / servicio con clave gratuita</option><option value="webllm">En mi navegador (WebLLM, experimental)</option></select></label>
+      <label>Proveedor del Laboratorio de indicadores (código)<select id="cfLab"><option value="webllm">En mi navegador (WebLLM) — recomendado</option><option value="free">Gratis · modelos abiertos (sin clave)</option><option value="compat">Mi servidor / Ollama</option></select></label>
       <div id="cfCompat"><label>URL compatible con OpenAI<input id="cfUrl" value="${esc(c.compat.url)}" autocomplete="off" spellcheck="false" placeholder="http://localhost:11434/v1"></label>
         <label>Modelo<input id="cfModel" value="${esc(c.compat.model)}" autocomplete="off" spellcheck="false" placeholder="qwen2.5vl:7b"></label>
         <label>Clave (opcional)<input id="cfKey" type="password" value="${esc(c.compat.key)}" autocomplete="off" placeholder="solo si el servicio la pide"></label>
@@ -211,10 +220,10 @@
         <p class="aiv-dim">Ejemplos gratuitos: <b>Ollama</b> en tu computadora (<code>http://localhost:11434/v1</code>, modelo <code>qwen2.5vl</code> o <code>llama3.2-vision</code>; para usarlo desde esta web ejecuta Ollama con <code>OLLAMA_ORIGINS=*</code>), <b>LM Studio</b>, o los planes gratuitos de Groq / OpenRouter con su clave.</p></div>
       <p class="aiv-dim" id="cfNote"></p>
       <div class="aiv-actions"><button class="aiv-btn" data-act="cfsave">Guardar</button><button class="aiv-btn ghost" data-act="cftest">Probar conexión</button></div><div id="cfOut"></div></div>`;
-    $('#cfProv').value = c.provider; const sync = () => { const p = $('#cfProv').value; $('#cfCompat').hidden = p !== 'compat'; $('#cfNote').textContent = p === 'free' ? 'Privacidad: tu pregunta, los datos del gráfico y la captura viajan al servicio gratuito de terceros (Pollinations), que usa modelos abiertos. No incluyas nada que no quieras compartir. Es un servicio comunitario: puede ir lento o saturarse.' : p === 'webllm' ? 'El modelo se descarga una vez (cientos de MB) y corre en tu equipo con WebGPU: nada sale de tu navegador. Necesita Chrome/Edge de escritorio reciente y buena memoria gráfica. Es experimental.' : 'Los datos van solo a la URL que indiques (si es tu computadora, no salen de ella). La clave se guarda solo en este navegador.'; };
-    $('#cfProv').onchange = sync; sync();
+    $('#cfProv').value = c.provider; $('#cfLab').value = c.lab; const sync = () => { const p = $('#cfProv').value; $('#cfCompat').hidden = p !== 'compat' && $('#cfLab').value !== 'compat'; $('#cfNote').textContent = p === 'free' ? 'Privacidad: tu pregunta, los datos del gráfico y la captura viajan al servicio gratuito de terceros (Pollinations), que usa modelos abiertos. No incluyas nada que no quieras compartir. Es un servicio comunitario: puede ir lento o saturarse.' : p === 'webllm' ? 'El modelo se descarga una vez (cientos de MB) y corre en tu equipo con WebGPU: nada sale de tu navegador. Necesita Chrome/Edge de escritorio reciente y buena memoria gráfica. Es experimental.' : 'Los datos van solo a la URL que indiques (si es tu computadora, no salen de ella). La clave se guarda solo en este navegador.'; };
+    $('#cfProv').onchange = sync; $('#cfLab').onchange = sync; sync();
   }
-  function readCfg() { return {provider: $('#cfProv').value, compat: {url: $('#cfUrl').value.trim(), key: $('#cfKey').value.trim(), model: $('#cfModel').value.trim(), vision: $('#cfVis').checked}}; }
+  function readCfg() { return {provider: $('#cfProv').value, lab: $('#cfLab').value, compat: {url: $('#cfUrl').value.trim(), key: $('#cfKey').value.trim(), model: $('#cfModel').value.trim(), vision: $('#cfVis').checked}}; }
 
   /* ───────── Eventos ───────── */
   function onClick(e) {
