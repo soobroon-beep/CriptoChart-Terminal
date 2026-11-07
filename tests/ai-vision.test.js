@@ -74,3 +74,71 @@ test('worker permite Qwen3-VL únicamente con WebGPU', async () => {
   for (let i = 0; i < 10; i++) await Promise.resolve();
   assert.ok(posted.some(x=>x.type==='error' && /WebGPU/.test(x.message)));
 });
+
+
+test('la IA rechaza respuesta en inglés y repetitiva de SmolVLM', async () => {
+  const English = 'The chart shows the trend of the price of the currency pair XRPUSD. The chart shows the trend of the price of the currency pair XRPUSD.';
+  const window = {};
+  class FakeURL { constructor(p, base) { this.href = base + p; } }
+  class FakeWorker {
+    postMessage(d) {
+      this.onmessage({data:{id:d.id,type:'result',which:'smol',device:'webgpu',text:English}});
+    }
+    terminate() {}
+  }
+  vm.runInNewContext(read('ai-vision.js'), {
+    window, document:{baseURI:'https://example.com/Vortex/'},
+    Worker:FakeWorker, URL:FakeURL, setTimeout, clearTimeout
+  });
+  const ctx = {symbol:'XRPUSDT',interval:'1h',active:['nnIa'],
+    pine:[],drawings:[{type:'rect',label:'zona'}],candles:[{c:1.18}]};
+  await assert.rejects(window.CCTFreeVision.analyze({
+    ctx,screenshot:'data:image/png;base64,AAAA'
+  }), /español|fiable/i);
+});
+
+test('la visión rechaza respuestas genéricas y repetidas aunque estén en español', async () => {
+  for (const sentence of [
+    'El gráfico muestra la tendencia del precio.',
+    'El gráfico muestra la tendencia del precio de XRPUSD. El gráfico muestra la tendencia del precio de XRPUSD.'
+  ]) {
+    const window = {};
+    class FakeURL { constructor(p, base) { this.href = base + p; } }
+    class FakeWorker {
+      postMessage(d) {
+        this.onmessage({data:{id:d.id,type:'result',which:'smol',device:'wasm',text:sentence}});
+      }
+      terminate() {}
+    }
+    vm.runInNewContext(read('ai-vision.js'), {
+      window, document:{baseURI:'https://example.com/Vortex/'},
+      Worker:FakeWorker, URL:FakeURL, setTimeout, clearTimeout
+    });
+    await assert.rejects(window.CCTFreeVision.analyze({
+      ctx:{symbol:'XRPUSDT',interval:'1h',active:[],pine:[],drawings:[],candles:[{c:1.18}]},
+      screenshot:'data:image/png;base64,AAAA'
+    }), /fiable|español/i);
+  }
+});
+
+test('acepta explicación visual específica en español, sin indicadores que no usa', async () => {
+  const window = {};
+  class FakeURL { constructor(p, base) { this.href = base + p; } }
+  class FakeWorker {
+    postMessage(d) {
+      this.onmessage({data:{id:d.id,type:'result',which:'smol',device:'webgpu',
+        text:'El MACD está positivo. Las últimas velas caen con fuerza y el precio está debajo del rectángulo dibujado.'}});
+    }
+    terminate() {}
+  }
+  vm.runInNewContext(read('ai-vision.js'), {
+    window, document:{baseURI:'https://example.com/Vortex/'},
+    Worker:FakeWorker, URL:FakeURL, setTimeout, clearTimeout
+  });
+  const text = (await window.CCTFreeVision.analyze({
+    ctx:{symbol:'XRPUSDT',interval:'1h',active:['nnIa'],pine:[],drawings:[],candles:[{c:1.18}]},
+    screenshot:'data:image/png;base64,AAAA'
+  })).text;
+  assert.match(text,/velas caen con fuerza/);
+  assert.doesNotMatch(text,/MACD|The chart/);
+});
