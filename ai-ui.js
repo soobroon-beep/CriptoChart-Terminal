@@ -88,7 +88,7 @@
       return /^data:image\/png;base64,/.test(png) && png.length < 3000000 ? png : null;
     } catch { return null; }
   }
-  function uniqueVisualDetail(t) {
+  function uniqueVisualDetail(t, ctx, analyst) {
     const s = String(t || '').trim();
     if (!s || s.split(/\s+/).length > 75) return false;
     const n = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -100,6 +100,16 @@
     for (let i=0;i<words.length-3;i++) {
       const key=words.slice(i,i+4).join(' '),k=(freq.get(key)||0)+1;freq.set(key,k);
       if (k>=3) return false;
+    }
+    // Los valores numéricos provienen de las velas, NO de una estimación visual.
+    if (/\b\d+[.,]\d+\b/.test(n)) return false;
+    const active = ctx && ctx.chart && ctx.chart.active || ctx && ctx.active || [];
+    if (/\bema\b/.test(n) && !active.some(k => /^ema|^nnEma$/.test(k))) return false;
+    if (/\bpoc\b/.test(n) && !active.some(k => /^(vpvr|nnVP)$/.test(k))) return false;
+    const facts = analyst && ctx && analyst.facts(ctx);
+    if (facts) {
+      if (facts.trend === 'bajista' && /(?:tendencia|movimiento|impulso) alcista/.test(n)) return false;
+      if (facts.trend === 'alcista' && /(?:tendencia|movimiento|impulso) bajista/.test(n)) return false;
     }
     return /\b(vela|velas|zona|zonas|rectangulo|linea|lineas|flecha|nube|canal|volumen|poc|ruptura|rebote|soporte|resistencia|oscilador|senal|indicador)\b/i.test(n);
   }
@@ -138,7 +148,7 @@
             const observation = String(response.text || '').trim();
             // La visión es una observación auxiliar, no puede sustituir datos
             // ni incluir precios / niveles inventados.
-            if (uniqueVisualDetail(observation))
+            if (uniqueVisualDetail(observation, ctx, analyst))
               out += '\n\n**Detalle visual orientativo (' + response.model + '):** ' + observation;
           } catch (e) {
             // Fallo de GPU/modelo/idioma no borra el análisis del gráfico.
