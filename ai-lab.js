@@ -89,7 +89,12 @@
       const b = e.target.closest('[data-ai-mode]'); if (!b) return;
       if (b.dataset.aiMode === 'brief') {
         mode('brief'); const old = $('#aiBrief'); if (old && !old.disabled) old.click();
-      } else mode(b.dataset.aiMode);
+      } else {
+        mode(b.dataset.aiMode);
+        // Al pulsar "Analizar gráfico con IA", analizar realmente el canvas y no solo abrir el chat.
+        if (b.dataset.aiMode === 'chat' && window.CCTAIUI && typeof window.CCTAIUI.analyzeVisibleChart === 'function')
+          window.CCTAIUI.analyzeVisibleChart();
+      }
     });
     panel.addEventListener('click', click);
     // El atajo original de Brief también debe mostrar la conversación si se estaba en Laboratorio.
