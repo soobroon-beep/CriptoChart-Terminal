@@ -21,6 +21,10 @@ async function load(which, id) {
   if (loading) return loading;
   loading = (async () => {
     if (!MODELS[which]) throw Error('Modelo de visión desconocido.');
+    if ((which === 'qwen35' || which === 'qwen35pro' || which === 'qwen') &&
+        (!self.navigator || !navigator.gpu)) {
+      throw Error('Este equipo no tiene WebGPU disponible. El análisis de trading por datos sigue funcionando sin descargar un modelo.');
+    }
     report(id, 'Preparando el motor abierto de visión…');
     const T = await import(which === 'qwen35' || which === 'qwen35pro' ? LIBRARY_QWEN35 : LIBRARY);
     const modelId = MODELS[which];
