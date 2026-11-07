@@ -4813,6 +4813,7 @@ if (/[?&]cct_debug=1/.test(location.search)) window.CCT_DEBUG = {applyState, sav
 
 /* ───────── Puente para el Screener (screener.js) ───────── */
 window.CCT_switchView = id => switchView(id);
+window.CCT_tzInfo = () => ({tz: PR.tz, clock: PR.clock}); // la zona horaria y el formato de hora elegidos (los usa la barra de eventos económicos)
 window.CCT_discordStore = {get: () => state.discord, set: patch => { state.discord = sanDiscord({...state.discord, ...patch, on: {...(state.discord || {}).on, ...(patch.on || {})}, sent: {...(state.discord || {}).sent, ...(patch.sent || {})}}); save(); return state.discord; }};
 window.CCT_host = {
   interval: () => state.interval,
