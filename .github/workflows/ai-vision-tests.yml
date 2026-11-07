@@ -6,6 +6,7 @@ on:
       - 'app.js'
       - 'tests/ai-*.test.js'
       - 'tests/ai-processor-real.mjs'
+      - 'tests/ai-generation-real.mjs'
       - '.github/workflows/ai-vision-tests.yml'
   push:
     branches:
@@ -15,6 +16,7 @@ on:
       - 'app.js'
       - 'tests/ai-*.test.js'
       - 'tests/ai-processor-real.mjs'
+      - 'tests/ai-generation-real.mjs'
       - '.github/workflows/ai-vision-tests.yml'
 permissions:
   contents: read
@@ -51,3 +53,17 @@ jobs:
         run: npm install --no-save --no-package-lock @huggingface/transformers@4.4.0-next.0 pngjs @napi-rs/canvas
       - name: Decodificar imagen y preparar tensores Qwen3.5
         run: node tests/ai-processor-real.mjs
+
+  real_generation:
+    name: Generación real desde velas con Qwen3.5
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar motor visual real y canvas
+        run: npm install --no-save --no-package-lock @huggingface/transformers@4.4.0-next.0 @napi-rs/canvas
+      - name: Generar respuesta REAL sin simulaciones
+        run: node --max-old-space-size=5500 tests/ai-generation-real.mjs
