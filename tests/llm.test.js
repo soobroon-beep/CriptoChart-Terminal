@@ -60,4 +60,13 @@ test('carga y guarda ajustes con valores por defecto seguros', () => {
   assert.equal(L.load().provider, 'free'); L.save({provider: 'compat', compat: {url: 'http://a/v1', key: '', model: 'm', vision: false}});
   assert.equal(L.load().provider, 'compat'); assert.equal(L.load().compat.vision, false);
   store.cct_llm_v1 = '{"provider":"hack"}'; assert.equal(L.load().provider, 'free');
+  store.cct_llm_v1 = '{"provider":"webllm"}'; const m = L.load(); assert.equal(m.provider, 'free'); assert.equal(m.lab, 'webllm'); // migración: general gratis, Laboratorio en el navegador
+  store.cct_llm_v1 = '{"provider":"free","lab":"free"}'; assert.equal(L.load().lab, 'free');
+});
+
+test('el Laboratorio usa su propio proveedor y cae al general si no hay WebGPU', async () => {
+  const calls = mockFetch(() => mkRes(reply('ok')));
+  const cfg = {provider: 'compat', lab: 'webllm', compat: {url: 'http://x/v1', model: 'm'}};
+  await L.chat([{role: 'user', content: 'q'}], {cfg, purpose: 'code'}); // en node no hay navigator.gpu -> compat
+  assert.equal(calls[0].url, 'http://x/v1/chat/completions');
 });
