@@ -69,7 +69,7 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   #watchView{display:block!important;grid-area:watch;border-right:1px solid var(--line);padding:18px 16px 20px}
   #chartView{display:flex!important;grid-area:chart;min-width:0}
   #indicatorView{display:none!important}
-  #newsView,#aiView,#settingsView,#alertsView,#screenerView,#lensView,#discordView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
+  #newsView,#aiView,#settingsView,#alertsView,#screenerView,#lensView,#discordView,#botLabView{display:none;grid-area:side;border-left:1px solid var(--line);padding:18px 18px 24px}
   body:not([data-side]) #newsView,body[data-side="newsView"] #newsView{display:block}
   body[data-side="aiView"] #aiView{display:block}
   body[data-side="settingsView"] #settingsView{display:block}
@@ -77,6 +77,7 @@ pre.code{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line)
   body[data-side="screenerView"] #screenerView{display:block}
   body[data-side="lensView"] #lensView{display:block}
   body[data-side="discordView"] #discordView{display:block}
+  body[data-side="botLabView"] #botLabView{display:block}
   #goChart{display:none}
   h1{font-size:21px}
   .view-head{margin-bottom:16px}
@@ -599,7 +600,7 @@ body.pane .favbar{display:none}
 #discordView .dc-back{display:none;margin:0 0 6px;padding:6px 10px;border:0;background:none;color:var(--accent);font-size:13px;cursor:pointer}
 @media(max-width:1023px){#discordView .dc-back{display:inline-block}}
 #discordView .dc-card small{display:block;margin-top:8px}
-@media(min-width:1024px){#dcSettingRow{display:none}}
+@media(min-width:1024px){#dcSettingRow,#blSettingRow{display:none}}
 
 /* Buscador de activos visual */
 .sym-backdrop{position:fixed;inset:0;z-index:20;background:rgba(3,7,14,.6);-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);display:none;align-items:flex-start;justify-content:center;padding:6vh 16px 16px}

@@ -245,7 +245,7 @@ function updateStatus(ok, msg) { $('#connection').textContent = '● ' + msg; $(
 async function getJSON(url, signal) { const r = await fetch(url, {signal}); if (!r.ok) throw Error('Binance HTTP ' + r.status); return r.json(); }
 
 /* ───────── Variables de ejecución ───────── */
-let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null;
+let tickers = {}, candles = [], ind = {}, visible = 70, pan = 0, fetchCtl = null, botMarks = null; // botMarks: operaciones de Nova Bot Lab dibujadas sobre el gráfico
 let currentView = 'watchView', sheetMode = 'select', editMode = false;
 let pineLastMs = 0, pineRes = {}, pineBusy = {}, pineDirty = {}, pineLast = 0, pineTimer = 0, pineKey = '', pineDraft = {name: '', code: ''}, pineSetSid = null, pineWorker = null, pineNoWorker = false, pineSeq = 0;
 const PINE_MAX = 6;
@@ -265,7 +265,7 @@ function setSide(id) {
 }
 function switchView(id) {
   if (isDesktop()) { // computadora: seguimiento + gráfico siempre visibles; Indicadores/Ajustes en el panel derecho
-    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView') { setSide(id); if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
+    if (id === 'watchView' || id === 'newsView' || id === 'aiView' || id === 'settingsView' || id === 'alertsView' || id === 'screenerView' || id === 'lensView' || id === 'discordView' || id === 'botLabView') { setSide(id); if (id === 'watchView') renderWatch(); if (id === 'alertsView') { renderAlerts(); checkAlertsPoll(); } return; }
     id = 'chartView';
   }
   currentView = id;
@@ -2829,6 +2829,30 @@ function renderCore() {
   g.fillStyle = priceMan ? '#548fff' : text; g.globalAlpha = priceMan ? .95 : .55;
   roundRect(w - 7, plotTop + plotH / 2 - 22, 4, 44, 2); g.fill();
   g.fillStyle = text; g.globalAlpha = .55; roundRect(left + plotW / 2 - 22, h - 6, 44, 4, 2); g.fill(); g.globalAlpha = 1;
+  // Nova Bot Lab: operaciones del bot sobre el gráfico (flechas, entrada/salida, stop, take profit). Solo dibuja; no toca nada del gráfico.
+  if (botMarks && botMarks.trades && botMarks.symbol === symOf(state.symbol) && botMarks.interval === state.interval) {
+    const M = botMarks, lim = M.limitT == null ? Infinity : M.limitT, shw = M.show || {};
+    g.save(); g.beginPath(); g.rect(left, plotTop, plotW, plotH); g.clip(); g.font = '10px system-ui'; g.textAlign = 'center';
+    for (const t of M.trades) {
+      if (t.entryT > lim) continue; const xi = X(idxOfTime(t.entryT)), exited = t.exitT <= lim, xe = X(idxOfTime(exited ? t.exitT : Math.min(lim, candles[n - 1].t)));
+      if (xe < left - 40 || xi > w - right + 40) continue; const long = t.side === 'long', win = t.net > 0, col = win ? '#17c964' : '#f31260', yi = Y(t.entry), ye = Y(t.exit);
+      if (shw.levels !== false) {
+        g.setLineDash([4, 4]); g.lineWidth = 1; g.globalAlpha = .75;
+        if (isFinite(t.sl) && t.sl != null) { g.strokeStyle = '#f31260'; g.beginPath(); g.moveTo(xi, Y(t.sl)); g.lineTo(xe, Y(t.sl)); g.stroke(); }
+        if (isFinite(t.tp) && t.tp != null) { g.strokeStyle = '#17c964'; g.beginPath(); g.moveTo(xi, Y(t.tp)); g.lineTo(xe, Y(t.tp)); g.stroke(); }
+        if (exited) { g.setLineDash([]); g.globalAlpha = .55; g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath(); g.moveTo(xi, yi); g.lineTo(xe, ye); g.stroke(); }
+      }
+      g.setLineDash([]); g.globalAlpha = 1;
+      if (shw.arrows !== false) {
+        g.fillStyle = long ? '#17c964' : '#f31260'; const s = 7, ay = long ? Y(candles[Math.max(0, Math.min(n - 1, Math.round(idxOfTime(t.entryT))))].l) + 12 : Y(candles[Math.max(0, Math.min(n - 1, Math.round(idxOfTime(t.entryT))))].h) - 12;
+        g.beginPath(); if (long) { g.moveTo(xi, ay - s); g.lineTo(xi - s * .8, ay + s * .5); g.lineTo(xi + s * .8, ay + s * .5); } else { g.moveTo(xi, ay + s); g.lineTo(xi - s * .8, ay - s * .5); g.lineTo(xi + s * .8, ay - s * .5); } g.closePath(); g.fill();
+        g.beginPath(); g.arc(xi, yi, 3, 0, 7); g.fill();
+        if (exited) { g.fillStyle = col; g.beginPath(); g.arc(xe, ye, 3.5, 0, 7); g.fill(); g.fillStyle = col; g.fillText((t.net >= 0 ? '+' : '') + t.net.toFixed(2), xe, ye + (long === win ? -9 : 14)); }
+      }
+    }
+    if (M.avoid && shw.avoid !== false) { g.globalAlpha = .08; g.fillStyle = '#ffb020'; for (const z of M.avoid) { const x1 = X(idxOfTime(z[0])), x2 = X(idxOfTime(z[1])); if (z[0] <= lim) g.fillRect(x1, plotTop, Math.max(2, x2 - x1), plotH); } g.globalAlpha = 1; }
+    g.restore();
+  }
   // alertas de precio activas: línea casi invisible en su nivel (aspecto en «Aspecto del gráfico»); seleccionada se resalta y se puede arrastrar
   { const CS = cstyle(), acol = CS.alertCol || text, dsh = {Puntos: [2, 5], Guiones: [7, 5], 'Sólida': []}[CS.alertS] || [2, 5], A = CS.alertA / 100, lastP = candles[n - 1].c;
     g.save();
@@ -4828,6 +4852,27 @@ window.CCT_host = {
     if (!state.symbols.includes(sym)) state.symbols.push(sym);
     renderFrames(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); selectSymbol(sym);
   }
+};
+/* ───────── Nova Bot Lab: ganchos mínimos (historial de velas, guardado en la cuenta y marcadores en el gráfico) ───────── */
+window.CCT_bot = {
+  key: () => 'cct_botlab_v1' + (uid ? '_' + uid : ''),
+  cloud: () => (uid && db && fbUser) ? {get: async () => { const sn = await db.doc(`users/${uid}/data/botlab`).get(); return sn.exists ? (sn.data().items || null) : null; }, set: str => db.doc(`users/${uid}/data/botlab`).set({items: str, updatedAt: firebase.firestore.FieldValue.serverTimestamp()})} : null,
+  chart: () => ({symbol: symOf(state.symbol), interval: state.interval, n: candles.length, from: candles.length ? candles[0].t : null, to: candles.length ? candles[candles.length - 1].t : null}),
+  seek(t) { if (!candles.length) return; pan = Math.max(0, Math.round(candles.length - 1 - idxOfTime(t) + visible * .25)); scheduleRender(); },
+  async history(sym, itv, count) { // velas CERRADAS de Binance Spot, paginadas hacia atrás (máx. 6000)
+    const want = Math.min(6000, Math.max(100, count | 0)), out = []; let end = Date.now();
+    while (out.length < want) {
+      const raw = await getJSON(`${API}/klines?symbol=${encodeURIComponent(sym)}&interval=${itv}&limit=1000&endTime=${end}`); if (!raw.length) break;
+      out.unshift(...raw.map(d => ({t: d[0], o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5], ct: d[6]}))); end = raw[0][0] - 1; if (raw.length < 1000) break;
+    }
+    return out.filter(c => c.ct < Date.now()).slice(-want).map(({ct, ...c}) => c); // se descarta la vela en formación
+  },
+  marks(m) { botMarks = m; scheduleRender(); },
+  open(sym, itv, t) { // muestra el gráfico del bot (y centra la operación si está en las velas cargadas)
+    const go = () => { if (t && candles.length) { const i = idxOfTime(t); pan = Math.max(0, Math.round(candles.length - 1 - i - visible / 2)); } scheduleRender(); };
+    if (symOf(state.symbol) !== sym || state.interval !== itv) { if (INTERVALS.includes(itv)) state.interval = itv; renderFrames(); selectSymbol(sym); setTimeout(go, 1800); setTimeout(go, 3500); } else { switchView('chartView'); setTimeout(go, 150); }
+  },
+  toast: m => toast(m)
 };
 /* ───────── Ganchos para la pestaña IA (solo lectura del gráfico + motor Pine existente; no cambian nada más) ───────── */
 window.CCT_ai = {
