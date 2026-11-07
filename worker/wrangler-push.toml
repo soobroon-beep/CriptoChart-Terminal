@@ -1,0 +1,17 @@
+# Worker de notificaciones push de VORTEX (alertas con la app cerrada). Lo publica .github/workflows/deploy-push-worker.yml.
+name = "vortex-push"
+main = "push-alerts.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# Revisa alertas y movimientos bruscos cada minuto
+[triggers]
+crons = ["* * * * *"]
+
+# KV «vortex-push»: alertas, suscripciones y claves VAPID (se crean solas)
+[[kv_namespaces]]
+binding = "KV"
+id = "c6d98896a2a3496b89228e7994cedda2"
+
+[vars]
+ALLOWED_ORIGIN = "https://soobroon-beep.github.io"

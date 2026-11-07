@@ -1,10 +1,10 @@
 'use strict';
 // Bump this version when changing cached application files. No API responses or account data are cached.
-const CACHE = 'cct-shell-v118';
+const CACHE = 'cct-shell-v119';
 const ROOT = new URL('./', self.location.href);
 const SHELL = ['index.html', 'style.css', 'glass.css', 'pwa.css', 'pwa-icons.js', 'pwa.js', 'icons.js',
   'app.js', 'screener.js', 'firebase-config.js', 'markets.js', 'indicators.js', 'patterns.js', 'channels.js', 'discord-format.js', 'discord.js', 'nova-nexus.js', 'catalog.js', 'pine.js',
-  'pine-draw.js', 'pine-preview.js', 'dock.js', 'pine-settings.js', 'news.js', 'ai.js', 'llm.js', 'ai-ui.js', 'botlab-engine.js','botlab-optimizer.js','botlab-paper.js', 'botlab-ui.js', 'fx.js', 'prefs.js', 'sessions.js', 'econbar.js', 'changelog.js', 'lens.html'];
+  'pine-draw.js', 'pine-preview.js', 'dock.js', 'pine-settings.js', 'news.js', 'ai.js', 'llm.js', 'ai-ui.js', 'botlab-engine.js','botlab-optimizer.js','botlab-paper.js', 'botlab-ui.js', 'fx.js', 'prefs.js', 'sessions.js', 'econbar.js', 'changelog.js', 'push.js', 'lens.html'];
 const ASSETS = new Set(SHELL.map(p => new URL(p, ROOT).href));
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL.map(p => new Request(new URL(p, ROOT), {cache:'reload'})))).then(() => self.skipWaiting())); // la versión nueva se activa sola
@@ -35,5 +35,20 @@ self.addEventListener('fetch', event => {
       const cached = await cache.match(key);
       return cached || Response.error();
     }
+  })());
+});
+
+// Avisos con la app cerrada: el Worker «vortex-push» manda {title, body, tag, url} cifrado (ver worker/push-alerts.mjs y push.js)
+self.addEventListener('push', event => {
+  let d = {}; try { d = event.data ? event.data.json() : {}; } catch { d = {body: event.data ? event.data.text() : ''}; }
+  const icon = new URL('icons/i01-192.png', ROOT).href;
+  event.waitUntil(self.registration.showNotification(d.title || 'VORTEX', {body: d.body || '', tag: d.tag || 'vortex', renotify: true, icon, badge: icon, vibrate: [200, 100, 200], data: {url: d.url || ROOT.href}}));
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || ROOT.href;
+  event.waitUntil((async () => {
+    for (const c of await self.clients.matchAll({type: 'window', includeUncontrolled: true})) if (c.url.startsWith(ROOT.href)) { await c.focus(); return; }
+    await self.clients.openWindow(target);
   })());
 });
