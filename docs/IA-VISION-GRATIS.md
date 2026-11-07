@@ -6,7 +6,8 @@
 
 Al pulsar «Analizar gráfico con IA», Vortex analiza **el rango visible del precio** (zoom/desplazamiento), los indicadores realmente activos, sus valores, el volumen, el POC si hay perfil visible y las posiciones, líneas o zonas dibujadas. Captura además **priceCanvas**, un solo lienzo que contiene las velas, paneles de indicadores, volumen y dibujos. El PNG se ofrece a un **Web Worker local** para observaciones complementarias. **El modelo visual NO sustituye los cálculos basados en las velas**: si su descripción es genérica, está repetida, cambia de idioma, introduce indicadores ocultos o contradice datos verificables, se descarta y queda la lectura en español respaldada por datos.
 
-- **Qwen3.5 0.8B (recomendado para uso cotidiano)** — `onnx-community/Qwen3.5-0.8B-ONNX`, modelo abierto multimodal que descarga significativamente menos pesos. Se probó la **generación efectiva en CPU** de respuestas a partir de un gráfico PNG, además del paso por el procesador. En navegador usa WebGPU y puede fallar si el equipo no lo soporta.
+- **Qwen3.5 0.8B (CPU/WASM; opción predeterminada comprobada en Chromium)** — `onnx-community/Qwen3.5-0.8B-ONNX`, pesos abiertos y generación real desde PNG en el navegador. Usa `embed_tokens: fp16`, `vision_encoder: fp16` y `decoder: q4` para evitar el error `GatherBlockQuantized` de los pesos de 4 bits al ejecutarse en CPU. Esta variante necesita más memoria y una primera descarga grande.
+- **Qwen3.5 0.8B (WebGPU; opcional)** — puede ser más veloz en equipos compatibles; si no termina, Vortex intenta automáticamente la ruta CPU con la misma captura.
 - **Qwen3.5 2B (avanzado)** — modelo de visión y lenguaje abierto (Apache-2.0). Pesos ONNX `huggingworld/Qwen3.5-2B-ONNX`; requiere WebGPU y bastante memoria. Utiliza Transformers.js 4.4.0-next.0, una versión preliminar compatible con su arquitectura.
 - **Qwen3.5 4B (avanzado)** — `huggingworld/Qwen3.5-4B-ONNX`; modelo con mayor capacidad, pero necesita más memoria de GPU y descarga.
 - **SmolVLM-256M-Instruct (compatibilidad)** — pequeño y menos capaz para gráficos financieros; se conserva como alternativa de bajo consumo, no como recomendación principal.
@@ -53,6 +54,16 @@ El flujo anterior solo demostraba que el PNG llegaba a los tensores del modelo. 
 La salida debe interpretarse como una prueba de lectura de una imagen sintética, no como evaluación de precisión financiera ni como garantía para otros gráficos. La prueba se ejecuta en GitHub Actions y solo se considera aprobada si termina y supera las verificaciones de contenido.
 
 La opción predeterminada migra una vez de la antigua Qwen3.5 2B a Qwen3.5 0.8B para reducir uso de memoria y bloqueos. Es posible volver manualmente a 2B/4B desde Ajustes de IA. Toda lectura en el navegador sigue sujeta a WebGPU y memoria disponible.
+
+## Comprobación real en Chrome con el código de producción
+
+El test \`tests/ai-browser-real.mjs\` inicia **Chromium real**, carga \`ai-vision.js\` y \`ai-vision-worker.js\` originales (sin sustituirlos), crea un gráfico PNG y comprueba que el modelo Qwen3.5 genera una respuesta en español usando **CPU/WASM**. Esta prueba se diferencia de las que solo preparaban tensores o de las que generaban en Node.
+
+- El primer análisis en el navegador de prueba tardó cerca de **108 segundos**, incluyendo descarga, preprocesamiento e inferencia; en otras máquinas puede ser mucho más lento o fallar por memoria.
+- La ruta de CPU es la selección inicial. La versión WebGPU sigue en Ajustes para quien prefiera probarla. Si WebGPU se bloquea o falla, se reintenta una sola vez usando CPU; el chat nunca queda ocupado por esa operación y el usuario puede cancelarla.
+- No hay claves ni servidores de inferencia. Los precios, EMA, POC, soportes y riesgos de entrada siguen proviniendo del analista OHLCV, no de inferencias visuales no comprobadas.
+
+**Alcance:** la prueba demuestra generación auténtica para gráficas de prueba en Chromium Linux. No certifica que la GPU de Windows del usuario produzca una respuesta ni que el modelo acierte lecturas complejas, por lo que el sistema mantiene el análisis de datos y muestra estados explícitos.
 
 ## Privacidad y limitaciones
 
