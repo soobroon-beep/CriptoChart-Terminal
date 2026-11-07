@@ -122,13 +122,23 @@ function drawing(f){
  if(p)out.push('Dibujo '+p.type.toUpperCase()+' con entrada '+money(p.a.p)+' (no es una orden ejecutada)');
  if(region){const low=Math.min(region.a.p,region.b.p),high=Math.max(region.a.p,region.b.p);
   out.push('precio '+(f.price<low?'debajo':f.price>high?'encima':'dentro')+' de tu rectángulo '+fmt(low)+'–'+fmt(high));}
+ const brush=f.draw.filter(x=>x&&x.type==='brush'&&x.brushPath&&x.brushPath.start&&x.brushPath.end)
+   .slice(-1)[0];
+ if(brush){
+   const first=brush.brushPath.start.p,last=brush.brushPath.end.p;
+   if(ok(first)&&ok(last)&&first>0){
+     const delta=pct(last,first);
+     out.push('tu trazo a mano dibuja una proyección '+(delta>0.2?'hacia arriba':delta<-.2?'hacia abajo':'lateral')+
+       ' (es un escenario dibujado, no una señal confirmada)');
+   } else out.push('hay un trazo a mano visible (no confirma por sí solo la dirección)');
+ }
  return out.length?out.join('; ')+'.':'';
 }
 function answer(q,ctx){
  const f=facts(ctx);if(!f)return 'Abre el gráfico y espera a que carguen por lo menos 12 velas.';
  const mode=kind(q),base=intro(f),
   direction = f.contextTrend !== f.recentTrend && Math.abs(f.contextChange) >= 2.5
-    ? 'Las últimas 20 velas están **'+f.recentTrend+'** ('+f.change.toFixed(1)+'%), pero el contexto de '+
+    ? 'Las últimas 20 velas tienen sesgo **'+f.recentTrend+'** ('+f.change.toFixed(1)+'%), pero el contexto de '+
       f.contextBars+' velas sigue **'+f.contextTrend+'** ('+f.contextChange.toFixed(1)+'%). '+
       'Un rebote no confirma por sí solo un cambio de tendencia.'
     : 'Las velas mostradas tienen estructura **'+f.trend+'** ('+f.change.toFixed(1)+
