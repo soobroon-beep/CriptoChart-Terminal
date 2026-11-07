@@ -61,32 +61,56 @@
   // El gráfico de Vortex usa un solo canvas para velas, EMAs, bandas,
   // volumen, VPVR, osciladores, indicadores Pine y dibujos de usuario.
   // Capturamos todo su alto real: no se limita al panel de velas.
+  // Captura literal del canvas que Vortex acaba de pintar. Este canvas incluye
+  // las velas, indicadores de precio, volumen, osciladores, VPVR y dibujos.
+  // Dejamos una copia visible para comprobar exactamente qué imagen se envió.
   function captureChart(ctx) {
+    captureChart.lastMeta = null;
     try {
       const source = document.getElementById('priceCanvas');
       if (!ctx || !source || source.width < 300 || source.height < 200) return null;
-      const maxW = 1600, maxH = 1150;
-      const scale = Math.min(1, maxW/source.width, maxH/source.height);
-      const w = Math.round(source.width*scale), h = Math.round(source.height*scale);
+      // Redimensionar ANTES de codificar; el modelo no recibirá un PNG gigante.
+      const maxW = 1152, maxH = 832;
+      const scale = Math.min(1, maxW / source.width, (maxH - 58) / source.height);
+      const w = Math.max(1, Math.round(source.width * scale));
+      const h = Math.max(1, Math.round(source.height * scale));
       const labels = ctx.chart && ctx.chart.names || ctx.active || [];
       const scripts = ctx.chart && ctx.chart.pine || ctx.pine || [];
-      const names = labels.slice(0, 12).concat(scripts.map(x => x.name).slice(0, 5));
-      const title = String(ctx.symbol || 'Gráfico')+' · '+String(ctx.interval || '')+
+      const title = String(ctx.symbol || 'Gráfico') + ' · ' + String(ctx.interval || '') +
         (ctx.chart && ctx.chart.historical ? ' · tramo histórico visible' : '');
-      const shot = document.createElement('canvas'); shot.width = w; shot.height = h + 64;
-      const g = shot.getContext('2d'); if (!g) return null;
-      g.fillStyle = '#090e19'; g.fillRect(0, 0, w, h+64);
-      g.fillStyle = '#eff2ff'; g.font = 'bold 18px system-ui, Arial, sans-serif';
-      g.fillText(title, 12, 23, w-24);
-      g.fillStyle = '#9aadd7'; g.font = '12px system-ui, Arial, sans-serif';
-      const line = 'Indicadores visibles: ' + (names.join(' · ') || 'ninguno');
-      g.fillText(line.slice(0, 160), 12, 44, w-24);
-      g.drawImage(source, 0, 64, w, h);
-      // En condiciones normales una captura de líneas y velas PNG es pequeña.
-      // Si excede el límite del modelo no se envía una imagen truncada.
+      const shot = document.createElement('canvas');
+      shot.width = w; shot.height = h + 58;
+      const g = shot.getContext('2d', {willReadFrequently:true});
+      if (!g) return null;
+      g.fillStyle = '#090e19'; g.fillRect(0,0,shot.width,shot.height);
+      g.fillStyle = '#eff2ff'; g.font = 'bold 17px system-ui, Arial, sans-serif';
+      g.fillText(title, 10, 21, w - 20);
+      g.fillStyle = '#9aadd7'; g.font = '11px system-ui, Arial, sans-serif';
+      const names = labels.slice(0, 10).concat(scripts.map(x => x.name).slice(0, 4));
+      g.fillText(('Indicadores visibles: ' + (names.join(' · ') || 'ninguno')).slice(0, 140),10,43,w-20);
+      g.drawImage(source,0,58,w,h);
+      // Verificación de diversidad visual: evita enviar un lienzo negro/vacío.
+      // La lectura de píxeles puede no estar permitida en algunos dispositivos;
+      // en ese caso la previsualización permite comprobar el resultado.
+      if (typeof g.getImageData === 'function') {
+        try {
+          const pixels = g.getImageData(0,58,w,h).data;
+          const unique = new Set();
+          const stride = Math.max(1, Math.floor(w / 40));
+          const stepY = Math.max(1, Math.floor(h / 22));
+          for (let y=0;y<h;y+=stepY) for (let x=0;x<w;x+=stride) {
+            const i = (y*w+x)*4;
+            unique.add((pixels[i] >> 4)*256 + (pixels[i+1] >> 4)*16 + (pixels[i+2] >> 4));
+          }
+          if (unique.size <= 2) return null;
+        } catch {}
+      }
       const png = shot.toDataURL('image/png');
-      return /^data:image\/png;base64,/.test(png) && png.length < 3000000 ? png : null;
-    } catch { return null; }
+      if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(png) || png.length > 3000000) return null;
+      captureChart.lastMeta = {width:w,height:h+58,symbol:String(ctx.symbol || ''),
+        interval:String(ctx.interval || ''),indicatorCount:names.length};
+      return png;
+    } catch {return null;}
   }
   function uniqueVisualDetail(t, ctx, analyst) {
     const s = String(t || '').trim();
