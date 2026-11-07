@@ -1,0 +1,33 @@
+name: Publicar servidor de avisos (vortex-push)
+# Publica worker/push-alerts.mjs en tu Cloudflare como el Worker «vortex-push» (cron cada minuto + KV «vortex-push»).
+# Es el que te manda las notificaciones de alertas aunque VORTEX esté cerrada.
+# Requiere el secreto CLOUDFLARE_API_TOKEN (plantilla «Edit Cloudflare Workers»). Opcional: CLOUDFLARE_ACCOUNT_ID si tu token ve varias cuentas.
+# Sin el secreto el flujo termina sin hacer nada (no falla).
+on:
+  push:
+    branches: [main]
+    paths: ['worker/push-alerts.mjs', 'worker/wrangler-push.toml', '.github/workflows/deploy-push-worker.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: {group: deploy-push-worker, cancel-in-progress: false}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Pruebas del Worker
+        run: node --test tests/push-worker.test.js
+      - name: Publicar en Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "Falta el secreto CLOUDFLARE_API_TOKEN (Settings → Secrets and variables → Actions). No se publica nada."; exit 0
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; fi
+          npx --yes wrangler@4 deploy --config worker/wrangler-push.toml

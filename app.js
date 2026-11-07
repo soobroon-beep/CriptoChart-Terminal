@@ -604,6 +604,16 @@ function alertBeep(force, tone) { // el sonido elegido en Configuración; force 
   if (!force && PR.sound === 'off') return;
   try { const A = window.AudioContext || window.webkitAudioContext, c = new A(); for (const [f, t0, d, ty] of TONE_SEQ[tone || PR.tone] || TONE_SEQ.beep) { const o = c.createOscillator(), g = c.createGain(); o.type = ty; o.frequency.value = f; o.connect(g); g.connect(c.destination); const t = c.currentTime + t0; g.gain.setValueAtTime(ty === 'square' ? .08 : .2, t); g.gain.exponentialRampToValueAtTime(.001, t + d); o.start(t); o.stop(t + d + .02); } setTimeout(() => { try { c.close(); } catch {} }, 1500); } catch {}
 }
+// Notificación del sistema. En Android/PWA «new Notification()» no existe: se usa el service worker. La etiqueta (tag) evita duplicados
+// si el servidor de avisos con la app cerrada (push.js) manda el mismo aviso.
+function sysNotify(title, body, tag) {
+  try {
+    if (!window.Notification || Notification.permission !== 'granted') return;
+    const opts = {body, tag, renotify: true, icon: 'icons/i01-192.png', badge: 'icons/i01-192.png', vibrate: [200, 100, 200], data: {url: location.href.split('#')[0] + '#alerts'}};
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.ready.then(r => r.showNotification(title, opts)).catch(() => {});
+    else new Notification(title, opts);
+  } catch {}
+}
 const dcSend = (k, o) => { if (window.CCTDiscord && PR.n.discord) CCTDiscord.alert(k, o); }; // Discord solo si se quiere recibir ahí
 const alNotify = (a, kind) => { const n = a.notify || 'both'; return {app: n !== 'discord', dc: n !== 'app' && (!!a.notify || PR.n.discord)}; }; // dónde avisar: app, Discord o ambos (alertas viejas: ambos si Discord está activo en Ajustes)
 function fireAlert(a, price) {
@@ -612,7 +622,7 @@ function fireAlert(a, price) {
   if (a.repeat === 'every') { if (a.cond) a.wait = true; else a.dir = a.dir === 'up' ? 'down' : 'up'; } else a.on = false; // «todo el tiempo»: el cruce normal vigila el sentido contrario; ascendente/descendente espera a que el precio vuelva
   if (!PR.n.price) return; // avisos de precio apagados en Configuración
   const n = alNotify(a);
-  if (n.app) { toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {} }
+  if (n.app) { toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} sysNotify('VORTEX · Alerta', msg, 'al-' + a.id); }
   if (n.dc && window.CCTDiscord) CCTDiscord.alert('price', {symbol: base(a.symbol), dir: dir0, level: a.price, price, note: a.note, text: msg});
 }
 function checkAlerts(sym, price) {
@@ -730,7 +740,7 @@ function fireMove(sym, dir, ch, lbl, price) {
   const msg = `${base(sym)} ${dir === 'up' ? 'sube' : 'cae'} ${Math.abs(ch).toFixed(1)}% en ${lbl} · ${fmt(price)}`;
   moveLog.unshift({t: Date.now(), s: sym, d: dir, c: +ch.toFixed(2), w: lbl, p: price}); moveLog = moveLog.slice(0, 30); try { localStorage.setItem(MOVE_LOG_KEY, JSON.stringify(moveLog)); } catch {}
   toast('Movimiento brusco: ' + msg); if ((state.moveAlerts || {}).sound !== false) { alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} }
-  try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Movimiento brusco', {body: msg}); } catch {}
+  sysNotify('VORTEX · Movimiento brusco', msg, 'mv-' + sym + '-' + dir);
   dcSend('move', {symbol: base(sym), dir, pct: ch, win: lbl, price, text: msg});
   renderMoveAlerts();
 }
@@ -820,7 +830,7 @@ function fireInd(a, info) {
   a.firedAt = Date.now(); a.firedInfo = info; if (a.repeat === 'once') a.on = false; if (!PR.n.ind) return;
   const msg = `${base(a.symbol)} ${a.interval} · ${a.label}${info ? ' · ' + info : ''}${a.note ? ' · ' + a.note : ''}`;
   const n = alNotify(a);
-  if (n.app) { toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {} }
+  if (n.app) { toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} sysNotify('VORTEX · Alerta', msg, 'in-' + a.id); }
   if (n.dc && window.CCTDiscord) CCTDiscord.alert('ind', {symbol: base(a.symbol), interval: a.interval, label: a.label, info, note: a.note, text: msg});
 }
 async function lastClosedBar(sym, itv) {
@@ -866,6 +876,7 @@ async function indAlertTick(force) {
   if (changed) { save(); renderAlerts(); }
 }
 window.CCTAlerts = {stdHit, pineHit, STD_CONDS}; // expuesto para pruebas
+window.CCTPushBridge = {state: () => state, prefs: () => PR, save: () => save(), renderAlerts: () => renderAlerts(), scheduleRender: () => scheduleRender(), toast: m => toast(m)}; // para push.js (avisos con la app cerrada)
 setInterval(() => { if (!document.hidden) indAlertTick(); }, 15000);
 setTimeout(indAlertTick, 4000);
 
