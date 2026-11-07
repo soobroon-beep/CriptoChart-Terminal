@@ -38,7 +38,7 @@ function facts(ctx){
  const volumes=last20.map(x=>x.v).filter(ok),avgVol=volumes.length>7?volumes.reduce((a,b)=>a+b,0)/volumes.length:null;
  const volRatio=ok(cur.v)&&ok(avgVol)&&avgVol>0?cur.v/avgVol:null;
  const emaKeys=['ema20','ema50','sma200','wma20','vwap'];
- const ema=emaKeys.filter(k=>active.includes(k)&&ok(vals[k])).map(k=>({key:k,name:k==='ema20'?'EMA principal':k==='ema50'?'EMA 50':k==='sma200'?'SMA 200':k==='wma20'?'WMA':'VWAP',value:vals[k]}));
+ const ema=emaKeys.filter(k=>active.includes(k)&&ok(vals[k])).map(k=>({key:k,name:safe((view.names||[])[active.indexOf(k)]||(k==='ema20'?'EMA':k==='ema50'?'EMA 50':k==='sma200'?'SMA 200':k==='wma20'?'WMA':'VWAP')),value:vals[k]}));
  const cloud=nova&&active.includes('nnEma')&&ok(nova.top)&&ok(nova.bot)?[Math.min(nova.bot,nova.top),Math.max(nova.bot,nova.top)]:null;
  const points=[],add=(p,origin,weight)=>{if(ok(p)&&p>0)points.push({p,origin,weight})};
  for(const d of draw){
@@ -79,6 +79,12 @@ function intro(f){return '**'+safe(f.ctx.symbol||'Gráfico')+' · '+safe(f.ctx.i
  (f.historical?' (tramo histórico, no precio actual)':'')+': '+money(f.price)+'.';}
 function indicators(f){
  const parts=f.ema.slice(0,3).map(e=>'precio '+(f.price<e.value?'bajo':f.price>e.value?'sobre':'en')+' '+e.name+' ('+fmt(e.value)+')');
+ if(f.active.includes('rsi')&&ok(f.vals.rsi))parts.push('RSI visible: '+fmt(f.vals.rsi));
+ if(f.active.includes('macd')&&ok(f.vals.macdHist))parts.push('MACD visible, histograma '+fmt(f.vals.macdHist));
+ if(f.active.includes('bollinger')&&ok(f.vals.bbUpper)&&ok(f.vals.bbLower))
+  parts.push('Bandas de Bollinger visibles: '+fmt(f.vals.bbLower)+'–'+fmt(f.vals.bbUpper));
+ if(f.active.includes('supertrend')&&ok(f.vals.supertrend))
+  parts.push('Supertrend visible '+(f.vals.supertrend>0?'alcista':'bajista'));
  if(f.cloud)parts.push('precio '+(f.price<f.cloud[0]?'bajo':f.price>f.cloud[1]?'sobre':'dentro de')+
    ' la nube Nova ('+fmt(f.cloud[0])+'–'+fmt(f.cloud[1])+')');
  if(f.nova&&f.nova.last&&f.active.some(x=>x==='nnIa'||x==='nnTp')&&f.nova.last.ago<=8)
