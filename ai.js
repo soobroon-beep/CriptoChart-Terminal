@@ -354,16 +354,59 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
       mercado_24h: (extra.market || []).slice(0, 25).map(m => ({moneda: m.symbol, precio: r(m.price), cambio24h_pct: r(m.chg24h)})),
       calendario: C && {proximos: C.upcoming.map(e => ({evento: C.name(e), pais: C.country(e), fecha_utc: new Date(e.t).toISOString(), en_horas: +((e.t - now) / 36e5).toFixed(1), impacto: e.impact, prevision: e.forecast, previo: e.previous, actual: e.actual || null})), recientes: C.recent.map(e => ({evento: C.name(e), fecha_utc: new Date(e.t).toISOString(), real: e.actual, prevision: e.forecast}))}});
   }
+
+  /* Solo para Analizar gráfico con IA; el briefing y otras preguntas no cambian. */
+  function isVisualChartRequest(q) {
+    const t = norm(q || '');
+    return /(?:analiza(?:me|r)?|analisis|revisa|lee|lectura de)\s+(?:(?:el|mi|este|del)\s+)?grafico\b/.test(t);
+  }
+  function visualContext(ctx) {
+    const active = Array.isArray(ctx.active) ? ctx.active.filter(x => typeof x === 'string').slice(0, 40) : [];
+    const values = {}, v = ctx.values || {};
+    const allows = {vwap:'vwap', supertrend:'supertrend', trailTrend:'trail', stochK:'stoch', obvSlope:'obv'};
+    for (const [name, key] of Object.entries(allows)) if (active.includes(key) && Number.isFinite(v[name])) values[name] = v[name];
+    const novaVisible = active.some(k => /^nn/i.test(k) || /nova|nexus/i.test(k));
+    const fmtC = x => Number.isFinite(x) ? +x.toPrecision(8) : null;
+    return JSON.stringify({
+      activo:ctx.symbol, temporalidad:ctx.interval, exchange:ctx.exchange || null,
+      ultima_vela:ctx.candles.length ? ctx.candles[ctx.candles.length - 1].t : null,
+      indicadores_activados:active, valores_indicadores_activados:values,
+      nova_nexus: novaVisible ? ctx.nova : null,
+      indicadores_personalizados:(ctx.pine || []).slice(0, 8),
+      zonas_de_indicadores: active.some(k => /^(nnSR|nnOb|nnSmc)$/i.test(k)) ? ctx.zones : null,
+      perfil_volumen: active.some(k => /^(vpvr|nnVP)$/i.test(k)) ? ctx.vp : null,
+      velas_ohlcv:(ctx.candles || []).slice(-45).map(c => [c.t,fmtC(c.o),fmtC(c.h),fmtC(c.l),fmtC(c.c),fmtC(c.v)])
+    });
+  }
+  function visualSummaryLocal(ctx) {
+    if (!ctx || !ctx.candles || !ctx.candles.length) return 'Abre primero un gráfico con velas cargadas y vuelve a analizarlo.';
+    const cs = ctx.candles, lastC = cs[cs.length - 1], prev = cs[Math.max(0, cs.length - 9)];
+    const diff = prev && prev.c ? (lastC.c - prev.c) / prev.c * 100 : 0;
+    const movement = diff > .25 ? 'subieron' : diff < -.25 ? 'bajaron' : 'se movieron de forma lateral';
+    const active = Array.isArray(ctx.active) ? ctx.active : [];
+    const labels = {nnIa:'Nova Nexus IA',nnEma:'Nova Nexus EMA',nnSmc:'Nova SMC',nnOb:'Nova OB',nnSR:'Nova S/R',nnVP:'Nova VP',vpvr:'perfil de volumen',volume:'volumen',rsi:'RSI',macd:'MACD',supertrend:'Supertrend'};
+    const shown = active.slice(0, 5).map(k => labels[k] || k).join(', ');
+    return '**' + ctx.symbol + ' · ' + ctx.interval + '**: último precio ' + fp(lastC.c) + '; las últimas velas ' + movement + '. ' +
+      (shown ? 'Indicadores activados: ' + shown + (active.length > 5 ? ' y otros' : '') + '. ' : 'No hay indicadores activos registrados. ') +
+      'Para interpretar visualmente los dibujos, las señales y su posición en la captura, activa un modelo con visión en Ajustes de IA; el modo Local no puede ver imágenes.';
+  }
+  const VISUAL_SYSTEM = 'Eres el lector VISUAL de gráficos de VORTEX. Responde SIEMPRE en español con máximo 75 palabras y entre 2 y 4 frases, sin listas ni títulos largos. Mira la captura auténtica del gráfico y describe únicamente velas, indicadores visibles y dibujos trazados por el usuario, y qué señalan. Usa la lista de indicadores activados solo para identificar los que aparecen en imagen, y OHLCV para confirmar cifras. NO menciones ni calcules RSI, MACD, Bollinger, medias ni indicadores que NO estén activos/visibles. NO agregues niveles, escenarios, objetivos, stops, noticias, calendario o explicaciones largas a menos que se pidan. Si una señal o dibujo no se distingue bien, dilo; nunca inventes una lectura visual. Es una descripción orientativa, no una orden de trading.';
+
   async function askClaude(opts, ctx, history, question, extra) {
-    const A = analyze(ctx), msgs = (history || []).slice(-8).map(m => ({role: m.role, content: m.text}));
-    const userText = `DATOS DEL GRÁFICO Y MERCADO (JSON; consulta, no garantía de tiempo real):\n${compactContext(ctx, A, extra || {})}\n\nPREGUNTA DEL USUARIO:\n${question}`;
+    const visual = !!(extra && extra.chartSnapshotMode);
+    const A = visual ? null : analyze(ctx);
+    const msgs = visual ? [] : (history || []).slice(-8).map(m => ({role: m.role, content: m.text}));
+    const userText = visual
+      ? 'LECTURA VISUAL DEL GRÁFICO. Describe ÚNICAMENTE lo que se ve en la imagen. Estos datos son auxiliares, no indicadores adicionales:\n' + visualContext(ctx) + '\n\nSOLICITUD: ' + question
+      : 'DATOS DEL GRÁFICO Y MERCADO (JSON; consulta, no garantía de tiempo real):\n' + compactContext(ctx, A, extra || {}) + '\n\nPREGUNTA DEL USUARIO:\n' + question;
     const screenshot = extra && typeof extra.screenshot === 'string' && /^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(extra.screenshot) && extra.screenshot.length < 3000000 ? extra.screenshot.split(',')[1] : null;
-    msgs.push({role: 'user', content: screenshot ? [{type:'text', text:userText + '\nSe adjunta una captura auténtica del canvas del gráfico; usa los datos OHLCV para valores exactos.'},{type:'image',source:{type:'base64',media_type:'image/png',data:screenshot}}] : userText});
+    if (visual && !screenshot) throw new Error('No pude capturar el gráfico visible. Vuelve a abrir el gráfico y prueba de nuevo.');
+    msgs.push({role: 'user', content: screenshot ? [{type:'text', text:userText + (visual ? '\nLa captura procede del canvas del precio, indicadores y dibujos.' : '\nCaptura del gráfico; verifica valores exactos con OHLCV.')},{type:'image',source:{type:'base64',media_type:'image/png',data:screenshot}}] : userText});
     const url = opts.proxy || 'https://api.anthropic.com/v1/messages', headers = {'content-type': 'application/json'};
     if (!opts.proxy) { headers['x-api-key'] = opts.key; headers['anthropic-version'] = '2023-06-01'; headers['anthropic-dangerous-direct-browser-access'] = 'true'; }
     const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 60000);
     try {
-      const r = await fetch(url, {method: 'POST', headers, signal: ctl.signal, body: JSON.stringify({model: opts.model || 'claude-sonnet-5-5', max_tokens: 1400, system: SYSTEM, messages: msgs})});
+      const r = await fetch(url, {method: 'POST', headers, signal: ctl.signal, body: JSON.stringify({model: opts.model || 'claude-sonnet-5-5', max_tokens: visual ? 280 : 1400, system: visual ? VISUAL_SYSTEM : SYSTEM, messages: msgs})});
       if (!r.ok) { let m = ''; try { const j = await r.json(); m = (j.error && j.error.message) || ''; } catch {} const e = new Error(r.status === 401 ? 'La clave de Claude no es válida.' : r.status === 429 ? 'Se alcanzó el límite de uso de Claude. Intenta en un momento.' : `Error de Claude (${r.status}) ${m}`.trim()); e.status = r.status; throw e; }
       const j = await r.json(); const txt = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim(); if (!txt) throw new Error('Claude no devolvió texto.'); return txt;
     } finally { clearTimeout(to); }
@@ -430,7 +473,7 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
     return name ? {name, code:v.concat(code).join('\n'), mode:'receta local', note:'Se generó una receta compatible de parámetros fijos. Revísala y valida sobre las velas reales; no es un backtest.'} : null;
   }
 
-  const api = {analyze, strategy, tradeWindow, briefLocal, answerLocal, intent, newsFor, calendarFor, sentiment, compactContext, askClaude, draftIndicator, SYSTEM, ema, rsi, macd, atr, swings, fmt, trCal, GLOSS};
+  const api = {analyze, strategy, tradeWindow, briefLocal, answerLocal, intent, isVisualChartRequest, visualSummaryLocal, visualContext, newsFor, calendarFor, sentiment, compactContext, askClaude, draftIndicator, SYSTEM, ema, rsi, macd, atr, swings, fmt, trCal, GLOSS};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTAICore = api;
   if (typeof document === 'undefined') return;
