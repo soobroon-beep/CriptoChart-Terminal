@@ -276,6 +276,52 @@
     L.push(secWindow(W, C, now));
     if (A && S) { const up = tot >= 8, dn = tot <= -8, r0 = A.resists[0], s0 = A.supports[0], when = W && W.nextHi ? ` **después de ${hhmm(W.nextHi.until, now)}**` : ''; L.push(`### Recomendación de hoy`, up ? `Se favorecen **largos**${when}: busca entrada en retrocesos hacia ${s0 ? fp(s0.p) : 'el soporte cercano'} o confirmación sobre ${r0 ? fp(r0.p) : 'la resistencia cercana'}; si pierde ${s0 ? fp(s0.p) : 'el soporte'} la idea se invalida.` : dn ? `Se favorecen **cortos**${when}: busca entrada en rebotes hacia ${r0 ? fp(r0.p) : 'la resistencia cercana'} o confirmación bajo ${s0 ? fp(s0.p) : 'el soporte cercano'}; si recupera ${r0 ? fp(r0.p) : 'la resistencia'} la idea se invalida.` : `Sin ventaja clara: **espera**${when} a que rompa ${r0 ? fp(r0.p) : 'la resistencia'} o ${s0 ? fp(s0.p) : 'el soporte'} con volumen antes de operar.`, 'Usa stop por ATR y arriesga una fracción pequeña de tu cuenta.'); }
     else L.push(C && C.soonHigh.length ? 'Atención: con un dato macro de alto impacto en menos de 24 h, conviene esperar a la reacción antes de apostar por una dirección.' : 'Si el precio rompe el nivel clave con volumen, la lectura gana fuerza; si lo pierde, se invalida.');
+    // Explicación económica, escenarios contrastables y procedencia: no solo titulares.
+    if (C && (C.upcoming.length || C.recent.length)) {
+      L.push('### Qué significan los próximos datos y cómo vigilarlos');
+      const important = C.upcoming.concat(C.recent).slice(0, 6);
+      for (const e of important) {
+        const topic = String(e.title || '').toLowerCase();
+        let meaning = 'Puede alterar expectativas de crecimiento, liquidez y apetito por riesgo; para BTC/ETH importa la reacción de dólar, tasas y mercado amplio.';
+        let surprise = 'Compara el dato real con el consenso; el movimiento inicial no confirma dirección.';
+        if (/cpi|pce|ppi|inflation/.test(topic)) {
+          meaning = 'Mide presiones de precios. Una inflación más persistente puede retrasar recortes de tasas y presionar los activos de riesgo, incluidas las criptomonedas.';
+          surprise = 'Mayor al pronóstico: posible presión bajista por tasas; menor: posible alivio alcista. La interpretación cambia con el contexto de la Fed.';
+        } else if (/non.farm|payroll|nfp|unemployment|employment|jolts|jobless|adp/.test(topic)) {
+          meaning = 'Evalúa la fortaleza del empleo, relevante para tasas de la Fed, liquidez y tolerancia al riesgo.';
+          surprise = 'Empleo sorprendentemente sólido puede fortalecer al dólar; muy débil puede alimentar temor de recesión. No hay reacción garantizada.';
+        } else if (/fomc|federal funds|fed |powell|interest rate|rate statement|press conference|ecb|boj|boe/.test(topic)) {
+          meaning = 'Puede cambiar expectativas de tasas y condiciones de financiación; el tono del comunicado y preguntas puede pesar más que la cifra.';
+          surprise = 'Tono más restrictivo: riesgo de presión bajista; tono menos restrictivo: posible recuperación. Vigila el lenguaje y la respuesta del mercado.';
+        } else if (/gdp|pmi|retail sales|consumer confidence/.test(topic)) {
+          meaning = 'Aporta señales de crecimiento y consumo que influyen en expectativas monetarias y apetito por riesgo.';
+          surprise = 'Un dato fuerte puede apoyar crecimiento o reducir expectativas de recorte; contrasta con la narrativa vigente.';
+        }
+        const at = new Date(e.t).toLocaleString('es', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short'});
+        L.push('**' + C.name(e) + ' · ' + at + '** (' + C.country(e) + ', ' + (C.imp(e) === 2 ? 'alto impacto' : 'impacto medio') + '). ' + meaning + ' ' + surprise +
+          (e.forecast ? ' Previsión: ' + e.forecast + '.' : '') +
+          (e.actual ? ' Publicado: ' + e.actual + '.' : ' Dato real todavía no disponible en el calendario.') +
+          ' En torno a la publicación, observa spreads, volumen y cierre de velas antes de validar una ruptura.');
+      }
+    }
+    if (N && N.top.length) {
+      L.push('### Noticias y sus fuentes (sentimiento estimado, no hechos verificados independientemente)');
+      for (const i of N.top.slice(0, 4)) {
+        const at = new Date(i.t).toLocaleString('es', {dateStyle: 'short', timeStyle: 'short'});
+        const link = /^https:\/\/[^\s)]+$/i.test(i.link || '') ? ' · [Leer fuente](' + i.link + ')' : '';
+        L.push('- ' + i.title + ' · ' + (i.src || 'Fuente no identificada') + ', ' + at + link +
+          '. Posible impacto: ' + (i.s > 0 ? 'favorable al sentimiento si se confirma y se refleja en el precio' : i.s < 0 ? 'adverso al sentimiento si se confirma y se refleja en el precio' : 'incierto; exige confirmar la relevancia para el activo') + '.');
+      }
+    }
+    if (A) {
+      L.push('### Escenarios para el activo abierto', secPlan(A),
+        '**Escenario neutral:** consolidación entre niveles cercanos, sin dirección confirmada; una ruptura sin cierre y volumen puede ser falsa.',
+        'Para confirmar una entrada hipotética, busca cierre de vela, volumen frente a su promedio y coincidencia con los indicadores activos; invalida la hipótesis al perder el nivel señalado.');
+      L.push('**Confianza:** ' + A.confidence + ' (valoración heurística, no probabilidad estadística). Riesgos: movimientos bruscos en noticias, liquidez insuficiente, deslizamiento, divergencias entre marcos y datos faltantes.');
+    }
+    const candleAt = ctx && ctx.candles && ctx.candles.length ? new Date(ctx.candles[ctx.candles.length - 1].t).toLocaleString('es', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short'}) : 'sin gráfico';
+    L.push('**Actualización consultada:** ' + new Date(now).toLocaleString('es', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short'}) +
+      ' · última vela: ' + candleAt + '. Fuentes: gráfico del exchange conectado, titulares del módulo Noticias y archivo del Calendario económico. Los datos pueden llegar con retraso.');
     return L.join('\n\n') + '\n\n' + DISC;
   }
   function answerLocal(question, ctx, extra) {
@@ -292,7 +338,7 @@
   }
 
   /* ───────── Modo Claude (opcional) ───────── */
-  const SYSTEM = `Eres «Analista CCT», el asistente de VORTEX (Powered by Nova Nexus). Respondes SIEMPRE en español.
+  const SYSTEM = `Eres «Analista CCT», el asistente de VORTEX (Powered by Nova Nexus). Respondes SIEMPRE en español. Distingue datos observados, titulares de terceros, hipótesis y rumores. Cita fuente y fecha. Si los datos son antiguos o incompletos, señálalo. No inventes capturas ni horarios de entrada seguros.
 ALCANCE: solo el sector cripto (criptomonedas, mercado cripto, análisis técnico del gráfico del usuario, noticias y eventos macro que lo afectan). Si te piden otra cosa, explica amablemente que solo atiendes cripto y reconduce.
 BASE: cada afirmación debe apoyarse en los DATOS que se te entregan (velas, indicadores activados por el usuario, zonas, noticias, calendario). Cita el indicador o nivel concreto. Si un dato no está, dilo; no inventes precios, niveles, noticias ni cifras.
 ESTILO: claro y directo, con listas cortas; incluye niveles de invalidación y relación beneficio/riesgo cuando propongas escenarios; menciona la incertidumbre y los eventos de calendario cercanos. Nunca prometas resultados ni des órdenes de compra/venta: presenta escenarios educativos. Cierra análisis de operaciones con una línea breve: «Análisis educativo, no asesoría financiera.»
@@ -304,13 +350,15 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
       indicadores_activos: ctx.active, valores: ctx.values, nova_nexus: ctx.nova, estrategia_combinada: A && (() => { const S = strategy(ctx, A); return {puntaje: S.score, sesgo: S.bias, factores_nova: S.nova.map(x => x[1])}; })(), zonas: ctx.zones, perfil_volumen: ctx.vp, scripts_pine: ctx.pine,
       analisis_calculado: A && {sesgo: A.bias, puntaje: A.score, confianza: A.confidence, estructura: A.structure, rsi: r(A.rsi), macd_hist: r(A.macd.hist), ema20: r(A.ema20), ema50: r(A.ema50), sma200: r(A.sma200), atr: r(A.atr), volumen_vs_prom: r(A.volRatio), soportes: A.supports.map(s => [r(s.p), s.k]), resistencias: A.resists.map(s => [r(s.p), s.k]), notas: A.notes, plan: A.plan},
       ultimas_velas_OHLCV: ctx.candles.slice(-60).map(c => [c.t, r(c.o), r(c.h), r(c.l), r(c.c), r(c.v)]),
-      noticias: N && N.top.map(i => ({titulo: i.title, fuente: i.src, hace_min: Math.round((now - i.t) / 6e4), tono: i.s, impacto: i.impact})),
+      noticias: N && N.top.map(i => ({titulo: i.title, fuente: i.src, enlace: i.link || null, fecha_utc: new Date(i.t).toISOString(), resumen_publicado: String(i.desc || '').slice(0, 220), clasificacion_heuristica: i.s, impacto: i.impact})),
       mercado_24h: (extra.market || []).slice(0, 25).map(m => ({moneda: m.symbol, precio: r(m.price), cambio24h_pct: r(m.chg24h)})),
-      calendario: C && {proximos: C.upcoming.map(e => ({evento: C.name(e), pais: C.country(e), en_horas: +((e.t - now) / 36e5).toFixed(1), impacto: e.impact, prevision: e.forecast, previo: e.previous})), recientes: C.recent.map(e => ({evento: C.name(e), real: e.actual, prevision: e.forecast}))}});
+      calendario: C && {proximos: C.upcoming.map(e => ({evento: C.name(e), pais: C.country(e), fecha_utc: new Date(e.t).toISOString(), en_horas: +((e.t - now) / 36e5).toFixed(1), impacto: e.impact, prevision: e.forecast, previo: e.previous, actual: e.actual || null})), recientes: C.recent.map(e => ({evento: C.name(e), fecha_utc: new Date(e.t).toISOString(), real: e.actual, prevision: e.forecast}))}});
   }
   async function askClaude(opts, ctx, history, question, extra) {
     const A = analyze(ctx), msgs = (history || []).slice(-8).map(m => ({role: m.role, content: m.text}));
-    msgs.push({role: 'user', content: `DATOS DEL GRÁFICO Y MERCADO (JSON, actualizados ahora):\n${compactContext(ctx, A, extra || {})}\n\nPREGUNTA DEL USUARIO:\n${question}`});
+    const userText = `DATOS DEL GRÁFICO Y MERCADO (JSON; consulta, no garantía de tiempo real):\n${compactContext(ctx, A, extra || {})}\n\nPREGUNTA DEL USUARIO:\n${question}`;
+    const screenshot = extra && typeof extra.screenshot === 'string' && /^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(extra.screenshot) && extra.screenshot.length < 3000000 ? extra.screenshot.split(',')[1] : null;
+    msgs.push({role: 'user', content: screenshot ? [{type:'text', text:userText + '\nSe adjunta una captura auténtica del canvas del gráfico; usa los datos OHLCV para valores exactos.'},{type:'image',source:{type:'base64',media_type:'image/png',data:screenshot}}] : userText});
     const url = opts.proxy || 'https://api.anthropic.com/v1/messages', headers = {'content-type': 'application/json'};
     if (!opts.proxy) { headers['x-api-key'] = opts.key; headers['anthropic-version'] = '2023-06-01'; headers['anthropic-dangerous-direct-browser-access'] = 'true'; }
     const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 60000);
@@ -321,7 +369,68 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
     } finally { clearTimeout(to); }
   }
 
-  const api = {analyze, strategy, tradeWindow, briefLocal, answerLocal, intent, newsFor, calendarFor, sentiment, compactContext, askClaude, SYSTEM, ema, rsi, macd, atr, swings, fmt, trCal, GLOSS};
+
+  /* Recetas locales transparentes; para otras descripciones hace falta un proveedor IA configurado. */
+  function draftIndicator(prompt) {
+    const t = norm(prompt || ''), v = ['//@version=5'];
+    let name = '', code = [];
+    if (/rsi/.test(t) && /macd/.test(t) && /volumen/.test(t)) {
+      name = 'IA RSI MACD Volumen'; code = [
+        'indicator("IA RSI MACD Volumen", overlay=false)',
+        'r = ta.rsi(close, 14)',
+        'm = ta.ema(close, 12) - ta.ema(close, 26)',
+        'sg = ta.ema(m, 9)',
+        'vol = ta.sma(volume, 20)',
+        'bull = r > 50 and m > sg and volume > vol',
+        'bear = r < 50 and m < sg and volume > vol',
+        'plot(r, title="RSI 14", color=color.aqua)',
+        'plot(bull ? 75 : na, title="Coincidencia alcista", color=color.lime)',
+        'plot(bear ? 25 : na, title="Coincidencia bajista", color=color.red)'
+      ];
+    } else if (/soporte|resistencia/.test(t)) {
+      name = 'IA Soportes y Resistencias'; code = [
+        'indicator("IA Soportes y Resistencias", overlay=true)',
+        'soporte = ta.lowest(low, 20)',
+        'resistencia = ta.highest(high, 20)',
+        'plot(soporte, title="Soporte 20", color=color.lime)',
+        'plot(resistencia, title="Resistencia 20", color=color.red)'
+      ];
+    } else if (/oscilador|rsi/.test(t)) {
+      name = 'IA Oscilador RSI 7'; code = [
+        'indicator("IA Oscilador RSI 7", overlay=false)',
+        'rapido = ta.rsi(close, 7)',
+        'lento = ta.rsi(close, 14)',
+        'plot(rapido, title="RSI 7", color=color.aqua)',
+        'plot(lento, title="RSI 14", color=color.orange)'
+      ];
+    } else if (/tres medias|3 medias|medias moviles|triple ema/.test(t)) {
+      name = 'IA Triple EMA'; code = [
+        'indicator("IA Triple EMA", overlay=true)',
+        'rapida = ta.ema(close, 9)',
+        'media = ta.ema(close, 21)',
+        'lenta = ta.ema(close, 55)',
+        'plot(rapida, title="EMA 9", color=color.lime)',
+        'plot(media, title="EMA 21", color=color.orange)',
+        'plot(lenta, title="EMA 55", color=color.aqua)'
+      ];
+    } else if (/volumen/.test(t) && /ruptura|breakout/.test(t)) {
+      name = 'IA Ruptura y Volumen'; code = [
+        'indicator("IA Ruptura y Volumen", overlay=true)',
+        'techo = ta.highest(high[1], 20)',
+        'suelo = ta.lowest(low[1], 20)',
+        'vol = ta.sma(volume, 20)',
+        'alcista = close > techo and volume > vol * 1.5',
+        'bajista = close < suelo and volume > vol * 1.5',
+        'plot(techo, title="Resistencia previa", color=color.red)',
+        'plot(suelo, title="Soporte previo", color=color.lime)',
+        'plot(alcista ? close : na, title="Ruptura alcista", color=color.aqua)',
+        'plot(bajista ? close : na, title="Ruptura bajista", color=color.orange)'
+      ];
+    }
+    return name ? {name, code:v.concat(code).join('\n'), mode:'receta local', note:'Se generó una receta compatible de parámetros fijos. Revísala y valida sobre las velas reales; no es un backtest.'} : null;
+  }
+
+  const api = {analyze, strategy, tradeWindow, briefLocal, answerLocal, intent, newsFor, calendarFor, sentiment, compactContext, askClaude, draftIndicator, SYSTEM, ema, rsi, macd, atr, swings, fmt, trCal, GLOSS};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTAICore = api;
   if (typeof document === 'undefined') return;

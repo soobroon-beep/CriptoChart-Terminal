@@ -4865,6 +4865,66 @@ window.CCT_getAIContext = function () {
   const tk = tickers[state.symbol];
   return {nova, symbol: symOf(state.symbol), exchange: exName(state.symbol), interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine};
 };
+/* Laboratorio IA: puente mínimo al motor existente, sin cambiar indicadores originales. */
+window.CCTAILab = Object.freeze({
+  list() {
+    return userScripts().filter(s => s.origin === 'ai-lab').map(s => ({
+      id: s.id, name: s.name, code: s.code, addedAt: s.addedAt,
+      on: state.pine.some(p => p.sid === s.id && p.on)
+    }));
+  },
+  async validate(code) {
+    if (typeof code !== 'string' || !code.trim() || code.length > 20000)
+      return {ok: false, error: 'El código está vacío o supera 20 000 caracteres.'};
+    if (candles.length < 30)
+      return {ok: false, error: 'Abre el gráfico y espera a que carguen al menos 30 velas reales.'};
+    try {
+      const cs = candles.slice(-500);
+      const r = await pineRunFull(code, {cs, interval: state.interval, symbol: symOf(state.symbol), timeLimitMs: 6000});
+      if (!r || !r.ok)
+        return {ok: false, error: (r && r.error && r.error.msg) || 'El motor rechazó el indicador.',
+          line: r && r.error && r.error.line};
+      const unsupported = (r.warnings || []).filter(w => w.level === 'unsupported');
+      if (unsupported.length) return {ok: false, error: 'La versión Pine del proyecto no admite una parte del código: ' + unsupported.map(w => w.msg || w.message || 'función no soportada').slice(0, 3).join('; ')};
+      if (!(r.plots || []).length && !(r.shapes || []).length)
+        return {ok: false, error: 'El indicador debe dibujar al menos una línea o señal.'};
+      return {ok: true, plots: (r.plots || []).length, shapes: (r.shapes || []).length, bars: cs.length};
+    } catch (e) { return {ok: false, error: String(e && e.message || e)}; }
+  },
+  async save(name, code, plot) {
+    name = String(name || 'Indicador IA').trim().slice(0, 80);
+    const test = await this.validate(code);
+    if (!test.ok) return test;
+    const existing = scripts.find(s => s.code === code);
+    if (existing && existing.origin !== 'ai-lab')
+      return {ok: false, error: 'Ese código ya está guardado como otro indicador. No modificaré el original.'};
+    if (plot && !state.pine.some(p => p.sid === (existing && existing.id)) &&
+        (activePine().length >= PINE_MAX || state.pine.length >= 12))
+      return {ok: false, error: 'El gráfico llegó al límite de indicadores. Desactiva uno antes de probar.'};
+    const id = existing ? existing.id : addScript(code, name);
+    if (!id) return {ok: false, error: 'No se pudo guardar el código.'};
+    const script = scripts.find(s => s.id === id);
+    if (!script || script.builtin) return {ok: false, error: 'No se permiten cambios en indicadores originales.'};
+    script.origin = 'ai-lab'; script.name = name; saveScripts();
+    if (plot) {
+      const p = state.pine.find(x => x.sid === id);
+      if (p) p.on = true;
+      else state.pine.push({sid: id, on: true, inputs: {}});
+      save(); renderIndicators(); countIndicators();
+      pineKey = ''; schedulePine(); scheduleRender();
+    }
+    return {ok: true, id, plotted: !!plot, plots: test.plots, shapes: test.shapes, bars: test.bars};
+  },
+  remove(id) {
+    const script = scripts.find(s => s.id === id && s.origin === 'ai-lab' && !s.builtin);
+    if (!script) return false;
+    scripts = scripts.filter(s => s !== script);
+    state.pine = state.pine.filter(p => p.sid !== id);
+    delete pineRes[id]; saveScripts(); save(); renderScripts(); renderIndicators(); countIndicators();
+    pineKey = ''; schedulePine(); scheduleRender();
+    return true;
+  }
+});
 /* ───────── Divisiones: de 1 a 5 gráficos ─────────
    Cada gráfico extra es la misma app dentro de un iframe (con su propio activo, temporalidad e indicadores). 3, 4 y 5 gráficos solo en pantallas anchas. */
 const LR = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1.6"/>`;
