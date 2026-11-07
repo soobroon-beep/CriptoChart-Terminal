@@ -556,3 +556,7 @@ button.brand-fab,button.brand-icon{background:none;border:0;padding:0;cursor:poi
 @media (prefers-reduced-motion:reduce){.ec-dot.soon,.ec-live,.ec-wait,.ec-pop{animation:none}}
 
 .chart-status{container-type:inline-size}.ss-txt{white-space:nowrap}.st-econ .ec-nm{flex:0 1 auto}
+
+/* Aviso de dibujo (arriba al centro): cristal plano y minimalista, sin borde dorado ni reflejo */
+.draw-hint{background:var(--glass);border:1px solid var(--glass-line);box-shadow:none}
+.draw-hint button{background:rgba(255,255,255,.06);border-color:var(--glass-line);border-radius:12px}

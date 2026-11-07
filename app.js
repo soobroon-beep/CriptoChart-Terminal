@@ -2924,12 +2924,12 @@ function renderCore() {
   // retícula (mantener pulsado)
   let shown = candles[hi - 1];
   if (cross) {
-    const i = clamp(Math.round(IDX(cross.x)), 0, n - 1), c = candles[i]; shown = c;
-    const cx = X(i), cy = clamp(cross.y, plotTop, plotTop + plotH);
+    const fi = IDX(cross.x), i = clamp(Math.round(fi), 0, n - 1), c = candles[i]; shown = c;
+    const free = fi > n - 1 + .5 || fi < -.5, cx = free ? clamp(cross.x, left, w - right) : X(i), cy = clamp(cross.y, plotTop, plotTop + plotH); // fuera de las velas (zona vacía a la derecha) la cruz sigue al puntero sin ajustarse a una vela
     g.strokeStyle = CS.cross || fg; g.globalAlpha = CS.crossA / 100; g.lineWidth = CS.crossW; g.setLineDash(CS.crossS === 'Sólida' ? [] : CS.crossS === 'Puntos' ? [1.5, 3] : [4, 4]);
     g.beginPath(); g.moveTo(cx, top0); g.lineTo(cx, h - axisH); g.moveTo(left, cy); g.lineTo(w - right + 2, cy); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
     g.fillStyle = CS.cross || fg; g.fillRect(w - right + 2, cy - 9, right - 3, 18); g.fillStyle = bg; g.fillText(fmt(PRICE(cy)), w - right + 5, cy + 3.5);
-    const tl = CCTPrefs.full(c.t, PR);
+    const tl = CCTPrefs.full(free ? timeOfIdx(Math.round(fi)) : c.t, PR);
     const tw = g.measureText(tl).width + 12, tx = clamp(cx - tw / 2, left, w - right - tw);
     g.fillStyle = CS.cross || fg; g.fillRect(tx, h - axisH + 1, tw, 18); g.fillStyle = bg; g.fillText(tl, tx + 6, h - 8);
   }

@@ -201,7 +201,8 @@
       if (!W || !H) continue;
       const k = Math.max(.4, Math.min(1, (bottom - top - 12) / H, (right - left - 12) / W)), pos = t.pos, Ws = W * k, Hs = H * k;
       const ax = pos.includes('left') ? left + 6 : pos.includes('center') ? (left + right - Ws) / 2 : right - Ws - 6, ay = pos.includes('top') ? top + 6 : pos.includes('middle') ? (top + bottom - Hs) / 2 : bottom - Hs - 6;
-      g.save(); g.translate(ax, ay); g.scale(k, k); const x0 = 0, y0 = 0, small = t.cells.length <= 4, bgOf = ci => small ? fadeRgba(P[ci], .25) : P[ci]; // tablas chicas (señal BUY/SELL, reglas): fondo casi transparente para no tapar las velas
+      g.save(); g.translate(ax, ay); g.scale(k, k); const x0 = 0, y0 = 0, small = t.cells.length <= 4, bgOf = ci => fadeRgba(P[ci], small ? .25 : .34); // cristal plano: los fondos de celda son translúcidos para no tapar las velas
+      g.beginPath(); if (g.roundRect) g.roundRect(x0, y0, W, H, 7); else g.rect(x0, y0, W, H); g.fillStyle = 'rgba(255,255,255,.045)'; g.fill(); g.save(); g.clip(); // fondo de cristal con esquinas redondeadas
       if (t.bci !== null && t.bci !== undefined && P[t.bci]) { g.fillStyle = bgOf(t.bci); g.fillRect(x0, y0, W, H); }
       for (const c of t.cells) {
         let x = x0, y = y0; for (let i = 0; i < c.c; i++) x += cw(i); for (let i = 0; i < c.r; i++) y += rh(i);
@@ -210,7 +211,9 @@
         const al = String(c.halign || 'center').replace(/^text\./, ''); g.textAlign = al === 'left' ? 'left' : al === 'right' ? 'right' : 'center';
         g.fillText(stripE(c.text.split('\n')[0]), al === 'left' ? x + 4 : al === 'right' ? x + cw(c.c) - 4 : x + cw(c.c) / 2, y + rh(c.r) / 2, cw(c.c) - 4);
       }
-      if (t.frame !== null && t.frame !== undefined && P[t.frame] && t.fw > 0) { g.strokeStyle = P[t.frame]; g.lineWidth = Math.min(3, t.fw); g.strokeRect(x0, y0, W, H); }
+      g.restore(); // fin del recorte redondeado
+      g.beginPath(); if (g.roundRect) g.roundRect(x0 + .5, y0 + .5, W - 1, H - 1, 7); else g.rect(x0 + .5, y0 + .5, W - 1, H - 1); g.strokeStyle = 'rgba(255,255,255,.13)'; g.lineWidth = 1; g.stroke(); // borde fino de cristal, sin reflejo
+      if (t.frame !== null && t.frame !== undefined && P[t.frame] && t.fw > 0) { g.strokeStyle = fadeRgba(P[t.frame], .6); g.lineWidth = Math.min(3, t.fw); g.beginPath(); if (g.roundRect) g.roundRect(x0, y0, W, H, 7); else g.rect(x0, y0, W, H); g.stroke(); }
       g.restore();
     }
     g.restore();
