@@ -276,52 +276,6 @@
     L.push(secWindow(W, C, now));
     if (A && S) { const up = tot >= 8, dn = tot <= -8, r0 = A.resists[0], s0 = A.supports[0], when = W && W.nextHi ? ` **después de ${hhmm(W.nextHi.until, now)}**` : ''; L.push(`### Recomendación de hoy`, up ? `Se favorecen **largos**${when}: busca entrada en retrocesos hacia ${s0 ? fp(s0.p) : 'el soporte cercano'} o confirmación sobre ${r0 ? fp(r0.p) : 'la resistencia cercana'}; si pierde ${s0 ? fp(s0.p) : 'el soporte'} la idea se invalida.` : dn ? `Se favorecen **cortos**${when}: busca entrada en rebotes hacia ${r0 ? fp(r0.p) : 'la resistencia cercana'} o confirmación bajo ${s0 ? fp(s0.p) : 'el soporte cercano'}; si recupera ${r0 ? fp(r0.p) : 'la resistencia'} la idea se invalida.` : `Sin ventaja clara: **espera**${when} a que rompa ${r0 ? fp(r0.p) : 'la resistencia'} o ${s0 ? fp(s0.p) : 'el soporte'} con volumen antes de operar.`, 'Usa stop por ATR y arriesga una fracción pequeña de tu cuenta.'); }
     else L.push(C && C.soonHigh.length ? 'Atención: con un dato macro de alto impacto en menos de 24 h, conviene esperar a la reacción antes de apostar por una dirección.' : 'Si el precio rompe el nivel clave con volumen, la lectura gana fuerza; si lo pierde, se invalida.');
-    // Explicación económica, escenarios contrastables y procedencia: no solo titulares.
-    if (C && (C.upcoming.length || C.recent.length)) {
-      L.push('### Qué significan los próximos datos y cómo vigilarlos');
-      const important = C.upcoming.concat(C.recent).slice(0, 6);
-      for (const e of important) {
-        const topic = String(e.title || '').toLowerCase();
-        let meaning = 'Puede alterar expectativas de crecimiento, liquidez y apetito por riesgo; para BTC/ETH importa la reacción de dólar, tasas y mercado amplio.';
-        let surprise = 'Compara el dato real con el consenso; el movimiento inicial no confirma dirección.';
-        if (/cpi|pce|ppi|inflation/.test(topic)) {
-          meaning = 'Mide presiones de precios. Una inflación más persistente puede retrasar recortes de tasas y presionar los activos de riesgo, incluidas las criptomonedas.';
-          surprise = 'Mayor al pronóstico: posible presión bajista por tasas; menor: posible alivio alcista. La interpretación cambia con el contexto de la Fed.';
-        } else if (/non.farm|payroll|nfp|unemployment|employment|jolts|jobless|adp/.test(topic)) {
-          meaning = 'Evalúa la fortaleza del empleo, relevante para tasas de la Fed, liquidez y tolerancia al riesgo.';
-          surprise = 'Empleo sorprendentemente sólido puede fortalecer al dólar; muy débil puede alimentar temor de recesión. No hay reacción garantizada.';
-        } else if (/fomc|federal funds|fed |powell|interest rate|rate statement|press conference|ecb|boj|boe/.test(topic)) {
-          meaning = 'Puede cambiar expectativas de tasas y condiciones de financiación; el tono del comunicado y preguntas puede pesar más que la cifra.';
-          surprise = 'Tono más restrictivo: riesgo de presión bajista; tono menos restrictivo: posible recuperación. Vigila el lenguaje y la respuesta del mercado.';
-        } else if (/gdp|pmi|retail sales|consumer confidence/.test(topic)) {
-          meaning = 'Aporta señales de crecimiento y consumo que influyen en expectativas monetarias y apetito por riesgo.';
-          surprise = 'Un dato fuerte puede apoyar crecimiento o reducir expectativas de recorte; contrasta con la narrativa vigente.';
-        }
-        const at = new Date(e.t).toLocaleString('es', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short'});
-        L.push('**' + C.name(e) + ' · ' + at + '** (' + C.country(e) + ', ' + (C.imp(e) === 2 ? 'alto impacto' : 'impacto medio') + '). ' + meaning + ' ' + surprise +
-          (e.forecast ? ' Previsión: ' + e.forecast + '.' : '') +
-          (e.actual ? ' Publicado: ' + e.actual + '.' : ' Dato real todavía no disponible en el calendario.') +
-          ' En torno a la publicación, observa spreads, volumen y cierre de velas antes de validar una ruptura.');
-      }
-    }
-    if (N && N.top.length) {
-      L.push('### Noticias y sus fuentes (sentimiento estimado, no hechos verificados independientemente)');
-      for (const i of N.top.slice(0, 4)) {
-        const at = new Date(i.t).toLocaleString('es', {dateStyle: 'short', timeStyle: 'short'});
-        const link = /^https:\/\/[^\s)]+$/i.test(i.link || '') ? ' · [Leer fuente](' + i.link + ')' : '';
-        L.push('- ' + i.title + ' · ' + (i.src || 'Fuente no identificada') + ', ' + at + link +
-          '. Posible impacto: ' + (i.s > 0 ? 'favorable al sentimiento si se confirma y se refleja en el precio' : i.s < 0 ? 'adverso al sentimiento si se confirma y se refleja en el precio' : 'incierto; exige confirmar la relevancia para el activo') + '.');
-      }
-    }
-    if (A) {
-      L.push('### Escenarios para el activo abierto', secPlan(A),
-        '**Escenario neutral:** consolidación entre niveles cercanos, sin dirección confirmada; una ruptura sin cierre y volumen puede ser falsa.',
-        'Para confirmar una entrada hipotética, busca cierre de vela, volumen frente a su promedio y coincidencia con los indicadores activos; invalida la hipótesis al perder el nivel señalado.');
-      L.push('**Confianza:** ' + A.confidence + ' (valoración heurística, no probabilidad estadística). Riesgos: movimientos bruscos en noticias, liquidez insuficiente, deslizamiento, divergencias entre marcos y datos faltantes.');
-    }
-    const candleAt = ctx && ctx.candles && ctx.candles.length ? new Date(ctx.candles[ctx.candles.length - 1].t).toLocaleString('es', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short'}) : 'sin gráfico';
-    L.push('**Actualización consultada:** ' + new Date(now).toLocaleString('es', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short'}) +
-      ' · última vela: ' + candleAt + '. Fuentes: gráfico del exchange conectado, titulares del módulo Noticias y archivo del Calendario económico. Los datos pueden llegar con retraso.');
     return L.join('\n\n') + '\n\n' + DISC;
   }
   function answerLocal(question, ctx, extra) {
@@ -338,7 +292,7 @@
   }
 
   /* ───────── Modo Claude (opcional) ───────── */
-  const SYSTEM = `Eres «Analista CCT», el asistente de VORTEX (Powered by Nova Nexus). Respondes SIEMPRE en español. Distingue datos observados, titulares de terceros, hipótesis y rumores. Cita fuente y fecha. Si los datos son antiguos o incompletos, señálalo. No inventes capturas ni horarios de entrada seguros.
+  const SYSTEM = `Eres «Analista CCT», el asistente de VORTEX (Powered by Nova Nexus). Respondes SIEMPRE en español.
 ALCANCE: solo el sector cripto (criptomonedas, mercado cripto, análisis técnico del gráfico del usuario, noticias y eventos macro que lo afectan). Si te piden otra cosa, explica amablemente que solo atiendes cripto y reconduce.
 BASE: cada afirmación debe apoyarse en los DATOS que se te entregan (velas, indicadores activados por el usuario, zonas, noticias, calendario). Cita el indicador o nivel concreto. Si un dato no está, dilo; no inventes precios, niveles, noticias ni cifras.
 ESTILO: claro y directo, con listas cortas; incluye niveles de invalidación y relación beneficio/riesgo cuando propongas escenarios; menciona la incertidumbre y los eventos de calendario cercanos. Nunca prometas resultados ni des órdenes de compra/venta: presenta escenarios educativos. Cierra análisis de operaciones con una línea breve: «Análisis educativo, no asesoría financiera.»
@@ -350,195 +304,24 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
       indicadores_activos: ctx.active, valores: ctx.values, nova_nexus: ctx.nova, estrategia_combinada: A && (() => { const S = strategy(ctx, A); return {puntaje: S.score, sesgo: S.bias, factores_nova: S.nova.map(x => x[1])}; })(), zonas: ctx.zones, perfil_volumen: ctx.vp, scripts_pine: ctx.pine,
       analisis_calculado: A && {sesgo: A.bias, puntaje: A.score, confianza: A.confidence, estructura: A.structure, rsi: r(A.rsi), macd_hist: r(A.macd.hist), ema20: r(A.ema20), ema50: r(A.ema50), sma200: r(A.sma200), atr: r(A.atr), volumen_vs_prom: r(A.volRatio), soportes: A.supports.map(s => [r(s.p), s.k]), resistencias: A.resists.map(s => [r(s.p), s.k]), notas: A.notes, plan: A.plan},
       ultimas_velas_OHLCV: ctx.candles.slice(-60).map(c => [c.t, r(c.o), r(c.h), r(c.l), r(c.c), r(c.v)]),
-      noticias: N && N.top.map(i => ({titulo: i.title, fuente: i.src, enlace: i.link || null, fecha_utc: new Date(i.t).toISOString(), resumen_publicado: String(i.desc || '').slice(0, 220), clasificacion_heuristica: i.s, impacto: i.impact})),
+      noticias: N && N.top.map(i => ({titulo: i.title, fuente: i.src, hace_min: Math.round((now - i.t) / 6e4), tono: i.s, impacto: i.impact})),
       mercado_24h: (extra.market || []).slice(0, 25).map(m => ({moneda: m.symbol, precio: r(m.price), cambio24h_pct: r(m.chg24h)})),
-      calendario: C && {proximos: C.upcoming.map(e => ({evento: C.name(e), pais: C.country(e), fecha_utc: new Date(e.t).toISOString(), en_horas: +((e.t - now) / 36e5).toFixed(1), impacto: e.impact, prevision: e.forecast, previo: e.previous, actual: e.actual || null})), recientes: C.recent.map(e => ({evento: C.name(e), fecha_utc: new Date(e.t).toISOString(), real: e.actual, prevision: e.forecast}))}});
+      calendario: C && {proximos: C.upcoming.map(e => ({evento: C.name(e), pais: C.country(e), en_horas: +((e.t - now) / 36e5).toFixed(1), impacto: e.impact, prevision: e.forecast, previo: e.previous})), recientes: C.recent.map(e => ({evento: C.name(e), real: e.actual, prevision: e.forecast}))}});
   }
-
-  /* Solo para Analizar gráfico con IA; el briefing y otras preguntas no cambian. */
-  function isVisualChartRequest(q) {
-    const t = norm(q || '');
-    return /(?:analiza(?:me|r)?|analisis|revisa|lee|lectura de)\s+(?:(?:el|mi|este|del)\s+)?grafico\b/.test(t);
-  }
-  function visualContext(ctx) {
-    const active = Array.isArray(ctx.active) ? ctx.active.filter(x => typeof x === 'string').slice(0, 40) : [];
-    const values = {}, v = ctx.values || {};
-    const allows = {vwap:'vwap', supertrend:'supertrend', trailTrend:'trail', stochK:'stoch', obvSlope:'obv'};
-    for (const [name, key] of Object.entries(allows)) if (active.includes(key) && Number.isFinite(v[name])) values[name] = v[name];
-    let nova = null;
-    if (ctx.nova && active.some(k => /^nn/i.test(k))) {
-      nova = {};
-      if (active.includes('nnIa') && ctx.nova.last) nova.ultima_senal = ctx.nova.last;
-      if (active.includes('nnEma')) {
-        nova.nube_ema = {base:ctx.nova.base, superior:ctx.nova.top, inferior:ctx.nova.bot, ema200:ctx.nova.ema200};
-      }
-      if (active.includes('nnSmc')) nova.tendencia_smc = ctx.nova.smcTrend;
-      if (active.includes('nnIa') || active.includes('nnTrail')) {
-        nova.oscilador = ctx.nova.osc;
-        nova.flujo = ctx.nova.flux;
-        nova.adx = ctx.nova.adx;
-      }
-    }
-    const fmtC = x => Number.isFinite(x) ? +x.toPrecision(8) : null;
-    return JSON.stringify({
-      activo:ctx.symbol, temporalidad:ctx.interval, exchange:ctx.exchange || null,
-      ultima_vela:ctx.candles.length ? ctx.candles[ctx.candles.length - 1].t : null,
-      indicadores_activados:active, valores_indicadores_activados:values,
-      nova_nexus: nova, indicadores_personalizados:(ctx.pine || []).slice(0, 8),
-      zonas_de_indicadores: active.some(k => /^(nnSR|nnOb|nnSmc)$/i.test(k)) ? ctx.zones : null,
-      perfil_volumen: active.some(k => /^(vpvr|nnVP)$/i.test(k)) ? ctx.vp : null,
-      dibujos_del_usuario:(ctx.drawings || []).slice(0, 24),
-      velas_ohlcv:(ctx.candles || []).slice(-45).map(c => [c.t,fmtC(c.o),fmtC(c.h),fmtC(c.l),fmtC(c.c),fmtC(c.v)])
-    });
-  }
-  function visualSummaryLocal(ctx) {
-    if (!ctx || !Array.isArray(ctx.candles) || ctx.candles.length < 12)
-      return 'Abre un gráfico con al menos 12 velas cargadas para analizarlo.';
-    const cs = ctx.candles, n = cs.length, latest = cs[n - 1], price = latest.c;
-    if (!Number.isFinite(price) || price <= 0) return 'El precio del gráfico no está disponible todavía.';
-    const change = (from, to) => Number.isFinite(from) && from > 0 ? (to - from) / from * 100 : 0;
-    // Contexto de hasta 36 velas: evita llamar lateral a un gráfico tras una caída fuerte.
-    const delta = change(cs[n - 1 - Math.min(35, n - 1)].c, price);
-    const shortMove = change(cs[n - 5].c, price);
-    const trend = delta < -1 ? 'presión bajista marcada' : delta < -.25 ? 'sesgo bajista' :
-      delta > 1 ? 'impulso alcista marcado' : delta > .25 ? 'sesgo alcista' : 'movimiento lateral';
-    const recent = Math.abs(shortMove) < .2 ? 'las últimas velas se estabilizan' :
-      shortMove > .25 ? 'las últimas velas muestran recuperación' :
-      shortMove < -.25 ? 'las últimas velas siguen retrocediendo' : 'las últimas velas muestran poco impulso';
-    const active = Array.isArray(ctx.active) ? ctx.active : [];
-    const parts = ['**' + (ctx.symbol || 'Gráfico') + ' · ' + (ctx.interval || '') + '**: ' + trend + '; ' + recent + '.'];
-    const details = [];
-    const nn = ctx.nova || {};
-    if (active.includes('nnEma') && Number.isFinite(nn.top) && Number.isFinite(nn.bot)) {
-      const hi = Math.max(nn.top, nn.bot), lo = Math.min(nn.top, nn.bot);
-      details.push('Nube Nova Nexus: precio ' + (price < lo ? 'por debajo' : price > hi ? 'por encima' : 'dentro') + ' de la nube');
-    }
-    if (active.includes('nnIa') && nn.last && Number.isFinite(nn.last.ago) && nn.last.ago >= 0 && nn.last.ago <= 5 &&
-        (nn.last.side === 'buy' || nn.last.side === 'sell')) {
-      details.push('señal Nova Nexus ' + (nn.last.side === 'buy' ? 'alcista' : 'bajista') + ' hace ' + nn.last.ago + ' velas');
-    }
-    const pine = Array.isArray(ctx.pine) ? ctx.pine : [];
-    const osc = pine.find(x => /nova.*oscil|oscil.*nova/i.test(x.name || ''));
-    if (osc) {
-      const pl = (osc.plots || []).find(p => Number.isFinite(p.value) && /osc|mom|hist|señal|signal/i.test(p.title || '')) ||
-        (osc.plots || []).find(p => Number.isFinite(p.value));
-      if (pl) details.push('Nova Oscillator: ' + (pl.title ? pl.title + ' ' : '') + fmt(pl.value));
-      else details.push('Nova Oscillator activo, sin lectura numérica disponible');
-    }
-    if ((active.includes('vpvr') || active.includes('nnVP')) && ctx.vp && Number.isFinite(ctx.vp.poc)) {
-      const gap = Math.abs(change(ctx.vp.poc, price));
-      if (gap >= .15) details.push('perfil de volumen: precio ' + (price < ctx.vp.poc ? 'bajo' : 'sobre') + ' el POC');
-      else details.push('perfil de volumen: precio cerca del POC');
-    }
-    if (details.length) parts.push(details.slice(0, 2).join('; ') + '.');
-    const drawings = Array.isArray(ctx.drawings) ? ctx.drawings : [];
-    const pos = drawings.filter(d => d && (d.type === 'long' || d.type === 'short') &&
-      d.a && Number.isFinite(d.a.p)).sort((x, y) => Math.abs(x.a.p - price) - Math.abs(y.a.p - price))[0];
-    const horizontal = drawings.filter(d => d && (d.type === 'horizontal' || d.type === 'hray') &&
-      d.a && Number.isFinite(d.a.p)).sort((x, y) => Math.abs(x.a.p - price) - Math.abs(y.a.p - price))[0];
-    const region = drawings.filter(d => d && d.type === 'rect' && d.a && d.b &&
-      Number.isFinite(d.a.p) && Number.isFinite(d.b.p)).sort((x, y) => Math.min(
-        Math.abs(x.a.p - price), Math.abs(x.b.p - price)) - Math.min(Math.abs(y.a.p - price), Math.abs(y.b.p - price)))[0];
-    const annotations = [];
-    if (pos) {
-      const gap = change(pos.a.p, price);
-      const relative = Math.abs(gap) < .15 ? 'cerca de su entrada' : gap < 0 ? 'con el precio bajo la entrada' : 'con el precio sobre la entrada';
-      annotations.push('posición ' + (pos.type === 'long' ? 'larga' : 'corta') + ' dibujada ' + relative);
-    }
-    if (region) {
-      const low = Math.min(region.a.p, region.b.p), high = Math.max(region.a.p, region.b.p);
-      annotations.push('precio ' + (price >= low && price <= high ? 'dentro' : price < low ? 'debajo' : 'encima') + ' de una zona marcada');
-    } else if (horizontal && Math.abs(change(horizontal.a.p, price)) < 2.5) {
-      annotations.push('línea horizontal marcada en ' + fp(horizontal.a.p));
-    }
-    if (annotations.length) parts.push('En tus dibujos: ' + annotations.slice(0, 2).join('; ') + '.');
-    else if (drawings.length) parts.push('Hay ' + drawings.length + ' dibujo' + (drawings.length === 1 ? '' : 's') + ' guardado' + (drawings.length === 1 ? '' : 's') + ' en el gráfico.');
-    return parts.join(' ');
-  }
-  const VISUAL_SYSTEM = 'Eres el lector VISUAL de gráficos de VORTEX. Responde SIEMPRE en español con máximo 75 palabras y entre 2 y 4 frases, sin listas ni títulos largos. Mira la captura auténtica del gráfico y describe únicamente velas, indicadores visibles y dibujos trazados por el usuario, y qué señalan. Usa la lista de indicadores activados solo para identificar los que aparecen en imagen, y OHLCV para confirmar cifras. NO menciones ni calcules RSI, MACD, Bollinger, medias ni indicadores que NO estén activos/visibles. NO agregues niveles, escenarios, objetivos, stops, noticias, calendario o explicaciones largas a menos que se pidan. Si una señal o dibujo no se distingue bien, dilo; nunca inventes una lectura visual. Es una descripción orientativa, no una orden de trading.';
-
   async function askClaude(opts, ctx, history, question, extra) {
-    const visual = !!(extra && extra.chartSnapshotMode);
-    const A = visual ? null : analyze(ctx);
-    const msgs = visual ? [] : (history || []).slice(-8).map(m => ({role: m.role, content: m.text}));
-    const userText = visual
-      ? 'LECTURA VISUAL DEL GRÁFICO. Describe ÚNICAMENTE lo que se ve en la imagen. Estos datos son auxiliares, no indicadores adicionales:\n' + visualContext(ctx) + '\n\nSOLICITUD: ' + question
-      : 'DATOS DEL GRÁFICO Y MERCADO (JSON; consulta, no garantía de tiempo real):\n' + compactContext(ctx, A, extra || {}) + '\n\nPREGUNTA DEL USUARIO:\n' + question;
-    const screenshot = extra && typeof extra.screenshot === 'string' && /^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(extra.screenshot) && extra.screenshot.length < 3000000 ? extra.screenshot.split(',')[1] : null;
-    if (visual && !screenshot) throw new Error('No pude capturar el gráfico visible. Vuelve a abrir el gráfico y prueba de nuevo.');
-    msgs.push({role: 'user', content: screenshot ? [{type:'text', text:userText + (visual ? '\nLa captura procede del canvas del precio, indicadores y dibujos.' : '\nCaptura del gráfico; verifica valores exactos con OHLCV.')},{type:'image',source:{type:'base64',media_type:'image/png',data:screenshot}}] : userText});
+    const A = analyze(ctx), msgs = (history || []).slice(-8).map(m => ({role: m.role, content: m.text}));
+    msgs.push({role: 'user', content: `DATOS DEL GRÁFICO Y MERCADO (JSON, actualizados ahora):\n${compactContext(ctx, A, extra || {})}\n\nPREGUNTA DEL USUARIO:\n${question}`});
     const url = opts.proxy || 'https://api.anthropic.com/v1/messages', headers = {'content-type': 'application/json'};
     if (!opts.proxy) { headers['x-api-key'] = opts.key; headers['anthropic-version'] = '2023-06-01'; headers['anthropic-dangerous-direct-browser-access'] = 'true'; }
     const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 60000);
     try {
-      const r = await fetch(url, {method: 'POST', headers, signal: ctl.signal, body: JSON.stringify({model: opts.model || 'claude-sonnet-5-5', max_tokens: visual ? 280 : 1400, system: visual ? VISUAL_SYSTEM : SYSTEM, messages: msgs})});
+      const r = await fetch(url, {method: 'POST', headers, signal: ctl.signal, body: JSON.stringify({model: opts.model || 'claude-sonnet-5-5', max_tokens: 1400, system: SYSTEM, messages: msgs})});
       if (!r.ok) { let m = ''; try { const j = await r.json(); m = (j.error && j.error.message) || ''; } catch {} const e = new Error(r.status === 401 ? 'La clave de Claude no es válida.' : r.status === 429 ? 'Se alcanzó el límite de uso de Claude. Intenta en un momento.' : `Error de Claude (${r.status}) ${m}`.trim()); e.status = r.status; throw e; }
       const j = await r.json(); const txt = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim(); if (!txt) throw new Error('Claude no devolvió texto.'); return txt;
     } finally { clearTimeout(to); }
   }
 
-
-  /* Recetas locales transparentes; para otras descripciones hace falta un proveedor IA configurado. */
-  function draftIndicator(prompt) {
-    const t = norm(prompt || ''), v = ['//@version=5'];
-    let name = '', code = [];
-    if (/rsi/.test(t) && /macd/.test(t) && /volumen/.test(t)) {
-      name = 'IA RSI MACD Volumen'; code = [
-        'indicator("IA RSI MACD Volumen", overlay=false)',
-        'r = ta.rsi(close, 14)',
-        'm = ta.ema(close, 12) - ta.ema(close, 26)',
-        'sg = ta.ema(m, 9)',
-        'vol = ta.sma(volume, 20)',
-        'bull = r > 50 and m > sg and volume > vol',
-        'bear = r < 50 and m < sg and volume > vol',
-        'plot(r, title="RSI 14", color=color.aqua)',
-        'plot(bull ? 75 : na, title="Coincidencia alcista", color=color.lime)',
-        'plot(bear ? 25 : na, title="Coincidencia bajista", color=color.red)'
-      ];
-    } else if (/soporte|resistencia/.test(t)) {
-      name = 'IA Soportes y Resistencias'; code = [
-        'indicator("IA Soportes y Resistencias", overlay=true)',
-        'soporte = ta.lowest(low, 20)',
-        'resistencia = ta.highest(high, 20)',
-        'plot(soporte, title="Soporte 20", color=color.lime)',
-        'plot(resistencia, title="Resistencia 20", color=color.red)'
-      ];
-    } else if (/oscilador|rsi/.test(t)) {
-      name = 'IA Oscilador RSI 7'; code = [
-        'indicator("IA Oscilador RSI 7", overlay=false)',
-        'rapido = ta.rsi(close, 7)',
-        'lento = ta.rsi(close, 14)',
-        'plot(rapido, title="RSI 7", color=color.aqua)',
-        'plot(lento, title="RSI 14", color=color.orange)'
-      ];
-    } else if (/tres medias|3 medias|medias moviles|triple ema/.test(t)) {
-      name = 'IA Triple EMA'; code = [
-        'indicator("IA Triple EMA", overlay=true)',
-        'rapida = ta.ema(close, 9)',
-        'media = ta.ema(close, 21)',
-        'lenta = ta.ema(close, 55)',
-        'plot(rapida, title="EMA 9", color=color.lime)',
-        'plot(media, title="EMA 21", color=color.orange)',
-        'plot(lenta, title="EMA 55", color=color.aqua)'
-      ];
-    } else if (/volumen/.test(t) && /ruptura|breakout/.test(t)) {
-      name = 'IA Ruptura y Volumen'; code = [
-        'indicator("IA Ruptura y Volumen", overlay=true)',
-        'techo = ta.highest(high[1], 20)',
-        'suelo = ta.lowest(low[1], 20)',
-        'vol = ta.sma(volume, 20)',
-        'alcista = close > techo and volume > vol * 1.5',
-        'bajista = close < suelo and volume > vol * 1.5',
-        'plot(techo, title="Resistencia previa", color=color.red)',
-        'plot(suelo, title="Soporte previo", color=color.lime)',
-        'plot(alcista ? close : na, title="Ruptura alcista", color=color.aqua)',
-        'plot(bajista ? close : na, title="Ruptura bajista", color=color.orange)'
-      ];
-    }
-    return name ? {name, code:v.concat(code).join('\n'), mode:'receta local', note:'Se generó una receta compatible de parámetros fijos. Revísala y valida sobre las velas reales; no es un backtest.'} : null;
-  }
-
-  const api = {analyze, strategy, tradeWindow, briefLocal, answerLocal, intent, isVisualChartRequest, visualSummaryLocal, visualContext, newsFor, calendarFor, sentiment, compactContext, askClaude, draftIndicator, SYSTEM, ema, rsi, macd, atr, swings, fmt, trCal, GLOSS};
+  const api = {analyze, strategy, tradeWindow, briefLocal, answerLocal, intent, newsFor, calendarFor, sentiment, compactContext, askClaude, SYSTEM, ema, rsi, macd, atr, swings, fmt, trCal, GLOSS};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTAICore = api;
   if (typeof document === 'undefined') return;
