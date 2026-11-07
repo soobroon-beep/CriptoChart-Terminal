@@ -297,7 +297,7 @@
           meaning = 'Aporta señales de crecimiento y consumo que influyen en expectativas monetarias y apetito por riesgo.';
           surprise = 'Un dato fuerte puede apoyar crecimiento o reducir expectativas de recorte; contrasta con la narrativa vigente.';
         }
-        const at = new Date(e.t).toLocaleString('es', {dateStyle: 'medium', timeStyle: 'short', timeZoneName: 'short'});
+        const at = new Date(e.t).toLocaleString('es', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short'});
         L.push('**' + C.name(e) + ' · ' + at + '** (' + C.country(e) + ', ' + (C.imp(e) === 2 ? 'alto impacto' : 'impacto medio') + '). ' + meaning + ' ' + surprise +
           (e.forecast ? ' Previsión: ' + e.forecast + '.' : '') +
           (e.actual ? ' Publicado: ' + e.actual + '.' : ' Dato real todavía no disponible en el calendario.') +
@@ -319,8 +319,8 @@
         'Para confirmar una entrada hipotética, busca cierre de vela, volumen frente a su promedio y coincidencia con los indicadores activos; invalida la hipótesis al perder el nivel señalado.');
       L.push('**Confianza:** ' + A.confidence + ' (valoración heurística, no probabilidad estadística). Riesgos: movimientos bruscos en noticias, liquidez insuficiente, deslizamiento, divergencias entre marcos y datos faltantes.');
     }
-    const candleAt = ctx && ctx.candles && ctx.candles.length ? new Date(ctx.candles[ctx.candles.length - 1].t).toLocaleString('es', {dateStyle:'short', timeStyle:'short', timeZoneName:'short'}) : 'sin gráfico';
-    L.push('**Actualización consultada:** ' + new Date(now).toLocaleString('es', {dateStyle:'medium', timeStyle:'short', timeZoneName:'short'}) +
+    const candleAt = ctx && ctx.candles && ctx.candles.length ? new Date(ctx.candles[ctx.candles.length - 1].t).toLocaleString('es', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short'}) : 'sin gráfico';
+    L.push('**Actualización consultada:** ' + new Date(now).toLocaleString('es', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short'}) +
       ' · última vela: ' + candleAt + '. Fuentes: gráfico del exchange conectado, titulares del módulo Noticias y archivo del Calendario económico. Los datos pueden llegar con retraso.');
     return L.join('\n\n') + '\n\n' + DISC;
   }
