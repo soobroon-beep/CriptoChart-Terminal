@@ -29,7 +29,7 @@ test('responde LONG/SHORT en español con zonas y datos reales',()=>{
 });
 test('lee EMAs activas y valores de indicadores personalizados',()=>{
  const c=ctx();c.chart.active.push('ema20');c.chart.values.ema20=1.48;
- const r=A.answer('¿Qué dice la EMA y mis indicadores?',c);
+ const r=A.answer('¿Qué marcan mis indicadores?',c);
  assert.match(r,/EMA principal/);
  assert.match(r,/Nova Oscillator/);
  assert.match(r,/1.48/);
