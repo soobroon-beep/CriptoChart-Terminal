@@ -22,7 +22,7 @@ const bytes=canvas.toBuffer('image/png');
 const img=await RawImage.fromBlob(new Blob([bytes],{type:'image/png'}));
 assert.equal(img.width,WIDTH);assert.equal(img.height,HEIGHT);
 const modelId='onnx-community/Qwen3.5-0.8B-ONNX';
-console.log('Cargando modelo REAL:',modelId,'para inferencia visual en CPU/WASM');
+console.log('Cargando modelo REAL:',modelId,'para inferencia visual en CPU');
 const processor=await AutoProcessor.from_pretrained(modelId);
 const conversation=[{role:'user',content:[
  {type:'image'},
@@ -33,7 +33,7 @@ const inputs=await processor(formatted,img);
 assert.ok(inputs.pixel_values && inputs.image_grid_thw,'Faltan tensores de imagen');
 console.log('Visión lista: pixel_values',inputs.pixel_values.dims,'image_grid_thw',inputs.image_grid_thw.dims);
 const model=await Qwen3_5ForConditionalGeneration.from_pretrained(modelId,{
- device:'wasm',
+ device:'cpu',
  dtype:{embed_tokens:'q4',vision_encoder:'fp16',decoder_model_merged:'q4'},
  progress_callback:info=>{
    if(info.status==='progress' && Number.isFinite(info.progress) && Math.round(info.progress)%25===0)
