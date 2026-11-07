@@ -107,55 +107,85 @@
     if (!evidence.test(norm) || (vague.test(norm) && sentences.length <= 1)) return null;
     return s.split(/\s+/).slice(0, 75).join(' ').trim();
   }
+  // El navegador nunca debe quedar bloqueado esperando una descarga o una
+  // inferencia GPU: límites independientes de carga, generación y total.
+  const MAX_TOTAL_MS = 180000;
+  const MAX_QUIET_MS = 45000;
+  const MAX_GENERATION_MS = 45000;
+  function endJob(current, error, result) {
+    if (!current || job !== current) return;
+    job = null;
+    clearTimeout(current.totalTimer); clearTimeout(current.silenceTimer);
+    if (error) current.reject(error); else current.resolve(result);
+  }
+  function stopWorker() {
+    if (worker) { try { worker.terminate(); } catch {} }
+    worker = null;
+  }
+  function cancel(message = 'Análisis visual cancelado. El análisis del gráfico sigue disponible.') {
+    const j = job;
+    if (!j) return false;
+    stopWorker();
+    endJob(j, Error(message));
+    return true;
+  }
+  function watchdog(j, phase) {
+    if (job !== j) return;
+    clearTimeout(j.silenceTimer);
+    const ms = phase === 'inference' ? MAX_GENERATION_MS : MAX_QUIET_MS;
+    j.silenceTimer = setTimeout(() => cancel(phase === 'inference'
+      ? 'La interpretación visual tardó demasiado y fue detenida. El análisis técnico continúa disponible.'
+      : 'La IA visual dejó de responder; se detuvo para no bloquear Vortex.'), ms);
+  }
   function getWorker() {
     if (worker) return worker;
-    if (typeof Worker !== 'function') throw Error('Este navegador no permite ejecutar IA local en segundo plano.');
+    if (typeof Worker !== 'function') throw Error('Este navegador no permite ejecutar IA local.');
     const url = new URL('ai-vision-worker.js', document.baseURI);
     const w = new Worker(url.href, {type:'module',name:'Vortex-vision-local'});
     w.onmessage = e => {
-      const m = e.data || {};
-      if (!job || m.id !== job.id) return;
+      const m = e.data || {}, j = job;
+      if (!j || m.id !== j.id) return;
       if (m.type === 'progress') {
-        if (typeof job.onProgress === 'function') job.onProgress(String(m.message || 'Cargando IA visual…'));
+        const message = String(m.message || 'Preparando IA visual…');
+        if (message !== j.lastProgress || m.stage !== j.stage) {
+          j.lastProgress = message; j.stage = m.stage;
+          if (typeof j.onProgress === 'function') j.onProgress(message);
+        }
+        watchdog(j, m.stage === 'inference' ? 'inference' : 'load');
       } else if (m.type === 'result' || m.type === 'error') {
-        const current = job; job = null; clearTimeout(current.timer);
-        if (m.type === 'error') current.reject(Error(m.message || 'Error al analizar la captura'));
-        else {
-          const text = cleanResponse(m.text, current.ctx);
-          if (!text) current.reject(Error('La respuesta visual no fue fiable, estaba repetida o no estaba en español.'));
-          else current.resolve({text,model:label(m.which),device:m.device});
+        if (m.type === 'error') {
+          stopWorker();
+          endJob(j, Error(m.message || 'Error al analizar la captura'));
+        } else {
+          const answer = cleanResponse(m.text, j.ctx);
+          if (!answer) { stopWorker(); endJob(j, Error('El modelo produjo una respuesta visual no fiable.')); }
+          else endJob(j, null, {text:answer,model:label(m.which),device:m.device});
         }
       }
     };
-    w.onerror = e => {
-      if (job) { const j = job; job = null; clearTimeout(j.timer);
-        j.reject(Error('No se pudo iniciar el motor de IA visual. Revisa la conexión o usa el modo Local.')); }
-      try { w.terminate(); } catch {}
-      worker = null;
-    };
-    worker = w; return w;
+    w.onerror = () => { const j = job; stopWorker(); if (j) endJob(j,Error('Falló el motor de IA visual; se mantiene el análisis técnico.')); };
+    w.onmessageerror = () => { const j=job; stopWorker(); if(j)endJob(j,Error('No se pudo recibir la respuesta de IA visual.')); };
+    worker = w;
+    return w;
   }
   function analyze({ctx,screenshot,model='qwen35',question='',onProgress}) {
     if (!ctx || !Array.isArray(ctx.candles) || !ctx.candles.length)
-      return Promise.reject(Error('Abre primero el gráfico y espera a que carguen las velas.'));
-    if (!/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(screenshot || ''))
-      return Promise.reject(Error('No hay una captura real del gráfico. Abre la pestaña Gráfico y vuelve a intentarlo.'));
-    if (!MODELS[model]) return Promise.reject(Error('Modelo desconocido.'));
-    if (job) return Promise.reject(Error('Ya hay un análisis visual en proceso.'));
+      return Promise.reject(Error('Abre primero un gráfico con velas cargadas.'));
+    if (!/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(screenshot || '') || screenshot.length > 3000000)
+      return Promise.reject(Error('No hay una captura PNG válida del gráfico.'));
+    if (!MODELS[model]) return Promise.reject(Error('Modelo de visión desconocido.'));
+    if (job) return Promise.reject(Error('Hay una interpretación visual en curso. Puedes cancelarla.'));
     return new Promise((resolve,reject) => {
-      let w;
-      try { w = getWorker(); } catch (e) { reject(e); return; }
-      const id = ++seq;
-      const timer = setTimeout(() => {
-        if (!job || job.id !== id) return;
-        job = null; try { worker.terminate(); } catch {} worker = null;
-        reject(Error('Se agotó el tiempo para cargar el modelo. Prueba con SmolVLM o en una computadora con más memoria.'));
-      }, 8 * 60 * 1000);
-      job = {id,resolve,reject,onProgress,ctx,timer};
-      if (typeof onProgress === 'function') onProgress('Iniciando ' + label(model) + ' en tu dispositivo…');
-      try { w.postMessage({id,type:'analyze',which:model,screenshot,prompt:model === 'smol' ? promptSmol(ctx,question) : prompt(ctx,question)}); }
-      catch (e) { clearTimeout(timer); job = null; reject(e); }
+      let w; try { w=getWorker(); } catch (e) { reject(e); return; }
+      const j={id:++seq,resolve,reject,onProgress,ctx,totalTimer:null,silenceTimer:null,lastProgress:'',stage:'load'};
+      job=j;
+      j.totalTimer=setTimeout(()=>cancel('La IA visual superó el límite de 3 minutos y se detuvo. Los datos del gráfico siguen disponibles.'),MAX_TOTAL_MS);
+      watchdog(j,'load');
+      if (typeof onProgress === 'function') onProgress('Captura recibida. Preparando '+label(model)+'…');
+      try { w.postMessage({id:j.id,type:'analyze',which:model,screenshot,
+        prompt:model==='smol'?promptSmol(ctx,question):prompt(ctx,question)}); }
+      catch(e) { stopWorker(); endJob(j,e); }
     });
   }
-  root.CCTFreeVision = Object.freeze({analyze,label,models:MODELS,prompt});
+  root.CCTFreeVision = Object.freeze({analyze,cancel,isBusy:()=>!!job,label,models:MODELS,prompt});
 })(typeof window !== 'undefined' ? window : this);
