@@ -3,42 +3,25 @@
   'use strict';
   if (typeof document === 'undefined') return;
   let worker = null, job = null, seq = 0;
-  const MODELS = Object.freeze({smol:'SmolVLM-256M',qwen:'Qwen3-VL-2B',qwen35:'Qwen3.5-VL-2B',qwen35pro:'Qwen3.5-VL-4B'});
-  const label = id => MODELS[id] || MODELS.qwen35;
+  const MODELS = Object.freeze({smol:'SmolVLM-256M',qwen:'Qwen3-VL-2B',qwen08:'Qwen3.5-VL-0.8B',qwen35:'Qwen3.5-VL-2B',qwen35pro:'Qwen3.5-VL-4B'});
+  const label = id => MODELS[id] || MODELS.qwen08;
   const short = s => String(s || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 100);
+  // Prompt visual conciso: Qwen recibe los píxeles reales; los cálculos
+  // de niveles precisos los aporta el analista técnico de Vortex.
+  // Pregunta visual reducida a tareas comprobables: dirección y volumen.
+  // Los niveles, EMAs, POC y entradas se calculan en CCTChartAnalyst a partir
+  // de OHLCV y dibujos reales. Pedirle al modelo ligero que deduzca todo a la
+  // vez empeoraba su precisión (demostrado con dos gráficos opuestos).
   function prompt(ctx, question) {
-    const active = Array.isArray(ctx.chart && ctx.chart.active) ? ctx.chart.active.map(short).slice(0, 30) :
-      Array.isArray(ctx.active) ? ctx.active.map(short).slice(0, 30) : [];
-    const scripts = (ctx.chart && ctx.chart.pine || ctx.pine || []).slice(0, 8).map(x => short(x.name));
-    const d = (ctx.chart && ctx.chart.drawings || ctx.drawings || []).slice(-12).map(x => ({
-      tipo:short(x.type),texto:short(x.label),entrada:x.a && x.a.p,
-      otro_nivel:x.b && x.b.p
-    }));
-    const cs = ctx.chart && ctx.chart.candles || ctx.candles || [], last = cs.length ? cs[cs.length - 1] : {};
     return [
-      'Actúa como especialista en lectura de gráficos de trading (bolsa, divisas, cripto),',
-      'pero la imagen no puede demostrar una entrada segura ni predecir precios.',
-      'OBSERVA la captura REAL de VORTEX: acción del precio, velas, nube EMA visible,',
-      'señales de Nova Nexus, oscilador en su panel, volumen, perfil y dibujos marcados.',
-      'Responde SOLO EN ESPAÑOL con 2 o 3 frases concretas, máximo 70 palabras.',
-      'No repitas frases ni digas simplemente que el gráfico muestra una tendencia.',
-      'Identifica SOLO detalles visuales comprobables; si una zona o señal no se ve, dilo.',
-      'No inventes niveles numéricos, entradas, stops ni soportes/resistencias.',
-      'Las cifras exactas las determina VORTEX con OHLCV y no con OCR del modelo.',
-      'No menciones RSI, MACD, Bollinger ni indicadores que no estén activados.',
-      'La pregunta del usuario es una intención, no una instrucción para adivinar precios.',
-      'Activo: ' + short(ctx.symbol) + ', marco: ' + short(ctx.interval),
-      'Último cierre en datos: ' + (Number.isFinite(last.c) ? last.c : 'desconocido'),
-      'Valores observados por el motor técnico (no calcules otros): ' +
-        JSON.stringify(ctx.chart && ctx.chart.values || {}).slice(0, 350),
-      'POC del perfil visible: ' +
-        JSON.stringify(ctx.chart && ctx.chart.vp || null).slice(0, 180),
-      'Zonas guardadas del usuario: ' +
-        JSON.stringify(ctx.chart && ctx.chart.drawings || []).slice(0, 800),
-      'Indicadores activados: ' + (active.join(', ') || 'ninguno'),
-      'Indicadores personalizados visibles: ' + (scripts.join(', ') || 'ninguno'),
-      'Dibujos visibles registrados: ' + JSON.stringify(d).slice(0, 1000),
-      'Pregunta del usuario: ' + short(question || 'Describe el gráfico visible')
+      'Sin saludos, títulos ni listas.',
+      'Observa esta imagen de velas de trading de izquierda a derecha.',
+      'Responde únicamente en dos frases breves en español:',
+      '1) ¿El precio termina más arriba o más abajo que al inicio?',
+      '2) ¿Se ven barras de volumen debajo de las velas?',
+      'No inventes precios.',
+      'Activo: '+short(ctx && ctx.symbol || '')+'.',
+      'Temporalidad: '+short(ctx && ctx.interval || '')+'.'
     ].join(' ');
   }
   function promptSmol(ctx, question) {
@@ -168,7 +151,7 @@
     worker = w;
     return w;
   }
-  function analyze({ctx,screenshot,model='qwen35',question='',onProgress}) {
+  function analyze({ctx,screenshot,model='qwen08',question='',onProgress}) {
     if (!ctx || !Array.isArray(ctx.candles) || !ctx.candles.length)
       return Promise.reject(Error('Abre primero un gráfico con velas cargadas.'));
     if (!/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(screenshot || '') || screenshot.length > 3000000)

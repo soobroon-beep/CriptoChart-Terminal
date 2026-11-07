@@ -221,3 +221,28 @@ test('Qwen3.5 sin WebGPU falla antes de descargar pesos', async () => {
   assert.equal(fetched,false);
   assert.ok(posted.some(x=>x.type==='error'&&/WebGPU/.test(x.message)));
 });
+
+
+test('Qwen3.5 0.8B usa los pesos visuales reales y recibe el PNG', async () => {
+  const sent=[],loaded=[],processed=[];
+  const processor=(text,image)=>{processed.push({text,image});return {input_ids:{dims:[1,11]}}};
+  processor.apply_chat_template=()=> 'PROMPT VISUAL BTCUSDT';
+  processor.batch_decode=()=>['Las velas más recientes están bajando y hay barras de volumen.'];
+  const T={
+    AutoProcessor:{from_pretrained:async()=>processor},
+    Qwen3_5ForConditionalGeneration:{from_pretrained:async(id,opt)=>{
+      loaded.push({id,opt});return {generate:async()=>({slice:()=>({})})};
+    }},
+    RawImage:{fromURL:async()=>({width:816,height:550,resize:async(w,h)=>({width:w,height:h})})}
+  };
+  const self={navigator:{gpu:{}},postMessage:x=>sent.push(x)};
+  vm.runInNewContext(read('ai-vision-worker.js').replace(/await import\([^\n]+\)/,'await fakeImport()'),
+    {self,navigator:self.navigator,fakeImport:async()=>T});
+  self.onmessage({data:{id:24,type:'analyze',which:'qwen08',
+    screenshot:'data:image/png;base64,AAAA',prompt:'BTCUSDT 1h: mira las velas'}});
+  await awaitWorkerFinish(sent);
+  assert.equal(loaded[0].id,'onnx-community/Qwen3.5-0.8B-ONNX');
+  assert.equal(loaded[0].opt.device,'webgpu');
+  assert.equal(processed.length,1);
+  assert.ok(sent.some(x=>x.type==='result'&&x.which==='qwen08'));
+});

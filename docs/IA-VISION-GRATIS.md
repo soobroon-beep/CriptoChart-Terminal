@@ -6,7 +6,8 @@
 
 Al pulsar «Analizar gráfico con IA», Vortex analiza **el rango visible del precio** (zoom/desplazamiento), los indicadores realmente activos, sus valores, el volumen, el POC si hay perfil visible y las posiciones, líneas o zonas dibujadas. Captura además **priceCanvas**, un solo lienzo que contiene las velas, paneles de indicadores, volumen y dibujos. El PNG se ofrece a un **Web Worker local** para observaciones complementarias. **El modelo visual NO sustituye los cálculos basados en las velas**: si su descripción es genérica, está repetida, cambia de idioma, introduce indicadores ocultos o contradice datos verificables, se descarta y queda la lectura en español respaldada por datos.
 
-- **Qwen3.5 2B (recomendado)** — modelo de visión y lenguaje abierto (Apache-2.0). Pesos ONNX `huggingworld/Qwen3.5-2B-ONNX`; requiere WebGPU y bastante memoria. Utiliza Transformers.js 4.4.0-next.0, una versión preliminar compatible con su arquitectura.
+- **Qwen3.5 0.8B (recomendado para uso cotidiano)** — `onnx-community/Qwen3.5-0.8B-ONNX`, modelo abierto multimodal que descarga significativamente menos pesos. Se probó la **generación efectiva en CPU** de respuestas a partir de un gráfico PNG, además del paso por el procesador. En navegador usa WebGPU y puede fallar si el equipo no lo soporta.
+- **Qwen3.5 2B (avanzado)** — modelo de visión y lenguaje abierto (Apache-2.0). Pesos ONNX `huggingworld/Qwen3.5-2B-ONNX`; requiere WebGPU y bastante memoria. Utiliza Transformers.js 4.4.0-next.0, una versión preliminar compatible con su arquitectura.
 - **Qwen3.5 4B (avanzado)** — `huggingworld/Qwen3.5-4B-ONNX`; modelo con mayor capacidad, pero necesita más memoria de GPU y descarga.
 - **SmolVLM-256M-Instruct (compatibilidad)** — pequeño y menos capaz para gráficos financieros; se conserva como alternativa de bajo consumo, no como recomendación principal.
 - **Qwen3-VL-2B-Instruct (alternativa)** — modelo multimodal anterior; exige WebGPU.
@@ -44,6 +45,14 @@ Pruebas automatizadas del proyecto en Node 22:
 Estas verifican cancelación, límite de tiempo, fallo del Worker, capturas PNG, cambio de preguntas, datos técnicos y cálculos de tendencia; además hay un flujo de GitHub Actions dedicado a IA.
 
 **No confundir:** las pruebas de Node usan un motor de visión simulado. No prueban que Qwen3.5 haya descargado, cargado los pesos y completado la inferencia en la GPU específica del usuario. Las conexiones externas y la GPU son condiciones que se verifican en el equipo al ejecutar Vortex. No se promete que el modelo pequeño produzca una explicación correcta de cada gráfico.
+
+## Prueba de lectura visual real de velas
+
+El flujo anterior solo demostraba que el PNG llegaba a los tensores del modelo. Ahora tests/ai-generation-real.mjs carga los pesos auténticos de Qwen3.5 0.8B en CPU y ejecuta model.generate sobre una captura PNG dibujada con un canvas real, con expectativa de que describa la dirección de las velas y el volumen. Este test **no usa mocks ni textos predefinidos**.
+
+La salida debe interpretarse como una prueba de lectura de una imagen sintética, no como evaluación de precisión financiera ni como garantía para otros gráficos. La prueba se ejecuta en GitHub Actions y solo se considera aprobada si termina y supera las verificaciones de contenido.
+
+La opción predeterminada migra una vez de la antigua Qwen3.5 2B a Qwen3.5 0.8B para reducir uso de memoria y bloqueos. Es posible volver manualmente a 2B/4B desde Ajustes de IA. Toda lectura en el navegador sigue sujeta a WebGPU y memoria disponible.
 
 ## Privacidad y limitaciones
 
