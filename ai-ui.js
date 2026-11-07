@@ -113,73 +113,101 @@
     }
     return /\b(vela|velas|zona|zonas|rectangulo|linea|lineas|flecha|nube|canal|volumen|poc|ruptura|rebote|soporte|resistencia|oscilador|senal|indicador)\b/i.test(n);
   }
+  // La inferencia visual es OPCIONAL y asíncrona. Nunca bloquea el chat ni
+  // el botón Analizar gráfico: el análisis del rango visible se entrega primero.
+  function launchVisual({message, core, ctx, screenshot, q, analyst, entry}) {
+    const vision = window.CCTFreeVision;
+    if (!vision || !screenshot || st.vision === 'off') return;
+    if (vision.isBusy && vision.isBusy()) {
+      const note = document.createElement('p');
+      note.className = 'ai-vision-progress';
+      note.textContent = 'Hay otra captura en proceso. Puedes seguir usando el chat o cancelar la lectura anterior.';
+      message.appendChild(note);
+      return;
+    }
+    const status = document.createElement('div');
+    status.className = 'ai-vision-progress';
+    status.setAttribute('role','status');
+    const label = document.createElement('span');
+    label.textContent = 'Preparando IA visual… Puedes seguir preguntando.';
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'small-button';
+    cancel.textContent = 'Cancelar visión';
+    cancel.setAttribute('aria-label','Cancelar análisis visual de la captura');
+    cancel.style.marginLeft = '8px';
+    status.appendChild(label); status.appendChild(cancel); message.appendChild(status);
+    cancel.addEventListener('click', () => {
+      cancel.disabled = true;
+      if (vision.cancel) vision.cancel();
+    });
+    const model = st.vision; // Modelo elegido cuando se capturó este gráfico.
+    vision.analyze({
+      ctx, screenshot, model, question:q,
+      onProgress:text => { if (status.isConnected) label.textContent = String(text || 'Analizando la captura…'); }
+    }).then(response => {
+      if (!message.isConnected) return;
+      const observation = String(response.text || '').trim();
+      if (uniqueVisualDetail(observation,ctx,analyst)) {
+        const final = core + '\n\n**Observación visual de ' + response.model + ':** ' + observation;
+        message.innerHTML = md(final);
+        if (entry) entry.text = final;
+      } else {
+        label.textContent = 'La visión no encontró detalles adicionales fiables. Se conserva el análisis técnico.';
+        cancel.remove();
+      }
+    }).catch(error => {
+      if (!message.isConnected) return;
+      const reason = String(error && error.message || error);
+      const suffix = /cancelado/i.test(reason)
+        ? 'Visión cancelada. La lectura del gráfico permanece disponible.'
+        : /demasiado|límite|responder|agotó/i.test(reason)
+        ? 'La IA visual tardó demasiado y fue detenida. El análisis técnico sigue disponible.'
+        : /WebGPU|memoria|GPU/i.test(reason)
+        ? 'Este equipo no pudo ejecutar el modelo de visión. El análisis por datos sí funciona.'
+        : 'No se pudo completar la lectura visual. El análisis técnico sigue disponible.';
+      label.textContent = suffix;
+      cancel.remove();
+    }).finally(() => { if (status.isConnected) cancel.remove(); });
+  }
   async function ask(q, shown) {
     q = String(q || '').trim();
     if (!q || st.busy) return;
     st.busy = true; $('#aiSend').disabled = true; push('user', shown || q);
-    const analyst = window.CCTChartAnalyst;
-    const isBrief = AI.intent(q) === 'brief';
-    const isChart = !isBrief && !!(analyst && analyst.isChartQuestion(q));
-    const ctx = window.CCT_getAIContext && window.CCT_getAIContext();
-    const news = !isChart && window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [];
-    const cal = isChart ? [] : await loadCalendar();
-    const market = isBrief && window.CCT_getMarketSnapshot ? await window.CCT_getMarketSnapshot() : [];
-    const extra = {news,calendar:cal||[],market,now:Date.now()};
-    if (ctx && (isChart || st.mode === 'claude' && (st.key || st.proxy)))
-      extra.screenshot = captureChart(ctx);
-    if (isChart) extra.chartSnapshotMode = true;
-    const typing = push('bot', '…', 'typing');
-    let out, showedCore = false;
     try {
-      if (!ctx && isBrief) out = AI.briefLocal(null, extra);
-      else if (!ctx) out = 'Todavía no hay velas cargadas. Abre **Gráfico** y vuelve a intentarlo.';
-      else if (isChart) {
-        // El análisis contrastable siempre se calcula del MISMO tramo visible,
-        // sin consultar RSI/MACD/Bollinger a menos que se hayan activado.
-        out = analyst.answer(q, ctx);
-        // Mostrar ya el resultado calculado, sin bloquear la lectura mientras
-        // el modelo visual descarga sus pesos o procesa la captura.
-        typing.classList.remove('typing'); typing.innerHTML = md(out); showedCore = true;
-        if (st.vision !== 'off' && window.CCTFreeVision && extra.screenshot) {
-          const progress = document.createElement('p');
-          progress.className = 'ai-vision-progress';
-          progress.textContent = 'Comprobando detalles visuales…';
-          typing.appendChild(progress);
-          try {
-            const response = await window.CCTFreeVision.analyze({
-              ctx,screenshot:extra.screenshot,model:st.vision,question:q,
-              onProgress: message => {
-                if (typing.isConnected) progress.textContent = String(message || 'Analizando el gráfico…');
-              }
-            });
-            const observation = String(response.text || '').trim();
-            // La visión es una observación auxiliar, no puede sustituir datos
-            // ni incluir precios / niveles inventados.
-            if (uniqueVisualDetail(observation, ctx, analyst))
-              out += '\n\n**Detalle visual orientativo (' + response.model + '):** ' + observation;
-          } catch (e) {
-            // Fallo de GPU/modelo/idioma no borra el análisis del gráfico.
-            out += '\n\n*La IA visual no pudo aportar detalles fiables; el análisis anterior utiliza los datos del gráfico.*';
-          }
-        }
-      }
+      const analyst = window.CCTChartAnalyst;
+      const isBrief = AI.intent(q) === 'brief';
+      const isChart = !isBrief && !!(analyst && analyst.isChartQuestion(q));
+      const ctx = window.CCT_getAIContext && window.CCT_getAIContext();
+      const news = !isChart && window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [];
+      const cal = isChart ? [] : await loadCalendar();
+      const market = isBrief && window.CCT_getMarketSnapshot ? await window.CCT_getMarketSnapshot() : [];
+      const extra = {news,calendar:cal||[],market,now:Date.now()};
+      if (ctx && (isChart || (st.mode === 'claude' && (st.key || st.proxy))))
+        extra.screenshot = captureChart(ctx);
+      if (isChart) extra.chartSnapshotMode = true;
+      let out;
+      if (!ctx && isBrief) out = AI.briefLocal(null,extra);
+      else if (!ctx) out = 'Abre primero **Gráfico** y espera a que carguen las velas.';
+      else if (isChart) out = analyst.answer(q,ctx);
       else if (st.mode === 'claude' && (st.key || st.proxy) && AI.intent(q) !== 'off') {
-        try {
-          out = await AI.askClaude({key:st.key,model:st.model,proxy:st.proxy},ctx,st.hist,q,extra);
-        } catch (e) {
-          out = 'No se pudo consultar el modelo remoto. Respuesta local:\n\n' + AI.answerLocal(q,ctx,extra);
-        }
+        try { out = await AI.askClaude({key:st.key,model:st.model,proxy:st.proxy},ctx,st.hist,q,extra); }
+        catch (e) { out = 'No se pudo consultar el modelo remoto.\n\n'+AI.answerLocal(q,ctx,extra); }
       } else out = AI.answerLocal(q,ctx,extra);
-    } catch (e) { out = 'No se pudo completar el análisis: ' + (e.message || e); }
-    if (mostlyEnglish(out)) out = ctx
-      ? (isChart ? analyst.answer(q,ctx) : AI.answerLocal(q,ctx,extra))
-      : 'No pude obtener una respuesta en español. Vuelve a intentarlo.';
-    if (showedCore) typing.innerHTML = md(out);
-    else { typing.remove(); push('bot', out); }
-    st.hist.push({role:'user',text:q},{role:'assistant',text:out});
-    if(st.hist.length>16)st.hist.splice(0,2);
-    st.busy = false; $('#aiSend').disabled = false; badge();
-    $('#aiInput').focus({preventScroll:true});
+      if (mostlyEnglish(out)) out = ctx
+        ? isChart ? analyst.answer(q,ctx) : AI.answerLocal(q,ctx,extra)
+        : 'No pude obtener una respuesta en español.';
+      const message = push('bot',out);
+      const entry = {role:'assistant',text:out};
+      st.hist.push({role:'user',text:q},entry);
+      if (st.hist.length > 16) st.hist.splice(0,2);
+      // Al llegar aquí ya se mostró la respuesta principal, sin esperar la GPU.
+      if (isChart && ctx) launchVisual({message,core:out,ctx,screenshot:extra.screenshot,q,analyst,entry});
+    } catch(e) {
+      push('bot','No pude completar esta solicitud: '+String(e && e.message || e).slice(0,160));
+    } finally {
+      st.busy = false; $('#aiSend').disabled = false; badge();
+      $('#aiInput').focus({preventScroll:true});
+    }
   }
   function init() {
     root = document.getElementById('aiRoot'); if (!root) return; shell();
