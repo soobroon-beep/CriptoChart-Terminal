@@ -48,32 +48,51 @@
     d.innerHTML = role === 'user' ? `<p>${esc(text)}</p>` : md(text); log.appendChild(d); log.scrollTo({top: log.scrollHeight, behavior: 'smooth'}); return d;
   }
   const BRIEF_Q = 'Brief del día: resume el mercado cripto de hoy tomando en cuenta el segmento completo, las noticias, el calendario económico y mi gráfico, y dime hacia dónde es más probable que vaya el mercado, con tu propio análisis.';
+  // La app dibuja velas, indicadores, paneles y dibujos manuales en priceCanvas.
+  // Se copia su última imagen real (aunque la vista Gráfico esté oculta al abrir IA).
+  function captureChart(ctx) {
+    try {
+      const canvas = document.getElementById('priceCanvas');
+      if (!ctx || !canvas || canvas.width < 300 || canvas.height < 200) return null;
+      const scale = Math.min(1, 1280 / canvas.width, 900 / canvas.height);
+      const w = Math.max(1, Math.round(canvas.width * scale));
+      const h = Math.max(1, Math.round(canvas.height * scale));
+      const shot = document.createElement('canvas');
+      shot.width = w; shot.height = h + 45;
+      const g = shot.getContext('2d');
+      if (!g) return null;
+      g.fillStyle = '#090e19'; g.fillRect(0, 0, shot.width, shot.height);
+      g.fillStyle = '#f0f3ff'; g.font = 'bold 18px Arial, sans-serif';
+      g.fillText(String(ctx.symbol || 'Gráfico') + ' · ' + String(ctx.interval || ''), 14, 29, w - 28);
+      g.drawImage(canvas, 0, 45, w, h);
+      const png = shot.toDataURL('image/png');
+      return /^data:image\/png;base64,/.test(png) && png.length < 3000000 ? png : null;
+    } catch { return null; }
+  }
   async function ask(q, shown) {
     q = String(q || '').trim(); if (!q || st.busy) return; st.busy = true; $('#aiSend').disabled = true; push('user', shown || q);
-    const isBrief = AI.intent(q) === 'brief';
+    const isBrief = AI.intent(q) === 'brief', isVisual = !!(AI.isVisualChartRequest && AI.isVisualChartRequest(q));
     const ctx = window.CCT_getAIContext && window.CCT_getAIContext(), news = window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [], cal = await loadCalendar(), market = isBrief && window.CCT_getMarketSnapshot ? await window.CCT_getMarketSnapshot() : [], extra = {news, calendar: cal || [], market, now: Date.now()};
-    // Captura auténtica del canvas: solo se envía en modo remoto si se pudo obtener.
-    if (ctx && st.mode === 'claude' && (st.key || st.proxy)) {
-      try {
-        const canvas = document.getElementById('priceCanvas');
-        if (canvas && canvas.width >= 300 && canvas.height >= 200) {
-          const png = canvas.toDataURL('image/png');
-          if (/^data:image\/png;base64,/.test(png) && png.length < 3000000) extra.screenshot = png;
-        }
-      } catch {} // Captura inaccesible: nunca fingir que se vio.
+    // La lectura visual usa siempre una captura real del gráfico; el modo Local no interpreta píxeles.
+    if (ctx && isVisual) {
+      extra.chartSnapshotMode = true;
+      extra.screenshot = captureChart(ctx);
+    } else if (ctx && st.mode === 'claude' && (st.key || st.proxy)) {
+      extra.screenshot = captureChart(ctx);
     }
     const typing = push('bot', '…', 'typing'); let out, useClaude = st.mode === 'claude' && (st.key || st.proxy) && ctx;
     try {
       if (!ctx && isBrief) out = AI.briefLocal(null, extra);
       else if (!ctx) out = 'Aún no hay un gráfico con velas cargadas. Abre la pestaña **Gráfico**, espera a que cargue y pregúntame de nuevo.';
-      else if (useClaude && AI.intent(q) !== 'off') { try { out = await AI.askClaude({key: st.key, model: st.model, proxy: st.proxy}, ctx, st.hist, q, extra); } catch (e) { out = 'Atención: ' + (e.message || 'No se pudo consultar a Claude') + '\n\nTe respondo con el análisis local:\n\n' + AI.answerLocal(q, ctx, extra); } }
-      else out = AI.answerLocal(q, ctx, extra);
+      else if (useClaude && AI.intent(q) !== 'off') { try { out = await AI.askClaude({key: st.key, model: st.model, proxy: st.proxy}, ctx, st.hist, q, extra); } catch (e) { out = isVisual ? 'No pude completar la lectura visual: ' + (e.message || 'No se pudo consultar a Claude') + '\n\n' + AI.visualSummaryLocal(ctx) : 'Atención: ' + (e.message || 'No se pudo consultar a Claude') + '\n\nTe respondo con el análisis local:\n\n' + AI.answerLocal(q, ctx, extra); } }
+      else out = isVisual ? AI.visualSummaryLocal(ctx) : AI.answerLocal(q, ctx, extra);
     } catch (e) { out = 'Ocurrió un error al analizar: ' + (e.message || e); }
     typing.remove(); push('bot', out); st.hist.push({role: 'user', text: q}, {role: 'assistant', text: out}); if (st.hist.length > 16) st.hist.splice(0, 2);
     st.busy = false; $('#aiSend').disabled = false; badge(); $('#aiInput').focus({preventScroll: true});
   }
   function init() {
     root = document.getElementById('aiRoot'); if (!root) return; shell();
+    if (window.CCTAIUI) window.CCTAIUI.analyzeVisibleChart = () => ask('Analiza el gráfico', 'Analizar gráfico con IA');
     push('bot', 'Hola. Soy tu **analista de gráficos cripto**. Leo tu gráfico abierto con los indicadores que tengas activados, las noticias y el calendario económico.\n\nToca una sugerencia o escríbeme tu pregunta.');
     root.addEventListener('click', e => {
       if (e.target.closest('#aiBrief')) { ask(BRIEF_Q, 'Brief del día'); return; }
