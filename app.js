@@ -29,13 +29,18 @@ const defaults = {
 };
 function sanAlert(a) {
   if (!a || typeof a.id !== 'string' || !/^[A-Z0-9]{3,20}$/.test(a.symbol)) return null;
-  const base0 = {id: a.id, symbol: a.symbol, on: a.on !== false, note: String(a.note || '').slice(0, 80), created: +a.created || 0, firedAt: +a.firedAt || 0};
+  const base0 = {id: a.id, symbol: a.symbol, on: a.on !== false, note: String(a.note || '').slice(0, 140), created: +a.created || 0, firedAt: +a.firedAt || 0};
+  if (['app', 'discord', 'both'].includes(a.notify)) base0.notify = a.notify;
   if (a.kind === 'ind') {
     if (!(a.interval in IV_MS) || !['pine', 'std', 'nova'].includes(a.src) || !a.spec || typeof a.spec !== 'object' || JSON.stringify(a.spec).length > 400) return null;
     return Object.assign(base0, {kind: 'ind', interval: a.interval, src: a.src, sid: typeof a.sid === 'string' ? a.sid.slice(0, 40) : '', spec: JSON.parse(JSON.stringify(a.spec)), label: String(a.label || '').slice(0, 120), repeat: a.repeat === 'every' ? 'every' : 'once', lastBar: +a.lastBar || 0, firedInfo: String(a.firedInfo || '').slice(0, 200)});
   }
   if (!Number.isFinite(a.price) || !(a.price > 0) || (a.dir !== 'up' && a.dir !== 'down')) return null;
-  return Object.assign(base0, {price: a.price, dir: a.dir, firedPrice: Number.isFinite(a.firedPrice) ? a.firedPrice : null});
+  const pr = Object.assign(base0, {price: a.price, dir: a.dir, firedPrice: Number.isFinite(a.firedPrice) ? a.firedPrice : null});
+  if (['up', 'down'].includes(a.cond)) pr.cond = a.cond; // cruce ascendente / descendente (sin cond = cruce normal)
+  if (a.repeat === 'every') pr.repeat = 'every'; if (a.wait === true) pr.wait = true;
+  if (Number.isFinite(+a.exp) && +a.exp > 0) pr.exp = Math.round(+a.exp); if (a.expired === true) pr.expired = true;
+  return pr;
 }
 function sanAcct(a) { // saldo de la cuenta para la barra de progreso (USD)
   const q = a && typeof a === 'object' && !Array.isArray(a) ? a : {}, n = v => Number.isFinite(+v) && +v >= 0 && +v < 1e12 ? Math.round(+v * 100) / 100 : 0;
@@ -54,14 +59,17 @@ function sanDiscord(a) { // Discord: webhook del canal #vortex, invitación al s
 }
 const CTYPES = [['candles', 'Velas', 'c_candles'], ['hollow', 'Velas huecas', 'c_hollow'], ['ha', 'Heikin Ashi', 'c_ha'], ['bars', 'Barras OHLC', 'c_bars'], ['hlc', 'Barras HLC', 'c_hlc'], ['line', 'Línea', 'c_line'], ['area', 'Área', 'c_area'], ['step', 'Línea escalonada', 'c_step']];
 const SOURCES = {binance: 'Binance Spot', binancef: 'Binance Futuros', bybit: 'Bybit Spot', okx: 'OKX Spot', coinbase: 'Coinbase', bingx: 'BingX', dom: 'Dominancia USDT/BTC'}; // exchanges (el exchange va en la clave del activo: BTCUSDT@bybit)
-const CHART_DEF = {bg: '#0d1019', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1};
+const CHART_DEF = {bg: '#0d1019', grid: '', gridH: true, gridV: true, up: '#089981', down: '#f23645', upBorder: '', downBorder: '', upWick: '', downWick: '', hollow: false, cross: '', crossA: 55, crossS: 'Guiones', crossW: 1, alertCol: '', alertA: 28, alertS: 'Puntos', alertW: 1};
 function sanChartStyle(c) {
   const o = {}; if (!c || typeof c !== 'object' || Array.isArray(c)) return o;
-  for (const k of ['bg', 'grid', 'up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick', 'cross']) if (typeof c[k] === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(c[k])) o[k] = c[k];
+  for (const k of ['bg', 'grid', 'up', 'down', 'upBorder', 'downBorder', 'upWick', 'downWick', 'cross', 'alertCol']) if (typeof c[k] === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(c[k])) o[k] = c[k];
   for (const k of ['gridH', 'gridV', 'hollow']) if (typeof c[k] === 'boolean') o[k] = c[k];
   if (Number.isFinite(+c.crossA) && c.crossA !== '') o.crossA = Math.max(5, Math.min(100, Math.round(+c.crossA)));
   if (Number.isFinite(+c.crossW) && c.crossW !== '') o.crossW = Math.max(1, Math.min(4, Math.round(+c.crossW)));
   if (['Guiones', 'Sólida', 'Puntos'].includes(c.crossS)) o.crossS = c.crossS;
+  if (Number.isFinite(+c.alertA) && c.alertA !== '') o.alertA = Math.max(5, Math.min(100, Math.round(+c.alertA)));
+  if (Number.isFinite(+c.alertW) && c.alertW !== '') o.alertW = Math.max(1, Math.min(4, Math.round(+c.alertW)));
+  if (['Guiones', 'Sólida', 'Puntos'].includes(c.alertS)) o.alertS = c.alertS;
   return o;
 }
 const STD_SCHEMA = {
@@ -356,7 +364,7 @@ function openRowMenu(k, x, y) {
     if (b.dataset.rm === 'sec') { const sub = m.querySelector('.rm-sub'); sub.hidden = !sub.hidden; b.setAttribute('aria-expanded', String(!sub.hidden)); const r = m.getBoundingClientRect(); if (r.bottom > innerHeight - 8) m.style.top = Math.max(8, innerHeight - 8 - r.height) + 'px'; return; }
     close();
     if (b.dataset.rm === 'open') selectSymbol(k);
-    else if (b.dataset.rm === 'alert') { renderAlerts(); switchView('alertsView'); setTimeout(() => { const sel = $('#alSym'); if (sel) sel.value = k; const pr = $('#alPrice'); if (pr) pr.focus(); }, 50); }
+    else if (b.dataset.rm === 'alert') { openAlertDialog({symbol: k}); }
     else if (b.dataset.rm === 'del') { state.symbols = state.symbols.filter(q => q !== k); delete state.symGroup[k]; delete (state.symColor || {})[k]; if (!state.symbols.length) editMode = false; save(); renderWatch(); }
   });
   setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', onKey, true); });
@@ -589,24 +597,35 @@ $('#popRows').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key
 
 /* ───────── Alertas de precio ───────── */
 const alertPrice = {}; // último precio conocido por símbolo (para alertas fuera del seguimiento)
+let selAlertId = null, alDrag = null, alConfirm = null; // alerta seleccionada en el gráfico, arrastre en curso y confirmación pendiente
+const alDiscordReady = () => { try { return !!(window.CCT_discordStore && CCT_discordStore.get().url); } catch { return false; } };
 const TONE_SEQ = {beep: [[880, 0, .6, 'sine']], chime: [[988, 0, .35, 'sine'], [1319, .16, .55, 'sine']], pulse: [[440, 0, .14, 'triangle'], [440, .22, .14, 'triangle'], [440, .44, .14, 'triangle']], alarm: [[780, 0, .18, 'square'], [620, .2, .18, 'square'], [780, .4, .18, 'square']]};
 function alertBeep(force, tone) { // el sonido elegido en Configuración; force = prueba
   if (!force && PR.sound === 'off') return;
   try { const A = window.AudioContext || window.webkitAudioContext, c = new A(); for (const [f, t0, d, ty] of TONE_SEQ[tone || PR.tone] || TONE_SEQ.beep) { const o = c.createOscillator(), g = c.createGain(); o.type = ty; o.frequency.value = f; o.connect(g); g.connect(c.destination); const t = c.currentTime + t0; g.gain.setValueAtTime(ty === 'square' ? .08 : .2, t); g.gain.exponentialRampToValueAtTime(.001, t + d); o.start(t); o.stop(t + d + .02); } setTimeout(() => { try { c.close(); } catch {} }, 1500); } catch {}
 }
 const dcSend = (k, o) => { if (window.CCTDiscord && PR.n.discord) CCTDiscord.alert(k, o); }; // Discord solo si se quiere recibir ahí
+const alNotify = (a, kind) => { const n = a.notify || 'both'; return {app: n !== 'discord', dc: n !== 'app' && (!!a.notify || PR.n.discord)}; }; // dónde avisar: app, Discord o ambos (alertas viejas: ambos si Discord está activo en Ajustes)
 function fireAlert(a, price) {
-  a.on = false; a.firedAt = Date.now(); a.firedPrice = price; if (!PR.n.price) return; // avisos de precio apagados en Configuración
-  const msg = `${base(a.symbol)} ${a.dir === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`;
-  toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
-  try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {}
-  dcSend('price', {symbol: base(a.symbol), dir: a.dir, level: a.price, price, note: a.note, text: msg});
+  const msg = `${base(a.symbol)} ${a.dir === 'up' ? 'subió a' : 'bajó a'} ${fmt(a.price)} (ahora ${fmt(price)})${a.note ? ' · ' + a.note : ''}`, dir0 = a.dir;
+  a.firedAt = Date.now(); a.firedPrice = price;
+  if (a.repeat === 'every') { if (a.cond) a.wait = true; else a.dir = a.dir === 'up' ? 'down' : 'up'; } else a.on = false; // «todo el tiempo»: el cruce normal vigila el sentido contrario; ascendente/descendente espera a que el precio vuelva
+  if (!PR.n.price) return; // avisos de precio apagados en Configuración
+  const n = alNotify(a);
+  if (n.app) { toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {} }
+  if (n.dc && window.CCTDiscord) CCTDiscord.alert('price', {symbol: base(a.symbol), dir: dir0, level: a.price, price, note: a.note, text: msg});
 }
 function checkAlerts(sym, price) {
   if (!Number.isFinite(price)) return;
   alertPrice[sym] = price; let hit = false;
-  for (const a of state.alerts) if (a.kind !== 'ind' && a.on && a.symbol === sym && (a.dir === 'up' ? price >= a.price : price <= a.price)) { fireAlert(a, price); hit = true; }
-  if (hit) { save(); renderAlerts(); }
+  for (const a of state.alerts) {
+    if (a.kind === 'ind' || !a.on || a.symbol !== sym) continue;
+    if (a.exp && Date.now() > a.exp) { a.on = false; a.expired = true; hit = true; continue; }
+    const past = a.dir === 'up' ? price >= a.price : price <= a.price;
+    if (a.wait) { if (!past) { a.wait = false; hit = true; } continue; }
+    if (past) { fireAlert(a, price); hit = true; }
+  }
+  if (hit) { save(); renderAlerts(); scheduleRender(); }
 }
 async function checkAlertsPoll() {
   const allS = [...new Set(state.alerts.filter(a => a.kind !== 'ind' && a.on).map(a => a.symbol))], syms = allS.filter(k => srcOf(k) === 'binance'); for (const k of allS) if (srcOf(k) !== 'binance') { const p = Number(tickers[k]?.lastPrice); if (Number.isFinite(p)) checkAlerts(k, p); } if (!syms.length) return;
@@ -623,28 +642,70 @@ function renderAlerts() {
   const row = a => { if (a.kind === 'ind') { const missing = a.src === 'pine' && !scripts.some(s => s.id === a.sid);
       return `<div class="setting-row alert-row ${a.on ? '' : 'dim'}"><div><b>${esc(a.label)}</b><small>${esc(base(a.symbol))} · ${a.interval} · ${a.repeat === 'every' ? 'cada vez' : 'una vez'}${missing ? ' · <span class="pine-err">el script ya no existe</span>' : ''}${a.firedAt ? ` · última: ${new Date(a.firedAt).toLocaleString()}${a.firedInfo ? ' (' + esc(a.firedInfo) + ')' : ''}` : ''}${a.note ? ' · ' + esc(a.note) : ''}</small></div><div class="alert-btns">${a.on ? '' : `<button class="small-button" data-al-re="${a.id}">Reactivar</button>`}<button class="small-button" data-al-del="${a.id}" aria-label="Eliminar">✕</button></div></div>`; }
     const p = curPrice(a.symbol), dist = Number.isFinite(p) ? ((a.price - p) / p * 100) : NaN;
-    return `<div class="setting-row alert-row ${a.on ? '' : 'dim'}"><div><b>${esc(base(a.symbol))} ${a.dir === 'up' ? '≥' : '≤'} ${fmt(a.price)}</b><small>${a.on ? `Ahora ${fmt(p)}${Number.isFinite(dist) ? ` · a ${Math.abs(dist).toFixed(2)}%` : ''}` : `Se disparó ${new Date(a.firedAt).toLocaleString()} a ${fmt(a.firedPrice)}`}${a.note ? ' · ' + esc(a.note) : ''}</small></div><div class="alert-btns">${a.on ? '' : `<button class="small-button" data-al-re="${a.id}">Reactivar</button>`}<button class="small-button" data-al-del="${a.id}" aria-label="Eliminar">✕</button></div></div>`; };
+    return `<div class="setting-row alert-row ${a.on ? '' : 'dim'}"><div><b>${esc(base(a.symbol))} ${a.dir === 'up' ? '≥' : '≤'} ${fmt(a.price)}</b><small>${a.on ? `Ahora ${fmt(p)}${Number.isFinite(dist) ? ` · a ${Math.abs(dist).toFixed(2)}%` : ''}` : a.expired ? 'Venció ' + new Date(a.exp).toLocaleString() : `Se disparó ${new Date(a.firedAt).toLocaleString()} a ${fmt(a.firedPrice)}`}${a.on && a.repeat === 'every' && a.firedAt ? ` · última: ${new Date(a.firedAt).toLocaleString()}` : ''} · ${alCondTxt(a)}${a.repeat === 'every' ? ' · todo el tiempo' : ''}${a.exp && a.on ? ' · vence ' + new Date(a.exp).toLocaleDateString() : ''}${alNotTxt(a) ? ' · ' + alNotTxt(a) : ''}${a.note ? ' · ' + esc(a.note) : ''}</small></div><div class="alert-btns"><button class="small-button" data-al-ed="${a.id}" aria-label="Editar">Editar</button>${a.on ? '' : `<button class="small-button" data-al-re="${a.id}">Reactivar</button>`}<button class="small-button" data-al-del="${a.id}" aria-label="Eliminar">✕</button></div></div>`; };
   el.innerHTML = (act.length ? `<div class="section-label">ACTIVAS (${act.length})</div>` + act.map(row).join('') : `<div class="soon"><div class="soon-ic">${I('bell', 28)}</div><b>Sin alertas activas</b><small>Crea una abajo y te avisaremos cuando el precio llegue.</small></div>`) + (done.length ? `<div class="section-label">DISPARADAS</div>` + done.map(row).join('') : '');
   const sel = $('#alSym'); if (sel && !sel.dataset.ready) { sel.dataset.ready = 1; sel.innerHTML = state.symbols.map(s => `<option value="${s}">${esc(pairLbl(s))}</option>`).join(''); }
   if (sel) { const s = state.symbols; if ([...sel.options].map(o => o.value).join() !== s.join()) { const v = sel.value; sel.innerHTML = s.map(x => `<option value="${x}">${esc(pairLbl(x))}</option>`).join(''); if (s.includes(v)) sel.value = v; } }
 }
 $('#alInd').onclick = openIndAlertDialog;
-$('#alAdd').onclick = async () => {
-  const sym = $('#alSym').value, price = parseFloat(String($('#alPrice').value).replace(',', '.')), note = $('#alNote').value.trim();
-  if (!sym || !(price > 0)) { toast('Escribe un precio válido'); return; }
-  let p = curPrice(sym);
-  if (!Number.isFinite(p)) { try { p = +(await getJSON(`${API}/ticker/price?symbol=${sym}`)).price; } catch {} }
-  if (!Number.isFinite(p)) { toast('No pude leer el precio actual; revisa tu conexión'); return; }
-  if (price === p) { toast('El precio ya está en ese nivel'); return; }
-  if (state.alerts.length >= 50) { toast('Máximo 50 alertas'); return; }
-  state.alerts.unshift({id: 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), symbol: sym, price, dir: price > p ? 'up' : 'down', on: true, note: note.slice(0, 80), created: Date.now(), firedAt: 0, firedPrice: null});
-  alertPrice[sym] = p; $('#alPrice').value = ''; $('#alNote').value = ''; save(); renderAlerts(); toast('Alerta creada');
-  try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
-};
+/* Diálogo «Crear alerta» (como en TradingView): activo, condición (precio o indicador), tipo de cruce, valor, activación, vencimiento, mensaje y dónde avisar */
+const AL_EXP = [['0', 'Sin vencimiento'], ['1', '24 horas'], ['7', '7 días'], ['30', '30 días'], ['c', 'Elegir fecha…']];
+const alCondTxt = a => a.cond === 'up' ? 'Cruce ascendente' : a.cond === 'down' ? 'Cruce descendente' : 'Cruce';
+const alNotTxt = a => a.notify === 'discord' ? 'Discord' : a.notify === 'both' ? 'App y Discord' : a.notify === 'app' ? 'App' : '';
+async function openAlertDialog(o) {
+  o = o || {}; const ed = o.edit || null, sym0 = ed ? ed.symbol : (o.symbol || state.symbol);
+  if (!ed && state.alerts.length >= 50) { toast('Máximo 50 alertas'); return; }
+  const el = document.createElement('div'); el.className = 'cfg-overlay';
+  const syms = state.symbols.includes(sym0) ? state.symbols : [sym0].concat(state.symbols), loc = ms => { const d = new Date(ms - new Date().getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+  const hasExp = ed && ed.exp, v = {cond: ed ? (ed.cond || 'cross') : 'cross', price: ed ? ed.price : (o.price || ''), rep: ed ? ed.repeat || 'once' : 'once', note: ed ? ed.note : '', not: ed ? (ed.notify || 'both') : 'app'};
+  el.innerHTML = `<div class="cfg-dlg al-dlg" role="dialog" aria-modal="true" aria-label="Crear alerta"><div class="cfg-head"><strong>${ed ? 'Editar alerta' : 'Crear alerta'} sobre</strong><select id="adSym" class="al-sym" ${ed ? 'disabled' : ''}>${syms.map(x => `<option value="${x}" ${x === sym0 ? 'selected' : ''}>${esc(pairLbl(x))}</option>`).join('')}</select><span class="cfg-sp"></span><button class="cfg-x" aria-label="Cerrar">✕</button></div>
+    <div class="cfg-body"><div class="cfg-sec">
+      <div class="al-r"><span>Condición</span><div class="al-c"><select id="adKind" ${ed ? 'disabled' : ''}><option value="price">Precio</option><option value="ind">Indicador…</option></select>
+        <select id="adCond"><option value="cross">Cruce</option><option value="up">Cruce ascendente</option><option value="down">Cruce descendente</option></select>
+        <input id="adPrice" inputmode="decimal" placeholder="Valor" aria-label="Valor"><small id="adNow" class="al-hint"></small></div></div>
+      <div class="al-r"><span>Activación</span><select id="adRep"><option value="once">Solo una vez</option><option value="every">Todo el tiempo</option></select></div>
+      <div class="al-r"><span>Vencimiento</span><div class="al-c"><select id="adExp">${AL_EXP.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select><input id="adDate" type="datetime-local" hidden></div></div>
+      <div class="al-r"><span>Mensaje</span><input id="adNote" maxlength="140" placeholder="Opcional · por defecto: el aviso del cruce"></div>
+      <div class="al-r"><span>Notificaciones</span><select id="adNot"><option value="app">Solo en la app</option><option value="discord">Solo en Discord</option><option value="both">App y Discord</option></select></div>
+      <p class="cfg-note">Se revisa mientras la app está abierta. «Todo el tiempo» vuelve a avisar cada vez que el precio cruce otra vez el nivel. No ejecuta órdenes.</p>
+    </div></div>
+    <div class="cfg-foot"><span class="cfg-sp"></span><button class="cfg-btn" data-act="cancel">Cancelar</button><button class="cfg-btn cfg-ok" data-act="ok">${ed ? 'Guardar' : 'Crear'}</button></div></div>`;
+  document.body.appendChild(el);
+  const $e = q => el.querySelector(q), close = () => { el.remove(); document.removeEventListener('keydown', onKey, true); }, onKey = ev => { if (ev.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey, true);
+  $e('#adCond').value = v.cond; $e('#adPrice').value = v.price === '' ? '' : String(v.price); $e('#adRep').value = v.rep; $e('#adNote').value = v.note; $e('#adNot').value = v.not;
+  if (hasExp) { $e('#adExp').value = 'c'; $e('#adDate').value = loc(ed.exp); $e('#adDate').hidden = false; }
+  $e('#adExp').onchange = () => { const c = $e('#adExp').value === 'c'; $e('#adDate').hidden = !c; if (c && !$e('#adDate').value) $e('#adDate').value = loc(Date.now() + 30 * 864e5); };
+  const showNow = () => { const p = curPrice($e('#adSym').value); $e('#adNow').textContent = Number.isFinite(p) ? 'Precio actual: ' + fmt(p) : ''; };
+  $e('#adSym').onchange = showNow; showNow(); if (!Number.isFinite(curPrice(sym0))) getJSON(`${API}/ticker/price?symbol=${sym0}`).then(r => { if (+r.price > 0) { alertPrice[sym0] = +r.price; showNow(); } }).catch(() => {});
+  $e('#adKind').onchange = () => { if ($e('#adKind').value === 'ind') { close(); openIndAlertDialog(); } };
+  setTimeout(() => { const f = $e('#adPrice'); f.focus(); f.select(); }, 60);
+  el.addEventListener('click', async e => {
+    if (e.target === el || e.target.closest('.cfg-x') || e.target.closest('[data-act=cancel]')) return close();
+    if (!e.target.closest('[data-act=ok]')) return;
+    const sym = $e('#adSym').value, price = parseFloat(String($e('#adPrice').value).replace(',', '.')), cond = $e('#adCond').value, rep = $e('#adRep').value, nt = $e('#adNot').value, note = $e('#adNote').value.trim().slice(0, 140);
+    if (!sym || !(price > 0)) { toast('Escribe un valor válido'); return; }
+    let exp = 0; const xk = $e('#adExp').value;
+    if (xk === 'c') { exp = Date.parse($e('#adDate').value); if (!(exp > Date.now())) { toast('El vencimiento debe ser una fecha futura'); return; } } else if (xk !== '0') exp = Date.now() + (+xk) * 864e5;
+    let p = curPrice(sym); if (!Number.isFinite(p)) { try { p = +(await getJSON(`${API}/ticker/price?symbol=${sym}`)).price; } catch {} }
+    if (!Number.isFinite(p)) { toast('No pude leer el precio actual; revisa tu conexión'); return; }
+    if (price === p) { toast('El precio ya está en ese nivel'); return; }
+    if (cond === 'up' && price < p) { toast(`Cruce ascendente: el valor debe estar por encima de ${fmt(p)}`); return; }
+    if (cond === 'down' && price > p) { toast(`Cruce descendente: el valor debe estar por debajo de ${fmt(p)}`); return; }
+    const dir = price > p ? 'up' : 'down', f = {price, dir, note, repeat: rep, notify: nt, exp: exp || 0}; if (cond === 'cross') delete f.cond; else f.cond = cond;
+    if (nt !== 'app' && !alDiscordReady()) toast('Aún no conectas Discord (barra derecha): el aviso llegará solo a la app');
+    if (ed) { const a = state.alerts.find(x => x.id === ed.id); if (!a) return close(); for (const k of ['cond', 'wait', 'expired']) delete a[k]; Object.assign(a, f, {on: true, firedAt: 0, firedPrice: null}); if (!f.cond) delete a.cond; if (rep !== 'every') delete a.repeat; }
+    else { const a = {id: 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), symbol: sym, on: true, created: Date.now(), firedAt: 0, firedPrice: null, ...f}; if (rep !== 'every') delete a.repeat; state.alerts.unshift(a); }
+    alertPrice[sym] = p; save(); renderAlerts(); scheduleRender(); close(); toast(ed ? 'Alerta actualizada' : 'Alerta creada');
+    try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
+  });
+}
+$('#alAdd').onclick = () => openAlertDialog({symbol: state.symbol});
 $('#alertsView').addEventListener('click', e => {
-  const d = e.target.closest('[data-al-del]'), r = e.target.closest('[data-al-re]');
+  const d = e.target.closest('[data-al-del]'), r = e.target.closest('[data-al-re]'), ed = e.target.closest('[data-al-ed]');
+  if (ed) { const a = state.alerts.find(x => x.id === ed.dataset.alEd); if (a && a.kind !== 'ind') openAlertDialog({edit: a}); else if (a) toast('Para cambiar una alerta con indicador, créala de nuevo'); return; }
   if (d) { state.alerts = state.alerts.filter(a => a.id !== d.dataset.alDel); save(); renderAlerts(); }
-  if (r) { const a = state.alerts.find(x => x.id === r.dataset.alRe), p = curPrice(a?.symbol); if (a && a.kind === 'ind') { a.on = true; a.firedAt = 0; a.firedInfo = ''; lastClosedBar(a.symbol, a.interval).then(t => { if (t != null) a.lastBar = t; save(); renderAlerts(); }); } else if (a) { a.dir = Number.isFinite(p) ? (a.price > p ? 'up' : 'down') : a.dir; a.on = true; a.firedAt = 0; a.firedPrice = null; save(); renderAlerts(); checkAlertsPoll(); } }
+  if (r) { const a = state.alerts.find(x => x.id === r.dataset.alRe), p = curPrice(a?.symbol); if (a && a.kind === 'ind') { a.on = true; a.firedAt = 0; a.firedInfo = ''; lastClosedBar(a.symbol, a.interval).then(t => { if (t != null) a.lastBar = t; save(); renderAlerts(); }); } else if (a) { if (!a.cond) a.dir = Number.isFinite(p) ? (a.price > p ? 'up' : 'down') : a.dir; a.on = true; a.firedAt = 0; a.firedPrice = null; a.wait = false; if (a.expired) { a.expired = false; a.exp = 0; } save(); renderAlerts(); checkAlertsPoll(); } }
 });
 
 /* ───────── Avisos de movimientos bruscos ─────────
@@ -758,9 +819,9 @@ function closedIdx(cs, lastClosedT) { for (let i = cs.length - 1; i >= 0; i--) i
 function fireInd(a, info) {
   a.firedAt = Date.now(); a.firedInfo = info; if (a.repeat === 'once') a.on = false; if (!PR.n.ind) return;
   const msg = `${base(a.symbol)} ${a.interval} · ${a.label}${info ? ' · ' + info : ''}${a.note ? ' · ' + a.note : ''}`;
-  toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
-  try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {}
-  dcSend('ind', {symbol: base(a.symbol), interval: a.interval, label: a.label, info, note: a.note, text: msg});
+  const n = alNotify(a);
+  if (n.app) { toast(msg); alertBeep(); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {} try { if (window.Notification && Notification.permission === 'granted') new Notification('VORTEX · Alerta', {body: msg}); } catch {} }
+  if (n.dc && window.CCTDiscord) CCTDiscord.alert('ind', {symbol: base(a.symbol), interval: a.interval, label: a.label, info, note: a.note, text: msg});
 }
 async function lastClosedBar(sym, itv) {
   const raw = await getJSON(`${API}/klines?symbol=${sym}&interval=${itv}&limit=2`), now = Date.now(), cl = raw.filter(d => d[6] < now);
@@ -821,7 +882,8 @@ function openIndAlertDialog() {
       <label class="al-f">Activo<select id="aiSym">${state.symbols.map(s => `<option value="${s}" ${s === state.symbol ? 'selected' : ''}>${esc(pairLbl(s))}</option>`).join('')}</select></label>
       <label class="al-f">Temporalidad<select id="aiTf">${INTERVALS.map(t => `<option ${t === state.interval ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <label class="al-f">Frecuencia<select id="aiRep"><option value="once">Solo una vez</option><option value="every">Cada vez que ocurra (al cerrar la vela)</option></select></label>
-      <label class="al-f">Nota (opcional)<input id="aiNote" maxlength="80"></label>
+      <label class="al-f">Notificaciones<select id="aiNot"><option value="app">Solo en la app</option><option value="discord">Solo en Discord</option><option value="both">App y Discord</option></select></label>
+      <label class="al-f">Mensaje (opcional)<input id="aiNote" maxlength="140"></label>
       <p class="cfg-note" id="aiHint">Se evalúa al cierre de cada vela, así evita falsas señales por repintado.</p>
     </div></div>
     <div class="cfg-foot"><span class="cfg-sp"></span><button class="cfg-btn" data-act="cancel">Cancelar</button><button class="cfg-btn cfg-ok" data-act="ok">Crear alerta</button></div></div>`;
@@ -871,11 +933,11 @@ function openIndAlertDialog() {
     }
     if (kind === 'pine') label = pineName(src.slice(5)) + ' · ' + label.replace(/^(alertcondition|alert\(\)|Señal\/forma): /, '').replace(/ — .*$/, '');
     if (kind === 'std') label = 'Indicador · ' + label;
-    const sym = $e('#aiSym').value, itv = $e('#aiTf').value;
+    const sym = $e('#aiSym').value, itv = $e('#aiTf').value; if ($e('#aiNot').value !== 'app' && !alDiscordReady()) toast('Aún no conectas Discord (barra derecha): el aviso llegará solo a la app');
     if (state.alerts.length >= 50) { toast('Máximo 50 alertas'); return; }
     let lc; try { lc = await lastClosedBar(sym, itv); } catch {}
     if (lc == null) { toast('No pude leer las velas; revisa tu conexión'); return; }
-    state.alerts.unshift({id: 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind: 'ind', src: kind, sid: kind === 'pine' ? src.slice(5) : '', spec, label, symbol: sym, interval: itv, repeat: $e('#aiRep').value, on: true, note: $e('#aiNote').value.trim().slice(0, 80), created: Date.now(), firedAt: 0, lastBar: lc, firedInfo: ''});
+    state.alerts.unshift({id: 'al' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind: 'ind', src: kind, sid: kind === 'pine' ? src.slice(5) : '', spec, label, symbol: sym, interval: itv, repeat: $e('#aiRep').value, notify: $e('#aiNot').value, on: true, note: $e('#aiNote').value.trim().slice(0, 140), created: Date.now(), firedAt: 0, lastBar: lc, firedInfo: ''});
     alGroups.delete(sym + '|' + itv); save(); renderAlerts(); close(); toast('Alerta con indicador creada');
     try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
   });
@@ -2514,8 +2576,9 @@ function openChartStyle() {
     P('upBorder', 'Alcista · borde', 'color', cs.upBorder || cs.up, 'VELAS'), P('downBorder', 'Bajista · borde', 'color', cs.downBorder || cs.down, 'VELAS'),
     P('upWick', 'Alcista · mecha', 'color', cs.upWick || cs.up, 'VELAS'), P('downWick', 'Bajista · mecha', 'color', cs.downWick || cs.down, 'VELAS'),
     P('hollow', 'Velas alcistas huecas', 'bool', false, 'VELAS'),
-    P('cross', 'Color del cursor (cruz)', 'color', document.body.classList.contains('light') ? '#0b1220' : '#edf3fc', 'CURSOR'), P('crossA', 'Opacidad del cursor (%)', 'int', 55, 'CURSOR', {min: 5, max: 100}), P('crossS', 'Estilo de línea', 'string', 'Guiones', 'CURSOR', {options: ['Guiones', 'Sólida', 'Puntos']}), P('crossW', 'Grosor (px)', 'int', 1, 'CURSOR', {min: 1, max: 4}), {key: 'reset', title: 'Restablecer todo a los valores por defecto', type: 'bool', def: false, value: false, group: 'RESTABLECER'}];
-  CCTSettings.open({title: 'Aspecto del gráfico', tabs: ['in'], note: 'Colores y cuadrícula del gráfico. Se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
+    P('cross', 'Color del cursor (cruz)', 'color', document.body.classList.contains('light') ? '#0b1220' : '#edf3fc', 'CURSOR'), P('crossA', 'Opacidad del cursor (%)', 'int', 55, 'CURSOR', {min: 5, max: 100}), P('crossS', 'Estilo de línea', 'string', 'Guiones', 'CURSOR', {options: ['Guiones', 'Sólida', 'Puntos']}), P('crossW', 'Grosor (px)', 'int', 1, 'CURSOR', {min: 1, max: 4}),
+    P('alertCol', 'Color de la línea', 'color', document.body.classList.contains('light') ? '#5b6678' : '#8a96a8', 'LÍNEA DE ALERTA'), P('alertA', 'Opacidad (%)', 'int', 28, 'LÍNEA DE ALERTA', {min: 5, max: 100}), P('alertS', 'Estilo de línea', 'string', 'Puntos', 'LÍNEA DE ALERTA', {options: ['Puntos', 'Guiones', 'Sólida']}), P('alertW', 'Grosor (px)', 'int', 1, 'LÍNEA DE ALERTA', {min: 1, max: 4}), {key: 'reset', title: 'Restablecer todo a los valores por defecto', type: 'bool', def: false, value: false, group: 'RESTABLECER'}];
+  CCTSettings.open({title: 'Aspecto del gráfico', tabs: ['in'], note: 'Colores, cuadrícula, cursor y línea de las alertas. Se guardan en este dispositivo y en tu cuenta de Google si iniciaste sesión.', inputs, values: Object.fromEntries(inputs.map(i => [i.key, i.value])), plots: [], hlines: [], objects: [], shapes: [], onApply: res => {
     const v = res.inputs, o = {};
     if (!v.reset) for (const i of inputs) { if (i.key === 'reset') continue; const x = v[i.key]; if (x === undefined) continue; const dflt = i.key === 'bg' ? bgDef : i.key === 'grid' ? lineDef : (i.key === 'upBorder' ? (v.up || CHART_DEF.up) : i.key === 'downBorder' ? (v.down || CHART_DEF.down) : i.key === 'upWick' ? (v.up || CHART_DEF.up) : i.key === 'downWick' ? (v.down || CHART_DEF.down) : i.def); if (x !== dflt) o[i.key] = x; }
     state.chartStyle = sanChartStyle(o); save(); scheduleRender(); toast(v.reset ? 'Aspecto restablecido' : 'Aspecto aplicado');
@@ -2766,9 +2829,18 @@ function renderCore() {
   g.fillStyle = priceMan ? '#548fff' : text; g.globalAlpha = priceMan ? .95 : .55;
   roundRect(w - 7, plotTop + plotH / 2 - 22, 4, 44, 2); g.fill();
   g.fillStyle = text; g.globalAlpha = .55; roundRect(left + plotW / 2 - 22, h - 6, 44, 4, 2); g.fill(); g.globalAlpha = 1;
-  // alertas de precio activas: línea punteada casi invisible en su nivel
-  { g.save(); g.strokeStyle = text; g.globalAlpha = .28; g.lineWidth = 1; g.setLineDash([2, 5]);
-    for (const a of state.alerts) { if (a.kind === 'ind' || !a.on || a.symbol !== state.symbol) continue; const ay = Math.round(Y(a.price)) + .5; if (!(ay > plotTop && ay < plotTop + plotH)) continue; g.beginPath(); g.moveTo(left, ay); g.lineTo(w - right, ay); g.stroke(); }
+  // alertas de precio activas: línea casi invisible en su nivel (aspecto en «Aspecto del gráfico»); seleccionada se resalta y se puede arrastrar
+  { const CS = cstyle(), acol = CS.alertCol || text, dsh = {Puntos: [2, 5], Guiones: [7, 5], 'Sólida': []}[CS.alertS] || [2, 5], A = CS.alertA / 100, lastP = candles[n - 1].c;
+    g.save();
+    const ln = (p, al, wd, dash) => { const ay = Math.round(Y(p)) + .5; if (!(ay > plotTop && ay < plotTop + plotH)) return null; g.globalAlpha = al; g.strokeStyle = acol; g.lineWidth = wd; g.setLineDash(dash); g.beginPath(); g.moveTo(left, ay); g.lineTo(w - right, ay); g.stroke(); return ay; };
+    const tag = (ay, txt, solid) => { g.setLineDash([]); g.globalAlpha = solid ? .95 : .8; g.fillStyle = acol; g.fillRect(w - right + 2, ay - 9, right - 3, 18); g.globalAlpha = 1; g.fillStyle = bg || '#0d1019'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText(txt, w - right + 5, ay + 3.5); };
+    for (const a of state.alerts) {
+      if (a.kind === 'ind' || !a.on || a.symbol !== state.symbol) continue;
+      const sel = a.id === selAlertId, live = alDrag && alDrag.id === a.id;
+      const ay = ln(a.price, live ? Math.min(A, .18) : sel ? Math.min(1, A + .45) : A, CS.alertW + (sel ? 1 : 0), live ? [4, 5] : dsh);
+      if (ay != null && sel && !live) { tag(ay, fmt(a.price), true); g.setLineDash([]); g.globalAlpha = .9; g.fillStyle = acol; g.beginPath(); g.arc(left + 16, ay, 4.5, 0, 7); g.fill(); g.globalAlpha = 1; }
+      if (live && alDrag.p != null) { const ny = ln(alDrag.p, .95, CS.alertW + 1, [6, 4]); if (ny != null) { const dl = (alDrag.p - lastP) / lastP * 100; tag(ny, fmt(alDrag.p), true); g.setLineDash([]); g.font = '11px system-ui'; g.globalAlpha = .9; g.fillStyle = acol; g.textAlign = 'left'; g.fillText(`${dl >= 0 ? '+' : ''}${dl.toFixed(2)}%`, left + 28, ny - 5); } }
+    }
     g.restore(); }
   // etiqueta de último precio
   const lastC = candles[n - 1], ly = Y(lastC.c);
@@ -3528,10 +3600,11 @@ function drawShape(d, selected, col, textCol) {
 
 /* ───────── Gestos: pan, pellizco, retícula, dibujo ───────── */
 const area = $('#chartArea'), ptrs = new Map();
-let gest = null, pinch = null, lastTap = null, brushLive = null;
+let gest = null, pinch = null, lastTap = null, brushLive = null, alHinted = false;
 const local = e => { const r = $('#priceCanvas').getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
 area.addEventListener('pointerdown', e => { stopMotion();
-  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.pbar,.pbar-pop,.pbar-hidden,.leg-toggle,.favbar,.fav-fab,.brand-fab')) return;
+  if (e.target.closest('.chart-controls,.draw-hint,.leg-row,.pbar,.pbar-pop,.pbar-hidden,.leg-toggle,.favbar,.fav-fab,.brand-fab,.al-confirm')) return;
+  if (alConfirm) closeAlConfirm(true);
   try { area.setPointerCapture(e.pointerId); } catch {} ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   if (!geo) return;
   if (ptrs.size === 2) { startPinch(); return; }
@@ -3553,9 +3626,37 @@ area.addEventListener('pointerdown', e => { stopMotion();
     if (hnd) { gest.mode = 'handle'; gest.handle = hnd.key; }
     else if (d && !d.lock && !DOPT.lock && !DOPT.hide && !d.hide && distToDrawing(d, pt) < 18) startDMove(d, pt);
   }
+  if (gest.mode === 'pending' && !drawTool && !PANE && selAlertId) { const al = alertHit(pt, e); if (al && al.id === selAlertId) { gest.mode = 'almove'; gest.al = {id: al.id}; gest.snapY = pt.y - Y(al.price); } } // línea de alerta seleccionada: arrastrarla cambia su precio
   if (gest.mode === 'pending' && !drawTool)
     gest.timer = setTimeout(() => { if (gest && !gest.moved && gest.mode === 'pending') { gest.mode = 'cross'; cross = pt; navigator.vibrate?.(8); scheduleRender(); } }, 380);
 });
+function alertHit(pt, e) { // alerta de precio activa del símbolo actual cuya línea está bajo el dedo/cursor
+  if (PANE || !geo || !(pt.x >= geo.left && pt.x <= geo.w - geo.right) || pt.y < geo.plotTop || pt.y > geo.plotTop + geo.plotH) return null;
+  const tol = e && e.pointerType === 'mouse' ? 7 : 16; let best = null, bd = tol;
+  for (const a of state.alerts) { if (a.kind === 'ind' || !a.on || a.symbol !== state.symbol) continue; const d = Math.abs(Y(a.price) - pt.y); if (d <= bd) { bd = d; best = a; } }
+  return best;
+}
+function closeAlConfirm(cancel) { if (!alConfirm) return; alConfirm.el.remove(); document.removeEventListener('keydown', alConfirm.key, true); alConfirm = null; if (cancel) { alDrag = null; scheduleRender(); } }
+function askMoveAlert(id, p) { // pide confirmación antes de cambiar el precio de la alerta
+  const a = state.alerts.find(x => x.id === id); closeAlConfirm(); if (!a || !geo) { alDrag = null; scheduleRender(); return; }
+  p = +p.toPrecision(8); alDrag = {id, p};
+  const box = document.createElement('div'); box.className = 'al-confirm'; box.setAttribute('role', 'dialog');
+  box.innerHTML = `<div class="alc-t">¿Mover la alerta aquí?</div><div class="alc-p"><s>${fmt(a.price)}</s><span>→</span><b>${fmt(p)}</b></div><div class="alc-b"><button type="button" data-k="no">Cancelar</button><button type="button" data-k="ok" class="ok">Mover</button></div>`;
+  const cr = $('#priceCanvas').getBoundingClientRect(), ar = area.getBoundingClientRect(), ny = Y(p) + cr.top - ar.top, top = ny > ar.height * .55 ? ny - 104 : ny + 16;
+  box.style.top = Math.max(8, Math.min(ar.height - 120, top)) + 'px';
+  area.appendChild(box);
+  const key = ev => { if (ev.key === 'Escape') { ev.stopPropagation(); closeAlConfirm(true); } else if (ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); ok(); } };
+  const ok = () => {
+    const al = state.alerts.find(x => x.id === id), cur = curPrice(al && al.symbol); if (!al) return closeAlConfirm(true);
+    if (Number.isFinite(cur) && p === cur) { toast('El precio ya está en ese nivel'); return closeAlConfirm(true); }
+    if (Number.isFinite(cur) && al.cond === 'up' && p < cur) { toast('Es una alerta de cruce ascendente: debe quedar sobre el precio actual'); return closeAlConfirm(true); }
+    if (Number.isFinite(cur) && al.cond === 'down' && p > cur) { toast('Es una alerta de cruce descendente: debe quedar bajo el precio actual'); return closeAlConfirm(true); }
+    al.price = p; if (Number.isFinite(cur)) al.dir = p > cur ? 'up' : 'down'; al.wait = false; if (!al.wait) delete al.wait;
+    closeAlConfirm(); alDrag = null; save(); renderAlerts(); scheduleRender(); toast('Alerta movida a ' + fmt(p));
+  };
+  box.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; if (b.dataset.k === 'ok') ok(); else closeAlConfirm(true); };
+  document.addEventListener('keydown', key, true); alConfirm = {el: box, key};
+}
 function startDMove(d, pt) {
   gest.mode = 'dmove'; gest.dm = {id: d.id, orig: JSON.parse(JSON.stringify(d)), i0: IDX(pt.x), p0: PRICE(pt.y), snap: false};
 }
@@ -3583,6 +3684,7 @@ area.addEventListener('pointermove', e => {
     scheduleRender(); return;
   }
   if (gest.mode === 'cross') { cross = pt; scheduleRender(); }
+  else if (gest.mode === 'almove') { if (!gest.moved) return; alDrag = {id: gest.al.id, p: clamp(PRICE(pt.y - (gest.snapY || 0)), 1e-12, 1e15)}; gest.al.p = alDrag.p; scheduleRender(); }
   else if (gest.mode === 'dmove') {
     if (!gest.moved) return; const d = getDrawings().find(x => x.id === gest.dm.id); if (!d) return;
     if (!gest.dm.snap) { gest.dm.snap = true; const arr = getDrawings(); drawHist.u.push(JSON.stringify(arr.map(x => x.id === d.id ? gest.dm.orig : x))); if (drawHist.u.length > 60) drawHist.u.shift(); drawHist.r.length = 0; } // deshacer vuelve a la posición anterior
@@ -3623,6 +3725,7 @@ function endPointer(e, cancelled) {
   if (gs.mode === 'brush') { const live = brushLive; brushLive = null; if (!cancelled) commitBrush(live); scheduleRender(); return; }
   if (cancelled) { cross = null; preview = null; scheduleRender(); return; }
   if (gs.mode === 'cross') { cross = null; scheduleRender(); return; }
+  if (gs.mode === 'almove') { if (gs.moved && gs.al.p != null) askMoveAlert(gs.al.id, gs.al.p); else { alDrag = null; scheduleRender(); } return; }
   if (gs.mode === 'handle') { save(); render(); return; }
   if (gs.mode === 'dmove') { if (gs.moved) { save(); updateDrawUI(); render(); return; } selectedId = gs.picked ? gs.dm.id : (distToDrawing(getDrawings().find(x => x.id === gs.dm.id) || {}, local(e)) < 13 ? selectedId : null); updateDrawUI(); render(); return; }
   if (gs.mode === 'scaleP') { if (!gs.moved) { const now = Date.now(); if (now - lastAxisTap < 320) { lastAxisTap = 0; delete paneMan[gs.pane.key]; render(); } else lastAxisTap = now; } return; } // doble toque = escala automática
@@ -3648,10 +3751,13 @@ function endPointer(e, cancelled) {
   }
   // toque simple: doble toque ajusta; un toque selecciona/deselecciona un dibujo
   const now = Date.now();
-  if (lastTap && now - lastTap.t < 300 && Math.hypot(pt.x - lastTap.x, pt.y - lastTap.y) < 24) { lastTap = null; fit(); return; }
+  if (lastTap && now - lastTap.t < 300 && Math.hypot(pt.x - lastTap.x, pt.y - lastTap.y) < 24) { lastTap = null; const ah = hitTest(pt) ? null : alertHit(pt, e); if (ah) { selAlertId = ah.id; openAlertDialog({edit: ah}); render(); return; } fit(); return; } // doble toque sobre una alerta = editarla
   lastTap = {t: now, x: pt.x, y: pt.y};
-  const hit = hitTest(pt); selectedId = hit ? hit.id : null; updateDrawUI(); render();
+  const hit = hitTest(pt), ah = hit ? null : alertHit(pt, e);
+  if (ah) { const first = selAlertId !== ah.id; selAlertId = ah.id; selectedId = null; updateDrawUI(); render(); if (first && !alHinted) { alHinted = true; toast('Arrastra la línea para mover la alerta · doble clic para editarla'); } return; }
+  selAlertId = null; selectedId = hit ? hit.id : null; updateDrawUI(); render();
 }
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && selAlertId && !alConfirm && !document.querySelector('.cfg-overlay')) { selAlertId = null; scheduleRender(); } });
 area.addEventListener('pointerup', e => endPointer(e, false));
 area.addEventListener('pointercancel', e => endPointer(e, true));
 function startPinch() {
@@ -3669,7 +3775,8 @@ function doPinch() {
 area.addEventListener('pointermove', e => {
   if (e.pointerType !== 'mouse' || !geo) return;
   if (ptrs.has(e.pointerId)) { if (cross && gest && gest.mode !== 'cross') { cross = null; scheduleRender(); } return; }
-  cross = local(e); scheduleRender();
+  cross = local(e); { const ah = !drawTool && alertHit(cross, e), cu = ah ? (ah.id === selAlertId ? 'ns-resize' : 'pointer') : ''; if (area.style.cursor !== cu) area.style.cursor = cu; }
+  scheduleRender();
 });
 area.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !ptrs.size && cross) { cross = null; scheduleRender(); } });
 area.addEventListener('wheel', e => { e.preventDefault(); cancelAnimationFrame(inertiaRaf); const base = glideT && glideT.visible != null ? glideT.visible : visible; glide({visible: clamp(base * (e.deltaY > 0 ? 1.12 : .89), 15, 400)}); }, {passive: false});
@@ -3735,10 +3842,9 @@ function copyText(txt, msg) {
   const ok = () => toast(msg || 'Copiado'), old = () => { const t = document.createElement('textarea'); t.value = txt; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); ok(); } catch { toast('No se pudo copiar'); } t.remove(); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, old); else old();
 }
-function alertAtPrice(price) { // abre Alertas con el activo y el precio del clic ya puestos, listo para crear (nota, indicador, etc.)
+function alertAtPrice(price) { // abre el diálogo de alerta con el activo y el precio del clic ya puestos
   if (!(price > 0)) { toast('No se pudo leer el precio de ese punto'); return; }
-  renderAlerts(); switchView('alertsView');
-  setTimeout(() => { const sel = $('#alSym'); if (sel) sel.value = state.symbol; const pr = $('#alPrice'); if (pr) { pr.value = String(price); pr.focus(); pr.select(); } toast('Alerta en ' + fmt(price) + ': añade una nota y toca «Crear alerta de precio»'); }, 60);
+  openAlertDialog({symbol: state.symbol, price});
 }
 area.addEventListener('contextmenu', e => {
   if (e.target.closest('.chart-label, .leg-row, button, .pop-menu, .favbar')) return;
