@@ -102,16 +102,18 @@ async function infer({id, which, screenshot, prompt}) {
     // No pasar data:image/png;base64 a fromURL(): en Node y algunos
     // entornos de navegador intenta acceder a esa cadena como URL (404).
     // Entregar los bytes reales como Blob es la ruta multimodal compatible.
-    const b64=screenshot.slice(screenshot.indexOf(',')+1);
-    const binary=atob(b64),bytes=new Uint8Array(binary.length);
-    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-    const blob=new Blob([bytes],{type:'image/png'});
     const raw=state.T.RawImage;
-    const img=typeof raw.fromBlob==='function'
-      ? await raw.fromBlob(blob)
-      : typeof raw.read==='function' ? await raw.read(blob)
-      : typeof raw.fromURL==='function' ? await raw.fromURL(screenshot)
-      : null;
+    let img=null;
+    if (typeof raw.fromBlob==='function' || typeof raw.read==='function') {
+      const b64=screenshot.slice(screenshot.indexOf(',')+1);
+      const binary=atob(b64),bytes=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+      const blob=new Blob([bytes],{type:'image/png'});
+      img=typeof raw.fromBlob==='function' ? await raw.fromBlob(blob) : await raw.read(blob);
+    } else if (typeof raw.fromURL==='function') {
+      // Compatibilidad con motores anteriores y pruebas sin decodificador Blob.
+      img=await raw.fromURL(screenshot);
+    }
     if (!img || !Number.isFinite(img.width) || !Number.isFinite(img.height) ||
         img.width < 100 || img.height < 80) throw Error('La captura llegó vacía o no pudo decodificarse.');
     report(id, 'PNG recibido: ' + img.width + ' × ' + img.height + ' píxeles. Preparando imagen…', 'load');
