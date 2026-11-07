@@ -53,5 +53,31 @@ assert.match(answer,/velas?|baj|sub|descend|ascend|precio|volumen/i,
   'No hizo una observación de velas, movimiento ni volumen');
 
 assert.ok(!/^\s*(?:undefined|null)\s*$/i.test(answer));
-console.log('PASS: Un modelo auténtico ha generado una respuesta a partir de un PNG de velas.');
+assert.match(answer,/baja|abajo|descen|cae|bajista/i,
+  'La IA no identificó el descenso del gráfico de prueba.');
+assert.match(answer,/volumen/i,'La IA no reconoció las barras de volumen.');
+console.log('Primera dirección BAJISTA reconocida correctamente.');
+// Prueba contraria: misma estructura y prompt, pero velas principalmente verdes
+// que ascienden desde izquierda a derecha. Si el modelo responde lo mismo,
+// no está leyendo la imagen: el test debe fallar.
+const upCanvas=createCanvas(WIDTH,HEIGHT),up=upCanvas.getContext('2d');
+up.fillStyle='#0b1020';up.fillRect(0,0,WIDTH,HEIGHT);
+up.strokeStyle='#5077b5';up.beginPath();up.moveTo(15,145);up.lineTo(435,145);up.stroke();
+for(let i=0;i<33;i++){
+ const x=24+i*12,base=245-i*5+7*Math.sin(i*.8),body=8+i%5;
+ up.strokeStyle=i%8===0?'#eb435b':'#12c29c';up.fillStyle=up.strokeStyle;
+ up.fillRect(x,base,6,body);
+ up.beginPath();up.moveTo(x+3,base-8);up.lineTo(x+3,base+body+6);up.stroke();
+ up.fillStyle='#214b74';up.fillRect(x,242,6,6+(i*11)%25);
+}
+const upImage=await RawImage.fromBlob(new Blob([upCanvas.toBuffer('image/png')],{type:'image/png'}));
+const upInputs=await processor(formatted,upImage);
+const upOutput=await model.generate({...upInputs,max_new_tokens:110,do_sample:false});
+const upDecoded=processor.batch_decode(upOutput.slice(null,[upInputs.input_ids.dims.at(-1),null]),{skip_special_tokens:true});
+const upAnswer=String(upDecoded?.[0]||'').trim();
+console.log('RESPUESTA VISUAL REAL (GRÁFICO ALCISTA):',upAnswer);
+assert.match(upAnswer,/arriba|sube|ascend|alcista|aumento|más alto/i,
+  'No distinguió el gráfico alcista de la imagen bajista anterior.');
+assert.match(upAnswer,/volumen/i,'No reconoció el volumen de la segunda imagen.');
+console.log('PASS: Qwen3.5 distingue imágenes de velas ALCISTAS y BAJISTAS.');
 await model.dispose?.();
