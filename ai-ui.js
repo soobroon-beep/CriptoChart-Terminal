@@ -11,6 +11,7 @@
     const out = []; let list = false;
     for (let ln of String(t).split('\n')) {
       let h = esc(ln).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[\s(])_(.+?)_(?=[\s).,;:]|$)/g, '$1<i>$2</i>');
+      h = h.replace(/\[([^\]]{1,160})\]\((https:\/\/[^\s)]+)\)/g, (m, label, link) => '<a href="' + link + '" target="_blank" rel="noopener noreferrer">' + label + '</a>');
       const li = /^\s*[-•] (.*)/.exec(h);
       if (li) { if (!list) { out.push('<ul>'); list = true; } out.push('<li>' + li[1] + '</li>'); continue; }
       if (list) { out.push('</ul>'); list = false; }
@@ -51,6 +52,16 @@
     q = String(q || '').trim(); if (!q || st.busy) return; st.busy = true; $('#aiSend').disabled = true; push('user', shown || q);
     const isBrief = AI.intent(q) === 'brief';
     const ctx = window.CCT_getAIContext && window.CCT_getAIContext(), news = window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [], cal = await loadCalendar(), market = isBrief && window.CCT_getMarketSnapshot ? await window.CCT_getMarketSnapshot() : [], extra = {news, calendar: cal || [], market, now: Date.now()};
+    // Captura auténtica del canvas: solo se envía en modo remoto si se pudo obtener.
+    if (ctx && st.mode === 'claude' && (st.key || st.proxy)) {
+      try {
+        const canvas = document.getElementById('priceCanvas');
+        if (canvas && canvas.width >= 300 && canvas.height >= 200) {
+          const png = canvas.toDataURL('image/png');
+          if (/^data:image\/png;base64,/.test(png) && png.length < 3000000) extra.screenshot = png;
+        }
+      } catch {} // Captura inaccesible: nunca fingir que se vio.
+    }
     const typing = push('bot', '…', 'typing'); let out, useClaude = st.mode === 'claude' && (st.key || st.proxy) && ctx;
     try {
       if (!ctx && isBrief) out = AI.briefLocal(null, extra);
