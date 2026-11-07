@@ -31,15 +31,19 @@
   }
   function cleanResponse(raw, ctx) {
     let s = String(raw || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    // Un modelo pequeño puede atribuir a la imagen un indicador que el usuario no tiene.
-    const active = (ctx.active || []).join(' ').toLowerCase();
-    const pine = (ctx.pine || []).map(x => x.name || '').join(' ').toLowerCase();
-    for (const re of [/\bMACD\b/ig,/\bRSI\b/ig,/\bBollinger\b/ig]) {
-      if (!(re.source.toLowerCase().replace(/\\b/g,'').includes('macd') ? active.includes('macd') || pine.includes('macd') :
-            re.source.toLowerCase().includes('rsi') ? active.includes('rsi') || pine.includes('rsi') :
-            active.includes('bollinger') || pine.includes('bollinger'))) {
-        s = s.split(/(?<=[.!?])\s+/).filter(sentence => !new RegExp(re.source, 'i').test(sentence)).join(' ').trim();
-      }
+    // Un modelo pequeño puede atribuir a la captura un indicador no activado.
+    const shown = ((ctx.active || []).join(' ') + ' ' +
+      (ctx.pine || []).map(x => x.name || '').join(' ')).toLowerCase();
+    const tags = [
+      {name:'macd', pattern:/\bMACD\b/i},
+      {name:'rsi', pattern:/\bRSI\b/i},
+      {name:'bollinger', pattern:/\bBollinger\b/i}
+    ];
+    for (const tag of tags) {
+      if (shown.includes(tag.name)) continue;
+      s = s.split(/(?<=[.!?])\s+/)
+        .filter(sentence => !tag.pattern.test(sentence))
+        .join(' ').trim();
     }
     return s.split(/\s+/).slice(0, 85).join(' ').trim();
   }
