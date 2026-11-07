@@ -1,10 +1,10 @@
 'use strict';
 // Bump this version when changing cached application files. No API responses or account data are cached.
-const CACHE = 'cct-shell-v111';
+const CACHE = 'cct-shell-v112';
 const ROOT = new URL('./', self.location.href);
 const SHELL = ['index.html', 'style.css', 'glass.css', 'pwa.css', 'pwa-icons.js', 'pwa.js', 'icons.js',
   'app.js', 'screener.js', 'firebase-config.js', 'markets.js', 'indicators.js', 'patterns.js', 'channels.js', 'discord-format.js', 'discord.js', 'nova-nexus.js', 'catalog.js', 'pine.js',
-  'pine-draw.js', 'pine-preview.js', 'dock.js', 'pine-settings.js', 'news.js', 'ai.js', 'ai-ui.js', 'fx.js', 'prefs.js', 'sessions.js', 'econbar.js', 'changelog.js', 'lens.html'];
+  'pine-draw.js', 'pine-preview.js', 'dock.js', 'pine-settings.js', 'news.js', 'ai.js', 'llm.js', 'ai-ui.js', 'fx.js', 'prefs.js', 'sessions.js', 'econbar.js', 'changelog.js', 'lens.html'];
 const ASSETS = new Set(SHELL.map(p => new URL(p, ROOT).href));
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL.map(p => new Request(new URL(p, ROOT), {cache:'reload'})))).then(() => self.skipWaiting())); // la versión nueva se activa sola
