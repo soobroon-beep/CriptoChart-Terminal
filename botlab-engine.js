@@ -113,7 +113,7 @@
     const C = candles, N = C.length, r = spec.risk, fee = spec.costs.feePct / 100, slip = spec.costs.slipPct / 100, ctx = {cache: {}, nova: opts.nova || root.NovaNexus, novaOpts: opts.novaOpts, user: opts.user || null};
     if (N < 60) throw new Error('Hacen falta al menos 60 velas para evaluar una estrategia');
     const atrS = series(C, {k: 'atr', n: r.atrLen}, ctx), ema200 = series(C, {k: 'ema', n: 200}, ctx), volR = series(C, {k: 'volRatio', n: 20}, ctx);
-    const trades = [], eq = new Array(N).fill(0), warnings = []; let cash = r.capital, pos = null, pend = null, peak = r.capital, halted = false, dayKey = -1, dayStartCash = cash, dayBlocked = false, start = -1;
+    const trades = [], eq = new Array(N).fill(0), warnings = []; let cash = r.capital, pos = null, pend = null, peak = opts.peak || r.capital, halted = false, tradeFrom = opts.tradeFrom | 0, dayKey = -1, dayStartCash = cash, dayBlocked = false, start = -1;
     const entryReason = side => (side === 'long' ? spec.entry.long : spec.entry.short).map(condText).join(' Y ');
     const close = (px, i, why, flagOpen) => { // cierra la posición con costos
       const dir = pos.side === 'long' ? 1 : -1, exitFee = px * pos.qty * fee, gross = (px - pos.entry) * pos.qty * dir; cash += gross - exitFee;
@@ -158,7 +158,7 @@
         if (r.trail) { const d = r.trail.type === 'atr' ? (atrS[i] ? atrS[i] * r.trail.v : NaN) : c.c * r.trail.v / 100; if (d > 0) { if (pos.side === 'long') pos.sl = isNum(pos.sl) ? Math.max(pos.sl, pos.hi - d) : pos.hi - d; else pos.sl = isNum(pos.sl) ? Math.min(pos.sl, pos.lo + d) : pos.lo + d; } }
       }
       // 5) señales con la vela cerrada i → orden para la apertura de i+1
-      if (i < N - 1 && !pend) {
+      if (i < N - 1 && !pend && i >= tradeFrom) { // tradeFrom: paper trading (no se decide nada antes del inicio de la sesión)
         if (pos) {
           const ex = pos.side === 'long' ? spec.exit.long : spec.exit.short, hit = ex.find(cd => condOk(cd, i, C, ctx));
           if (hit) pend = {type: 'exit', why: 'Regla de salida: ' + condText(hit)}; else if (r.maxBars && i + 1 - pos.bar >= r.maxBars) pend = {type: 'exit', why: `Tiempo máximo (${r.maxBars} velas)`};
@@ -174,6 +174,7 @@
       }
     }
     if (start < 0) start = Math.min(N - 1, 1);
+    if (tradeFrom > start) start = Math.min(N - 1, tradeFrom);
     const out = {spec, bars: N, from: C[0].t, to: C[N - 1].t, trades, equity: eq.map((e, i) => ({t: C[i].t, e: i === 0 ? r.capital : e})), warnings, halted, capital: r.capital, interval: spec.interval, symbol: spec.symbol};
     out.metrics = metrics(trades, out.equity, r.capital, C, start); out.segments = segments(C, trades, out.equity, r.capital, start); out.buyHold = buyHold(C, start, r.capital, fee, slip); out.daily = dailyStats(out.equity, trades); out.breakdown = breakdown(trades);
     if (trades.length < 30) warnings.push(`Solo ${trades.length} operaciones: la muestra es demasiado pequeña para sacar conclusiones fiables.`);

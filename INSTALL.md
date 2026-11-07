@@ -37,9 +37,12 @@ Referencias: https://developer.chrome.com/blog/improvements-to-web-app-updates y
 Un flujo de GitHub Actions (`.github/workflows/botlab-retrain.yml`) corre cada día `scripts/botlab-retrain.js` para los bots con el «ciclo automático» activado (pestaña **Reentrenar** del bot). No depende de tener la app abierta. Hace validación walk-forward y **nunca cambia la versión principal**: solo deja resultados y, si hay mejora comprobada fuera de muestra, una versión *candidata* que tú apruebas.
 
 Configuración (una sola vez):
-1. **Firebase Console → Firestore → Reglas**: pega el contenido actualizado de `firestore.rules` (ahora permite guardar el documento `botlab` de tu cuenta) y publica.
+1. **Reglas de Firestore**: el flujo «Publicar reglas de Firestore» (`deploy-firestore-rules.yml`) las publica solo desde `firestore.rules` en cuanto existe el secreto del paso 3 (la cuenta de servicio necesita el rol «Administrador de reglas de Firebase»). Si prefieres hacerlo a mano: Firebase Console → Firestore → Reglas → pega `firestore.rules` y publica.
 2. **Firebase Console → Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada**. Se descarga un JSON.
 3. **GitHub → Settings → Secrets and variables → Actions → New repository secret**: nombre `FIREBASE_SERVICE_ACCOUNT`, valor = el contenido completo del JSON. No lo subas al repositorio ni lo pegues en la app.
 4. Para probar sin esperar: GitHub → Actions → «Reentrenar bots» → Run workflow (marca *force*).
 
 Sin el secreto el flujo termina sin hacer nada (no falla). Los datos de velas se descargan de `data-api.binance.vision`.
+
+## Paper trading
+Se inicia desde la pestaña **Paper trading** de cada bot (solo versión de PC). Es una simulación hacia adelante con capital virtual: no envía órdenes reales. Por ahora se actualiza al abrir el laboratorio (se pone al día con las velas reales); no corre en servidor.

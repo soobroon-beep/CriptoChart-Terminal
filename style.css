@@ -653,3 +653,4 @@ body.pane .favbar{display:none}
 .legend-box.dragging{cursor:grabbing}
 .sec-grip{flex:none;display:grid;place-items:center;width:26px;height:30px;color:var(--muted);font-size:15px;cursor:grab;touch-action:none;opacity:.8}
 .sec-grip:active{cursor:grabbing;color:var(--accent)}
+@media(max-width:1023px){#botLabView,#rrBotLab,#blSettingRow{display:none!important}}
