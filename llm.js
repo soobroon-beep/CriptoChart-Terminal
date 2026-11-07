@@ -52,6 +52,18 @@
     return '';
   }
   const stripCode = text => String(text || '').replace(/```[\s\S]*?(```|$)/g, '').trim();
+  function applyPatch(code, text) { // aplica bloques «<<<<<<< SEARCH / ======= / >>>>>>> REPLACE» sobre el código actual (solo cambia lo pedido)
+    const re = /<{3,}\s*SEARCH[^\n]*\n([\s\S]*?)\n={3,}[^\n]*\n([\s\S]*?)\n?>{3,}\s*REPLACE/g, norm = x => x.split('\n').map(l => l.trim());
+    let out = String(code), applied = 0, failed = [], m, found = 0;
+    while ((m = re.exec(String(text || '')))) {
+      found++; const a = m[1].replace(/^```\w*\n?|\n?```$/g, ''), b = m[2].replace(/^```\w*\n?|\n?```$/g, '');
+      if (out.includes(a) && a.trim()) { out = out.replace(a, () => b); applied++; continue; }
+      const lines = out.split('\n'), want = norm(a).filter((l, i, arr) => !(i === arr.length - 1 && l === '')), have = lines.map(l => l.trim()); let at = -1;
+      for (let i = 0; i + want.length <= have.length && want.length; i++) { let ok = true; for (let j = 0; j < want.length; j++) if (have[i + j] !== want[j]) { ok = false; break; } if (ok) { at = i; break; } }
+      if (at >= 0) { lines.splice(at, want.length, ...b.split('\n')); out = lines.join('\n'); applied++; } else failed.push(a.split('\n')[0].slice(0, 80));
+    }
+    return {code: out, applied, failed, found, changed: out !== String(code)};
+  }
   function friendly(e) {
     if (!e) return 'Error desconocido de la IA.';
     if (e.kind === 'network') return 'No hay conexión con el modelo de IA. Revisa tu internet o cambia de proveedor en ⚙.';
@@ -157,6 +169,7 @@ REGLAS OBLIGATORIAS:
 - Señales visuales con plotshape (compra: location.belowbar, venta: location.abovebar). Títulos de plot cortos.
 - Si el indicador necesita escala distinta al precio (RSI, MACD, volumen…) usa overlay=false; si va sobre las velas, overlay=true.
 - Código claro y comentado en español, menos de 140 líneas, sin dependencias externas.
+SI RECIBES UNA IMAGEN de referencia (captura de un indicador, boceto o ejemplo), obsérvala: tipo (sobre velas o panel), líneas, colores, señales y niveles, y replica ese estilo con funciones soportadas.
 FORMATO DE RESPUESTA: primero 2-4 líneas en español explicando qué hace y cómo leerlo; después UN solo bloque \`\`\`pine con el código completo. Nada más.`;
   function signalMetrics(candles, res) { // qué pasó DESPUÉS de cada señal del indicador (histórico). No es un backtest ni un resultado real
     const out = {bars: candles.length, signals: [], note: 'Estadística descriptiva sobre las velas cargadas: mide cuánto se movió el precio después de cada señal visual (compra = marca bajo la vela, venta = marca sobre la vela). No incluye comisiones, deslizamiento ni gestión de riesgo, y no es un resultado real ni una promesa.'};
@@ -169,7 +182,7 @@ FORMATO DE RESPUESTA: primero 2-4 líneas en español explicando qué hace y có
     return out;
   }
 
-  const api = {resetCache: () => { freeCache = null; }, LLMError, load, save, chat, freeModels, pickFree, supportsVision, imageMessage, hasImage, stripImages, extractCode, stripCode, friendly, providerLabel, PINE_GUIDE, signalMetrics, WEBLLM_MODELS, FREE_URL};
+  const api = {resetCache: () => { freeCache = null; }, LLMError, load, save, chat, freeModels, pickFree, supportsVision, imageMessage, hasImage, stripImages, extractCode, stripCode, applyPatch, friendly, providerLabel, PINE_GUIDE, signalMetrics, WEBLLM_MODELS, FREE_URL};
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.CCTLLM = api;
 })(typeof self !== 'undefined' ? self : this);

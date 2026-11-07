@@ -70,3 +70,14 @@ test('el Laboratorio usa su propio proveedor y cae al general si no hay WebGPU',
   await L.chat([{role: 'user', content: 'q'}], {cfg, purpose: 'code'}); // en node no hay navigator.gpu -> compat
   assert.equal(calls[0].url, 'http://x/v1/chat/completions');
 });
+
+test('applyPatch cambia solo lo pedido (exacto, con sangría distinta y bloques fallidos)', () => {
+  const code = '//@version=5\nindicator("A")\nf = ta.ema(close, 9)\n    s = ta.ema(close, 21)\nplot(f)\nplot(s)';
+  let r = L.applyPatch(code, 'Cambio.\n<<<<<<< SEARCH\nf = ta.ema(close, 9)\n=======\nf = ta.ema(close, 12)\n>>>>>>> REPLACE');
+  assert.equal(r.applied, 1); assert.match(r.code, /close, 12/); assert.match(r.code, /plot\(s\)/); assert.equal(r.code.split('\n').length, 6);
+  r = L.applyPatch(code, '<<<<<<< SEARCH\ns = ta.ema(close, 21)\n=======\ns = ta.ema(close, 30)\n>>>>>>> REPLACE'); // ignora diferencias de sangría
+  assert.equal(r.applied, 1); assert.match(r.code, /close, 30/);
+  r = L.applyPatch(code, '<<<<<<< SEARCH\nplot(f)\n=======\nplot(f)\nplot(close)\n>>>>>>> REPLACE'); assert.match(r.code, /plot\(f\)\nplot\(close\)/); // añadir
+  r = L.applyPatch(code, '<<<<<<< SEARCH\nlinea inexistente\n=======\nx\n>>>>>>> REPLACE'); assert.equal(r.applied, 0); assert.equal(r.failed.length, 1); assert.equal(r.changed, false);
+  assert.equal(L.applyPatch(code, 'sin bloques').found, 0);
+});

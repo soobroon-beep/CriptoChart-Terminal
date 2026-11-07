@@ -4853,6 +4853,13 @@ window.CCT_ai = {
   },
   keep(sid) { const x = scripts.find(y => y.id === sid); if (!x) return false; if (scriptsBytes(scripts.filter(y => !y.temp)) + x.size > SCRIPTS_MAX) { toast('Se pasa del límite de scripts por cuenta'); return false; } x.temp = false; saveScripts(); renderScripts(); toast('Indicador guardado'); return true; },
   remove(sid, quiet) { scripts = scripts.filter(y => y.id !== sid); state.pine = state.pine.filter(q => q.sid !== sid); delete pineRes[sid]; save(); if (!quiet) { saveScripts(); renderScripts(); } else renderIndicators(); countIndicators(); scheduleRender(); },
+  update(sid, code, res) { // cambia el código de un indicador ya puesto en el gráfico (se ve en vivo); si estaba guardado, se guarda el cambio
+    const x = scripts.find(y => y.id === sid); if (!x) return false; const m = code.match(/indicator\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/);
+    x.code = code; x.size = new Blob([code]).size; x.lines = code.split('\n').length; if (m) x.name = m[1].slice(0, 80);
+    if (res && res.ok && candles.length) { res._key = `${state.symbol}|${state.interval}|${candles[0].t}`; pineRes[sid] = res; } else delete pineRes[sid];
+    if (!x.temp) saveScripts(); if (!state.pine.some(p => p.sid === sid)) state.pine.push({sid, on: true, inputs: {}}); else state.pine.find(p => p.sid === sid).on = true;
+    save(); renderIndicators(); countIndicators(); if (!x.temp) renderScripts(); pineKey = ''; schedulePine(); scheduleRender(); return true;
+  },
   toggle(sid, on) { const p = state.pine.find(q => q.sid === sid); if (p) p.on = on; else if (on) state.pine.push({sid, on: true, inputs: {}}); save(); renderIndicators(); countIndicators(); pineKey = ''; schedulePine(); scheduleRender(); },
   res: sid => pineRes[sid] || null
 };
