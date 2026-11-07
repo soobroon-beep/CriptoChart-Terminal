@@ -4869,7 +4869,16 @@ window.CCT_getAIContext = function () {
     type: String(d.type || '').slice(0, 24),
     a: xy(d.a), b: xy(d.b), c: xy(d.c),
     label: String(d.label || d.text || '').slice(0, 100),
-    points: Array.isArray(d.pts) ? d.pts.length : 0
+    points: Array.isArray(d.pts) ? d.pts.length : 0,
+    // Los trazos a mano se guardan como [tiempo, precio]; se toma una muestra
+    // de solo lectura para interpretar su dirección sin tocar el dibujo.
+    brushPath: d.type === 'brush' && Array.isArray(d.pts) && d.pts.length >= 2
+      ? {start:{t:d.pts[0][0],p:d.pts[0][1]},
+         end:{t:d.pts[d.pts.length-1][0],p:d.pts[d.pts.length-1][1]},
+         samples:[0,.2,.4,.6,.8,1].map(k => {
+           const pt=d.pts[Math.round(k*(d.pts.length-1))];
+           return {t:pt[0],p:pt[1]};
+         })} : null
   }));
   // Datos exclusivamente del tramo que aparece en pantalla: zoom, desplazamiento,
   // indicadores no ocultos y sus valores alineados con la última vela visible.
@@ -4932,7 +4941,9 @@ window.CCT_getAIContext = function () {
       if (z) chartVp = {poc:z.pocPrice, val:z.val, vah:z.vah}; } catch {}
   } else if (stdOn('nnVP') && ind.vp) chartVp = {poc:ind.vp.pocPrice};
   const chartDrawings = drawings.filter(d => {
-    if (d.type === 'horizontal' || d.type === 'hray' || d.type === 'brush') return true;
+    if (d.type === 'horizontal' || d.type === 'hray') return true;
+    if (d.type === 'brush') return !d.brushPath ||
+      (d.brushPath.start.t <= candles[endI].t && d.brushPath.end.t >= candles[startI].t);
     const times = [d.a, d.b, d.c].filter(Boolean).map(p => p.t).filter(Number.isFinite);
     return !times.length || (Math.min(...times) <= candles[endI].t &&
       Math.max(...times) >= candles[startI].t);
