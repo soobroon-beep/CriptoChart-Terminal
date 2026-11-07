@@ -560,3 +560,13 @@ button.brand-fab,button.brand-icon{background:none;border:0;padding:0;cursor:poi
 /* Aviso de dibujo (arriba al centro): cristal plano y minimalista, sin borde dorado ni reflejo */
 .draw-hint{background:var(--glass);border:1px solid var(--glass-line);box-shadow:none}
 .draw-hint button{background:rgba(255,255,255,.06);border-color:var(--glass-line);border-radius:12px}
+
+/* Hilera de botones del gráfico (escritorio): un solo contenedor de cristal translúcido y plano; los botones sin fondo oscuro ni sombra propios */
+@media(min-width:1024px){
+  .chart-bar .chart-toolbar{flex:0 1 auto;gap:2px;padding:3px;margin-right:2px;border:1px solid var(--glass-line);border-radius:15px;background:rgba(255,255,255,.04);-webkit-backdrop-filter:var(--blur-s);backdrop-filter:var(--blur-s);box-shadow:none}
+  .light .chart-bar .chart-toolbar{background:rgba(255,255,255,.5)}
+  .chart-bar .chart-toolbar button{background:transparent;border-color:transparent;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;border-radius:12px}
+  .chart-bar .chart-toolbar button:hover{background:rgba(255,255,255,.09);filter:none}
+  .light .chart-bar .chart-toolbar button:hover{background:rgba(20,40,80,.08)}
+  .chart-bar .chart-toolbar button[aria-expanded=true],.chart-bar .chart-toolbar button.active{background:rgba(255,255,255,.1)}
+}
