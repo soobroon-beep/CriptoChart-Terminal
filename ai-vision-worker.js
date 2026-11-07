@@ -98,8 +98,13 @@ async function infer({id, which, screenshot, prompt}) {
   active = true;
   try {
     const state = await load(which, id);
-    report(id, 'Procesando imagen, velas e indicadores…', 'inference');
-    const img = await state.T.RawImage.fromURL(screenshot);
+    report(id, 'Decodificando el PNG del gráfico…', 'load');
+    const decode = state.T.RawImage.read || state.T.RawImage.fromURL;
+    if (typeof decode !== 'function') throw Error('El motor de visión no tiene decodificador PNG.');
+    const img = await decode.call(state.T.RawImage, screenshot);
+    if (!img || !Number.isFinite(img.width) || !Number.isFinite(img.height) ||
+        img.width < 100 || img.height < 80) throw Error('La captura llegó vacía o no pudo decodificarse.');
+    report(id, 'PNG recibido: ' + img.width + ' × ' + img.height + ' píxeles. Preparando imagen…', 'load');
     // Reducir imagen para evitar consumo excesivo de memoria con gráficos ultrapanorámicos.
     const limit = which === 'qwen35' ? 896 : which === 'qwen35pro' ? 1024 : which === 'qwen' ? 1024 : 768; // conserva más detalle de paneles y dibujos
     const factor = Math.min(1, limit / Math.max(img.width, img.height));
@@ -108,7 +113,7 @@ async function infer({id, which, screenshot, prompt}) {
     const messages = [{
       role:'user', content:[
         {type:'image'},
-        {type:'text',text:String(prompt || 'Describe el gráfico visible en español brevemente.').slice(0, 3000)}
+        {type:'text',text:String(prompt || 'Describe el gráfico visible en español brevemente.').slice(0, 1300)}
       ]
     }];
     const isQwen35 = which === 'qwen35' || which === 'qwen35pro';
@@ -119,6 +124,9 @@ async function infer({id, which, screenshot, prompt}) {
     const inputs = isQwen35
       ? await state.processor(formatted, picture)
       : await state.processor(formatted, [picture], {return_tensors:'pt'});
+    if (!inputs || !inputs.input_ids || !inputs.input_ids.dims)
+      throw Error('Qwen no pudo preparar la imagen del gráfico para inferencia.');
+    report(id, 'Imagen aceptada por el procesador multimodal; generando lectura…', 'inference');
         let emitted = 0, lastTick = 0;
     const streamer = state.T.TextStreamer && state.processor.tokenizer
       ? new state.T.TextStreamer(state.processor.tokenizer, {
@@ -131,7 +139,7 @@ async function infer({id, which, screenshot, prompt}) {
             }
           }
         }) : null;
-    const maxTokens = isQwen35 ? 120 : which === 'qwen' ? 160 : 110;
+    const maxTokens = isQwen35 ? 90 : which === 'qwen' ? 110 : 80;
     const output = await state.model.generate({
       ...inputs, max_new_tokens:maxTokens, do_sample:false,
       ...(streamer ? {streamer} : {})
