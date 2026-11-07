@@ -6,14 +6,15 @@
   const MODELS = Object.freeze({smol:'SmolVLM-256M',qwen:'Qwen3-VL-2B'});
   const label = id => MODELS[id] || MODELS.smol;
   const short = s => String(s || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 100);
-  function prompt(ctx) {
-    const active = Array.isArray(ctx.active) ? ctx.active.map(short).slice(0, 30) : [];
-    const scripts = (ctx.pine || []).slice(0, 8).map(x => short(x.name));
-    const d = (ctx.drawings || []).slice(-12).map(x => ({
+  function prompt(ctx, question) {
+    const active = Array.isArray(ctx.chart && ctx.chart.active) ? ctx.chart.active.map(short).slice(0, 30) :
+      Array.isArray(ctx.active) ? ctx.active.map(short).slice(0, 30) : [];
+    const scripts = (ctx.chart && ctx.chart.pine || ctx.pine || []).slice(0, 8).map(x => short(x.name));
+    const d = (ctx.chart && ctx.chart.drawings || ctx.drawings || []).slice(-12).map(x => ({
       tipo:short(x.type),texto:short(x.label),entrada:x.a && x.a.p,
       otro_nivel:x.b && x.b.p
     }));
-    const cs = ctx.candles || [], last = cs.length ? cs[cs.length - 1] : {};
+    const cs = ctx.chart && ctx.chart.candles || ctx.candles || [], last = cs.length ? cs[cs.length - 1] : {};
     return [
       'Eres una IA visual especializada en gráficos de VORTEX. La IMAGEN adjunta es real.',
       'Describe EN ESPAÑOL en 2 o 3 frases cortas (máximo 65 palabras) lo que se ve:',
@@ -26,18 +27,19 @@
       'Último cierre en datos: ' + (Number.isFinite(last.c) ? last.c : 'desconocido'),
       'Indicadores activados: ' + (active.join(', ') || 'ninguno'),
       'Indicadores personalizados visibles: ' + (scripts.join(', ') || 'ninguno'),
-      'Dibujos visibles registrados: ' + JSON.stringify(d).slice(0, 1000)
+      'Dibujos visibles registrados: ' + JSON.stringify(d).slice(0, 1000),
+      'Pregunta del usuario: ' + short(question || 'Describe el gráfico visible')
     ].join(' ');
   }
-  function promptSmol(ctx) {
-    const active = (ctx.active || []).map(short).slice(0, 12).join(', ') || 'ninguno';
+  function promptSmol(ctx, question) {
+    const active = (ctx.chart && ctx.chart.active || ctx.active || []).map(short).slice(0, 12).join(', ') || 'ninguno';
     return 'Responde EXCLUSIVAMENTE en español. Mira esta imagen de un gráfico de ' +
       short(ctx.symbol) + ' en ' + short(ctx.interval) + '. ' +
       'Describe en dos frases concretas si las últimas velas suben, bajan o están laterales, ' +
       'y qué señalan las líneas, zonas o dibujos que puedas distinguir. ' +
       'No repitas frases ni digas solamente que el gráfico muestra una tendencia. ' +
       'No inventes precios ni menciones indicadores que no estén activados. ' +
-      'Indicadores activos: ' + active + '.';
+      'Indicadores activos: ' + active + '. Pregunta: ' + short(question || 'Describe el gráfico') + '.';
   }
   function cleanResponse(raw, ctx) {
     let s = String(raw || '').replace(/<[^>]*>/g, ' ')
@@ -45,8 +47,8 @@
       .replace(/\s+/g, ' ').trim();
     if (!s) return null;
     // Los modelos pequeños pueden mencionar indicadores que NO se muestran.
-    const shown = ((ctx.active || []).join(' ') + ' ' +
-      (ctx.pine || []).map(x => x.name || '').join(' ')).toLowerCase();
+    const shown = ((ctx.chart && ctx.chart.active || ctx.active || []).join(' ') + ' ' +
+      (ctx.chart && ctx.chart.pine || ctx.pine || []).map(x => x.name || '').join(' ')).toLowerCase();
     const tags = [
       {name:'macd', pattern:/\bMACD\b/i},
       {name:'rsi', pattern:/\bRSI\b/i},
@@ -79,6 +81,15 @@
       }
     }
     const words = canon(s);
+    // Hallucinaciones observadas: una frase casi idéntica repetida 4–10 veces.
+    // El modelo pequeño puede generar español gramatical, pero no una observación real.
+    const counts = new Map();
+    for (let i=0; i<words.length-4; i++) {
+      const chunk=words.slice(i,i+5).join(' '), count=(counts.get(chunk)||0)+1;
+      counts.set(chunk,count);
+      if(count>=3) return null;
+    }
+    if (words.length>=18 && new Set(words).size / words.length < .54) return null;
     if (words.length >= 22 && new Set(words).size / words.length < .47) return null;
     // «El gráfico muestra la tendencia del precio» no es un análisis del gráfico.
     const evidence = /\b(bajista|alcista|baja|bajan|cae|caen|cayo|caida|descenso|retroceso|rompe|rompio|ruptura|sube|suben|subida|rebote|rebotan|lateral|laterales|consolidacion|nube|rectangulo|dibujad|marcad|linea|lineas|senal|flecha|volumen|poc|vela|velas|canal|zona|zonas|vela roja|vela verde)\b/i;
@@ -114,7 +125,7 @@
     };
     worker = w; return w;
   }
-  function analyze({ctx,screenshot,model='smol',onProgress}) {
+  function analyze({ctx,screenshot,model='smol',question='',onProgress}) {
     if (!ctx || !Array.isArray(ctx.candles) || !ctx.candles.length)
       return Promise.reject(Error('Abre primero el gráfico y espera a que carguen las velas.'));
     if (!/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(screenshot || ''))
@@ -132,7 +143,7 @@
       }, 8 * 60 * 1000);
       job = {id,resolve,reject,onProgress,ctx,timer};
       if (typeof onProgress === 'function') onProgress('Iniciando ' + label(model) + ' en tu dispositivo…');
-      try { w.postMessage({id,type:'analyze',which:model,screenshot,prompt:model === 'smol' ? promptSmol(ctx) : prompt(ctx)}); }
+      try { w.postMessage({id,type:'analyze',which:model,screenshot,prompt:model === 'smol' ? promptSmol(ctx,question) : prompt(ctx,question)}); }
       catch (e) { clearTimeout(timer); job = null; reject(e); }
     });
   }

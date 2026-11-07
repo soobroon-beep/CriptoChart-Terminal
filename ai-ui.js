@@ -58,66 +58,128 @@
   const BRIEF_Q = 'Brief del día: resume el mercado cripto de hoy tomando en cuenta el segmento completo, las noticias, el calendario económico y mi gráfico, y dime hacia dónde es más probable que vaya el mercado, con tu propio análisis.';
   // La app dibuja velas, indicadores, paneles y dibujos manuales en priceCanvas.
   // Se copia su última imagen real (aunque la vista Gráfico esté oculta al abrir IA).
+  // El gráfico de Vortex usa un solo canvas para velas, EMAs, bandas,
+  // volumen, VPVR, osciladores, indicadores Pine y dibujos de usuario.
+  // Capturamos todo su alto real: no se limita al panel de velas.
   function captureChart(ctx) {
     try {
-      const canvas = document.getElementById('priceCanvas');
-      if (!ctx || !canvas || canvas.width < 300 || canvas.height < 200) return null;
-      const scale = Math.min(1, 1280 / canvas.width, 900 / canvas.height);
-      const w = Math.max(1, Math.round(canvas.width * scale));
-      const h = Math.max(1, Math.round(canvas.height * scale));
-      const shot = document.createElement('canvas');
-      shot.width = w; shot.height = h + 45;
-      const g = shot.getContext('2d');
-      if (!g) return null;
-      g.fillStyle = '#090e19'; g.fillRect(0, 0, shot.width, shot.height);
-      g.fillStyle = '#f0f3ff'; g.font = 'bold 18px Arial, sans-serif';
-      g.fillText(String(ctx.symbol || 'Gráfico') + ' · ' + String(ctx.interval || ''), 14, 29, w - 28);
-      g.drawImage(canvas, 0, 45, w, h);
+      const source = document.getElementById('priceCanvas');
+      if (!ctx || !source || source.width < 300 || source.height < 200) return null;
+      const maxW = 1600, maxH = 1150;
+      const scale = Math.min(1, maxW/source.width, maxH/source.height);
+      const w = Math.round(source.width*scale), h = Math.round(source.height*scale);
+      const labels = ctx.chart && ctx.chart.names || ctx.active || [];
+      const scripts = ctx.chart && ctx.chart.pine || ctx.pine || [];
+      const names = labels.slice(0, 12).concat(scripts.map(x => x.name).slice(0, 5));
+      const title = String(ctx.symbol || 'Gráfico')+' · '+String(ctx.interval || '')+
+        (ctx.chart && ctx.chart.historical ? ' · tramo histórico visible' : '');
+      const shot = document.createElement('canvas'); shot.width = w; shot.height = h + 64;
+      const g = shot.getContext('2d'); if (!g) return null;
+      g.fillStyle = '#090e19'; g.fillRect(0, 0, w, h+64);
+      g.fillStyle = '#eff2ff'; g.font = 'bold 18px system-ui, Arial, sans-serif';
+      g.fillText(title, 12, 23, w-24);
+      g.fillStyle = '#9aadd7'; g.font = '12px system-ui, Arial, sans-serif';
+      const line = 'Indicadores visibles: ' + (names.join(' · ') || 'ninguno');
+      g.fillText(line.slice(0, 160), 12, 44, w-24);
+      g.drawImage(source, 0, 64, w, h);
+      // En condiciones normales una captura de líneas y velas PNG es pequeña.
+      // Si excede el límite del modelo no se envía una imagen truncada.
       const png = shot.toDataURL('image/png');
       return /^data:image\/png;base64,/.test(png) && png.length < 3000000 ? png : null;
     } catch { return null; }
   }
-  async function ask(q, shown) {
-    q = String(q || '').trim(); if (!q || st.busy) return; st.busy = true; $('#aiSend').disabled = true; push('user', shown || q);
-    const isBrief = AI.intent(q) === 'brief', isVisual = !!(AI.isVisualChartRequest && AI.isVisualChartRequest(q));
-    const ctx = window.CCT_getAIContext && window.CCT_getAIContext(), news = !isVisual && window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [], cal = isVisual ? [] : await loadCalendar(), market = isBrief && window.CCT_getMarketSnapshot ? await window.CCT_getMarketSnapshot() : [], extra = {news, calendar: cal || [], market, now: Date.now()};
-    // La lectura visual usa siempre una captura real del gráfico; el modo Local no interpreta píxeles.
-    if (ctx && isVisual) {
-      extra.chartSnapshotMode = true;
-      extra.screenshot = captureChart(ctx);
-    } else if (ctx && st.mode === 'claude' && (st.key || st.proxy)) {
-      extra.screenshot = captureChart(ctx);
+  function uniqueVisualDetail(t, ctx, analyst) {
+    const s = String(t || '').trim();
+    if (!s || s.split(/\s+/).length > 75) return false;
+    const n = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    // No publicar descripciones genéricas del pequeño modelo de 256M.
+    if (/el grafico muestra la tendencia del precio|la amplitud de las velas es muy variada/.test(n)) return false;
+    const words = n.match(/[\p{L}\p{N}]+/gu) || [];
+    if (words.length < 8 || new Set(words).size / words.length < .58) return false;
+    const freq = new Map();
+    for (let i=0;i<words.length-3;i++) {
+      const key=words.slice(i,i+4).join(' '),k=(freq.get(key)||0)+1;freq.set(key,k);
+      if (k>=3) return false;
     }
-    const typing = push('bot', '…', 'typing'); let out, useClaude = st.mode === 'claude' && (st.key || st.proxy) && ctx;
+    // Los valores numéricos provienen de las velas, NO de una estimación visual.
+    if (/\b\d+[.,]\d+\b/.test(n)) return false;
+    const active = ctx && ctx.chart && ctx.chart.active || ctx && ctx.active || [];
+    if (/\bema\b/.test(n) && !active.some(k => /^ema|^nnEma$/.test(k))) return false;
+    if (/\bpoc\b/.test(n) && !active.some(k => /^(vpvr|nnVP)$/.test(k))) return false;
+    const facts = analyst && ctx && analyst.facts(ctx);
+    if (facts) {
+      if (facts.trend === 'bajista' && /(?:tendencia|movimiento|impulso) alcista/.test(n)) return false;
+      if (facts.trend === 'alcista' && /(?:tendencia|movimiento|impulso) bajista/.test(n)) return false;
+    }
+    return /\b(vela|velas|zona|zonas|rectangulo|linea|lineas|flecha|nube|canal|volumen|poc|ruptura|rebote|soporte|resistencia|oscilador|senal|indicador)\b/i.test(n);
+  }
+  async function ask(q, shown) {
+    q = String(q || '').trim();
+    if (!q || st.busy) return;
+    st.busy = true; $('#aiSend').disabled = true; push('user', shown || q);
+    const analyst = window.CCTChartAnalyst;
+    const isBrief = AI.intent(q) === 'brief';
+    const isChart = !isBrief && !!(analyst && analyst.isChartQuestion(q));
+    const ctx = window.CCT_getAIContext && window.CCT_getAIContext();
+    const news = !isChart && window.CCTNews && window.CCTNews.items ? window.CCTNews.items() : [];
+    const cal = isChart ? [] : await loadCalendar();
+    const market = isBrief && window.CCT_getMarketSnapshot ? await window.CCT_getMarketSnapshot() : [];
+    const extra = {news,calendar:cal||[],market,now:Date.now()};
+    if (ctx && (isChart || st.mode === 'claude' && (st.key || st.proxy)))
+      extra.screenshot = captureChart(ctx);
+    if (isChart) extra.chartSnapshotMode = true;
+    const typing = push('bot', '…', 'typing');
+    let out, showedCore = false;
     try {
       if (!ctx && isBrief) out = AI.briefLocal(null, extra);
-      else if (!ctx) out = 'Aún no hay un gráfico con velas cargadas. Abre la pestaña **Gráfico**, espera a que cargue y pregúntame de nuevo.';
-      else if (isVisual && st.vision !== 'off' && window.CCTFreeVision) {
-        try {
-          const response = await window.CCTFreeVision.analyze({
-            ctx, screenshot: extra.screenshot, model: st.vision,
-            onProgress: message => { if (typing.isConnected) typing.textContent = message; }
-          });
-          out = '**' + ctx.symbol + ' · ' + ctx.interval + ' · ' + response.model + '**\n\n' + response.text;
-        } catch (e) {
-          const message = String(e && e.message || e);
-          // El modelo pequeño puede contestar en inglés o repetir texto.
-          // Jamás mostrar esa respuesta: usar un resumen español verificable.
-          out = AI.visualSummaryLocal(ctx) +
-            '\n\n*Lectura basada en los datos del gráfico' +
-            (/respuesta visual no fue fiable/i.test(message) ? '; el modelo visual no distinguió detalles suficientes.' :
-              '; la visión gratuita no pudo completarse: ' + message.slice(0, 110) + '.') + '*';
+      else if (!ctx) out = 'Todavía no hay velas cargadas. Abre **Gráfico** y vuelve a intentarlo.';
+      else if (isChart) {
+        // El análisis contrastable siempre se calcula del MISMO tramo visible,
+        // sin consultar RSI/MACD/Bollinger a menos que se hayan activado.
+        out = analyst.answer(q, ctx);
+        // Mostrar ya el resultado calculado, sin bloquear la lectura mientras
+        // el modelo visual descarga sus pesos o procesa la captura.
+        typing.classList.remove('typing'); typing.innerHTML = md(out); showedCore = true;
+        if (st.vision !== 'off' && window.CCTFreeVision && extra.screenshot) {
+          const progress = document.createElement('p');
+          progress.className = 'ai-vision-progress';
+          progress.textContent = 'Comprobando detalles visuales…';
+          typing.appendChild(progress);
+          try {
+            const response = await window.CCTFreeVision.analyze({
+              ctx,screenshot:extra.screenshot,model:st.vision,question:q,
+              onProgress: message => {
+                if (typing.isConnected) progress.textContent = String(message || 'Analizando el gráfico…');
+              }
+            });
+            const observation = String(response.text || '').trim();
+            // La visión es una observación auxiliar, no puede sustituir datos
+            // ni incluir precios / niveles inventados.
+            if (uniqueVisualDetail(observation, ctx, analyst))
+              out += '\n\n**Detalle visual orientativo (' + response.model + '):** ' + observation;
+          } catch (e) {
+            // Fallo de GPU/modelo/idioma no borra el análisis del gráfico.
+            out += '\n\n*La IA visual no pudo aportar detalles fiables; el análisis anterior utiliza los datos del gráfico.*';
+          }
         }
       }
-      else if (useClaude && AI.intent(q) !== 'off') { try { out = await AI.askClaude({key: st.key, model: st.model, proxy: st.proxy}, ctx, st.hist, q, extra); } catch (e) { out = isVisual ? 'No pude completar la lectura visual: ' + (e.message || 'No se pudo consultar a Claude') + '\n\n' + AI.visualSummaryLocal(ctx) : 'Atención: ' + (e.message || 'No se pudo consultar a Claude') + '\n\nTe respondo con el análisis local:\n\n' + AI.answerLocal(q, ctx, extra); } }
-      else out = isVisual ? AI.visualSummaryLocal(ctx) : AI.answerLocal(q, ctx, extra);
-    } catch (e) { out = 'Ocurrió un error al analizar: ' + (e.message || e); }
-    // Una respuesta externa en inglés nunca se muestra al usuario.
+      else if (st.mode === 'claude' && (st.key || st.proxy) && AI.intent(q) !== 'off') {
+        try {
+          out = await AI.askClaude({key:st.key,model:st.model,proxy:st.proxy},ctx,st.hist,q,extra);
+        } catch (e) {
+          out = 'No se pudo consultar el modelo remoto. Respuesta local:\n\n' + AI.answerLocal(q,ctx,extra);
+        }
+      } else out = AI.answerLocal(q,ctx,extra);
+    } catch (e) { out = 'No se pudo completar el análisis: ' + (e.message || e); }
     if (mostlyEnglish(out)) out = ctx
-      ? (isVisual ? AI.visualSummaryLocal(ctx) : AI.answerLocal(q, ctx, extra))
-      : (isBrief ? AI.briefLocal(null, extra) : 'No pude obtener una respuesta en español. Intenta nuevamente.');
-    typing.remove(); push('bot', out); st.hist.push({role: 'user', text: q}, {role: 'assistant', text: out}); if (st.hist.length > 16) st.hist.splice(0, 2);
-    st.busy = false; $('#aiSend').disabled = false; badge(); $('#aiInput').focus({preventScroll: true});
+      ? (isChart ? analyst.answer(q,ctx) : AI.answerLocal(q,ctx,extra))
+      : 'No pude obtener una respuesta en español. Vuelve a intentarlo.';
+    if (showedCore) typing.innerHTML = md(out);
+    else { typing.remove(); push('bot', out); }
+    st.hist.push({role:'user',text:q},{role:'assistant',text:out});
+    if(st.hist.length>16)st.hist.splice(0,2);
+    st.busy = false; $('#aiSend').disabled = false; badge();
+    $('#aiInput').focus({preventScroll:true});
   }
   function init() {
     root = document.getElementById('aiRoot'); if (!root) return; shell();

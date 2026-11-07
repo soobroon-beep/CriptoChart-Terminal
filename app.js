@@ -4871,8 +4871,85 @@ window.CCT_getAIContext = function () {
     label: String(d.label || d.text || '').slice(0, 100),
     points: Array.isArray(d.pts) ? d.pts.length : 0
   }));
+  // Datos exclusivamente del tramo que aparece en pantalla: zoom, desplazamiento,
+  // indicadores no ocultos y sus valores alineados con la última vela visible.
+  // La captura y estos valores corresponden al mismo símbolo y marco temporal.
+  const endI = geo && Number.isFinite(geo.end) ?
+    Math.min(n - 1, Math.max(0, Math.floor(geo.end - .5))) : n - 1;
+  const startI = geo && Number.isFinite(geo.start) ?
+    Math.min(endI, Math.max(0, Math.ceil(geo.start - .5))) : Math.max(0, endI - 119);
+  const chartActive = Object.keys(state.indicators).filter(k => stdOn(k));
+  const chartAt = a => a && Number.isFinite(a[endI]) ? a[endI] : null;
+  const chartValues = {};
+  for (const [k, arr] of Object.entries({
+    ema20: ind.ema20, ema50: ind.ema50, sma200: ind.sma200, wma20: ind.wma20,
+    vwap: ind.vwap, rsi: ind.rsi, obv: ind.obv, adx: ind.adx, atr: ind.atr
+  })) if (chartActive.includes(k)) {
+    const v = chartAt(arr); if (v != null) chartValues[k] = v;
+  }
+  if (chartActive.includes('bollinger')) {
+    const upper = chartAt(ind.bbU), lower = chartAt(ind.bbL);
+    if (upper != null) chartValues.bbUpper = upper;
+    if (lower != null) chartValues.bbLower = lower;
+  }
+  if (chartActive.includes('supertrend')) {
+    const dir = chartAt(ind.stDir);
+    if (dir != null) chartValues.supertrend = -dir;
+  }
+  if (chartActive.includes('macd') && ind.macd) {
+    const m = ind.macd;
+    const v = chartAt(m.hist || m.histogram);
+    if (v != null) chartValues.macdHist = v;
+  }
+  const chartPine = activePine().filter(p => !p.hide && pineVisibleOn(p, state.interval))
+    .map(p => {
+      const r = pineRes[p.sid], sc = scripts.find(x => x.id === p.sid);
+      if (!r || !r.ok) return null;
+      const plots = (r.plots || []).slice(0, 10).map(pl => ({
+        title: String(pl.title || '').slice(0, 40), value: chartAt(pl.values)
+      }));
+      const table = []; if (endI >= n - 2) for (const t of (r.tables || []).slice(0, 2)) {
+        for (const x of (t.cells || []).slice(0, 10))
+          if (x.text != null) table.push(String(x.text).slice(0, 50));
+      }
+      return {name: String(sc && sc.name || r.meta && r.meta.title || 'Script').slice(0, 55),
+        plots, table, pane: p.pane || (r.meta && r.meta.overlay ? 'main' : 'bottom')};
+    }).filter(Boolean).slice(0, 8);
+  let chartNova = null;
+  if (ind.nn && chartActive.some(k => k.startsWith('nn'))) {
+    const r = ind.nn;
+    const sg = (r.signals || []).filter(s => s.i >= startI && s.i <= endI).slice(-1)[0];
+    chartNova = {
+      top: chartAt(r.emaTop), bot: chartAt(r.emaBot), base: chartAt(r.emaBase),
+      osc: chartAt(r.osc), flux: chartAt(r.flux), adx: chartAt(r.adx),
+      last: sg ? {side: sg.side, ago: endI - sg.i, price: sg.price, score: sg.score} : null
+    };
+  } else if (endI === n - 1 && chartActive.some(k => k.startsWith('nn'))) chartNova = nova;
+  let chartVp = null;
+  if (stdOn('vpvr') && window.CCTIndicators && CCTIndicators.visibleRangeProfile) {
+    try { const z = CCTIndicators.visibleRangeProfile(candles, startI, endI,
+      {rows: sp('vpvr', 'rows'), valueArea: sp('vpvr', 'va')});
+      if (z) chartVp = {poc:z.pocPrice, val:z.val, vah:z.vah}; } catch {}
+  } else if (stdOn('nnVP') && ind.vp) chartVp = {poc:ind.vp.pocPrice};
+  const chartDrawings = drawings.filter(d => {
+    if (d.type === 'horizontal' || d.type === 'hray' || d.type === 'brush') return true;
+    const times = [d.a, d.b, d.c].filter(Boolean).map(p => p.t).filter(Number.isFinite);
+    return !times.length || (Math.min(...times) <= candles[endI].t &&
+      Math.max(...times) >= candles[startI].t);
+  }).map(d => {
+    const raw = getDrawings().find(x => x.type === d.type && String(x.label || x.text || '') === d.label &&
+      x.a && d.a && x.a.t === d.a.t && x.a.p === d.a.p);
+    return {...d, sp: raw && Number.isFinite(raw.sp) ? raw.sp : null};
+  });
+  const chart = {
+    historical: endI < n - 2, firstIndex: startI, lastIndex: endI,
+    timeStart: candles[startI].t, timeEnd: candles[endI].t,
+    candles: candles.slice(startI, endI + 1).map(c => ({t:c.t,o:c.o,h:c.h,l:c.l,c:c.c,v:c.v})),
+    active: chartActive, names: chartActive.map(k => stdName(k) || k),
+    values: chartValues, pine: chartPine, nova: chartNova, vp: chartVp, drawings: chartDrawings
+  };
   const tk = tickers[state.symbol];
-  return {nova, symbol: symOf(state.symbol), exchange: exName(state.symbol), interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine, drawings};
+  return {nova, symbol: symOf(state.symbol), exchange: exName(state.symbol), interval: state.interval, candles: candles.slice(-400).map(c => ({t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v})), change24h: tk ? Number(tk.priceChangePercent) : null, active, values, zones, vp, pine, drawings, chart};
 };
 /* Laboratorio IA: puente mínimo al motor existente, sin cambiar indicadores originales. */
 window.CCTAILab = Object.freeze({

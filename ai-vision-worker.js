@@ -75,7 +75,7 @@ async function infer({id, which, screenshot, prompt}) {
     report(id, 'Interpretando la captura de tu gráfico…');
     const img = await state.T.RawImage.fromURL(screenshot);
     // Reducir imagen para evitar consumo excesivo de memoria con gráficos ultrapanorámicos.
-    const limit = which === 'qwen' ? 896 : 768;
+    const limit = which === 'qwen' ? 1152 : 896; // conserva más detalle de paneles y dibujos
     const factor = Math.min(1, limit / Math.max(img.width, img.height));
     const picture = factor < 1 ? await img.resize(Math.max(1, Math.round(img.width * factor)),
       Math.max(1, Math.round(img.height * factor))) : img;
@@ -88,7 +88,7 @@ async function infer({id, which, screenshot, prompt}) {
     const formatted = state.processor.apply_chat_template(messages,
       {tokenize:false,add_generation_prompt:true});
     const inputs = await state.processor(formatted, [picture], {return_tensors:'pt'});
-    const output = await state.model.generate({...inputs, max_new_tokens:170, do_sample:false});
+    const output = await state.model.generate({...inputs, max_new_tokens:which === 'qwen' ? 210 : 135, do_sample:false});
     const inputLength = inputs.input_ids.dims[inputs.input_ids.dims.length - 1];
     const onlyNew = output.slice(null, [inputLength, null]);
     const decoded = await state.processor.batch_decode(onlyNew, {skip_special_tokens:true});
