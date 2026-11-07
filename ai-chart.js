@@ -11,14 +11,14 @@ const safe=s=>String(s||'').replace(/[\r\n*<>]/g,'').slice(0,54);
 function isChartQuestion(s){
  const q=normal(s);
  if(!q||/\b(brief|noticias?|calendario|evento economico|fomc|fed|inflacion|crear indicador|generar indicador|codigo pine)\b/.test(q))return false;
- return /\b(long|short|entrar|entrada|operar|comprar|vender|trade|trading|scalp|stop|riesgo|volumen|poc|perfil|soportes?|resistencias?|ema|medias?|nube|tendencia|oscilador|indicadores?|senal|dibujos?|zonas?|velas?|nexus|grafico|alcista|bajista|ruptura|rebote|patrones?)\b|como (?:lo )?ves|que opinas|analiza|analizame|que ves/.test(q);
+ return /\b(long|short|entrar|entrada|operar|comprar|vender|trade|trading|scalp|stop|riesgo|volumen|poc|perfil|soportes?|resistencias?|emas?|medias?|nube|tendencia|oscilador|indicadores?|senal|dibujos?|zonas?|velas?|nexus|grafico|alcista|bajista|ruptura|rebote|patrones?)\b|como (?:lo )?ves|que opinas|analiza|analizame|que ves/.test(q);
 }
 function kind(q){
  const t=normal(q);
  if(/\b(long|short|entrar|entrada|comprar|vender|operar|trade|trading|scalp|stop|riesgo)\b|buena zona/.test(t))return 'trade';
  if(/soporte|resistencia|niveles?|zonas?/.test(t))return 'levels';
  if(/volumen|poc|perfil/.test(t))return 'volume';
- if(/\bema\b|nube|medias? movil/.test(t))return 'ema';
+ if(/\bemas?\b|nube|medias? movil/.test(t))return 'ema';
  if(/oscilador|nexus|indicadores?|senal/.test(t))return 'indicators';
  return 'overview';
 }
