@@ -26,7 +26,7 @@ for(let x=20;x<W-30;x+=2) {
  rect(x,y,2,2,80,177,200);
 }
 const dataUrl='data:image/png;base64,'+PNG.sync.write(png).toString('base64');
-const decoded=await RawImage.read(dataUrl);
+const decoded=await RawImage.fromBlob(new Blob([Buffer.from(dataUrl.split(',')[1],'base64')],{type:'image/png'}));
 assert.equal(decoded.width,W);
 assert.equal(decoded.height,H);
 assert.ok(decoded.data.length>=W*H*3);
