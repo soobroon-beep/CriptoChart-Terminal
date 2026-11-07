@@ -4887,6 +4887,15 @@ window.CCT_getAIContext = function () {
   })) if (chartActive.includes(k)) {
     const v = chartAt(arr); if (v != null) chartValues[k] = v;
   }
+  if (chartActive.includes('bollinger')) {
+    const upper = chartAt(ind.bbU), lower = chartAt(ind.bbL);
+    if (upper != null) chartValues.bbUpper = upper;
+    if (lower != null) chartValues.bbLower = lower;
+  }
+  if (chartActive.includes('supertrend')) {
+    const dir = chartAt(ind.stDir);
+    if (dir != null) chartValues.supertrend = -dir;
+  }
   if (chartActive.includes('macd') && ind.macd) {
     const m = ind.macd;
     const v = chartAt(m.hist || m.histogram);
