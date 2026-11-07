@@ -85,7 +85,7 @@
     if (words.length>=18 && new Set(words).size / words.length < .54) return null;
     if (words.length >= 22 && new Set(words).size / words.length < .47) return null;
     // «El gráfico muestra la tendencia del precio» no es un análisis del gráfico.
-    const evidence = /\b(bajista|alcista|baja|bajan|cae|caen|cayo|caida|descenso|retroceso|rompe|rompio|ruptura|sube|suben|subida|rebote|rebotan|lateral|laterales|consolidacion|nube|rectangulo|dibujad|marcad|linea|lineas|senal|flecha|volumen|poc|vela|velas|canal|zona|zonas|vela roja|vela verde)\b/i;
+    const evidence = /\b(arriba|abajo|bajista|alcista|baja|bajan|cae|caen|cayo|caida|descenso|retroceso|rompe|rompio|ruptura|sube|suben|subida|rebote|rebotan|lateral|laterales|consolidacion|nube|rectangulo|dibujad|marcad|linea|lineas|senal|flecha|volumen|poc|vela|velas|canal|zona|zonas|vela roja|vela verde)\b/i;
     const vague = /\b(el grafico muestra (?:la )?tendencia|muestra la tendencia del precio|el precio de la moneda|el par de divisas)\b/i;
     if (!evidence.test(norm) || (vague.test(norm) && sentences.length <= 1)) return null;
     return s.split(/\s+/).slice(0, 75).join(' ').trim();
