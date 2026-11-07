@@ -9,6 +9,7 @@ const LIBRARY_QWEN35 = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4
 const MODELS = Object.freeze({
   smol: 'HuggingFaceTB/SmolVLM-256M-Instruct',
   qwen: 'onnx-community/Qwen3-VL-2B-Instruct-ONNX',
+  qwen08: 'onnx-community/Qwen3.5-0.8B-ONNX',
   qwen35: 'huggingworld/Qwen3.5-2B-ONNX',
   qwen35pro: 'huggingworld/Qwen3.5-4B-ONNX'
 });
@@ -21,12 +22,12 @@ async function load(which, id) {
   if (loading) return loading;
   loading = (async () => {
     if (!MODELS[which]) throw Error('Modelo de visión desconocido.');
-    if ((which === 'qwen35' || which === 'qwen35pro' || which === 'qwen') &&
+    if ((which === 'qwen08' || which === 'qwen35' || which === 'qwen35pro' || which === 'qwen') &&
         (!self.navigator || !navigator.gpu)) {
       throw Error('Este equipo no tiene WebGPU disponible. El análisis de trading por datos sigue funcionando sin descargar un modelo.');
     }
     report(id, 'Preparando el motor abierto de visión…');
-    const T = await import(which === 'qwen35' || which === 'qwen35pro' ? LIBRARY_QWEN35 : LIBRARY);
+    const T = await import(which === 'qwen08' || which === 'qwen35' || which === 'qwen35pro' ? LIBRARY_QWEN35 : LIBRARY);
     const modelId = MODELS[which];
     const onProgress = info => {
       if (info && (info.status === 'progress' || info.status === 'downloading')) {
@@ -36,7 +37,7 @@ async function load(which, id) {
     };
     const processor = await T.AutoProcessor.from_pretrained(modelId, {progress_callback:onProgress});
     let model, device;
-    if (which === 'qwen35' || which === 'qwen35pro') {
+    if (which === 'qwen08' || which === 'qwen35' || which === 'qwen35pro') {
       if (typeof navigator.gpu.requestAdapter === 'function') {
         const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
         if (!adapter) throw Error('No hay un adaptador WebGPU disponible. Se conserva la lectura por datos.');
@@ -118,7 +119,7 @@ async function infer({id, which, screenshot, prompt}) {
         img.width < 100 || img.height < 80) throw Error('La captura llegó vacía o no pudo decodificarse.');
     report(id, 'PNG recibido: ' + img.width + ' × ' + img.height + ' píxeles. Preparando imagen…', 'load');
     // Reducir imagen para evitar consumo excesivo de memoria con gráficos ultrapanorámicos.
-    const limit = which === 'qwen35' ? 896 : which === 'qwen35pro' ? 1024 : which === 'qwen' ? 1024 : 768; // conserva más detalle de paneles y dibujos
+    const limit = which === 'qwen08' ? 768 : which === 'qwen35' ? 896 : which === 'qwen35pro' ? 1024 : which === 'qwen' ? 1024 : 768; // conserva más detalle de paneles y dibujos
     const factor = Math.min(1, limit / Math.max(img.width, img.height));
     const picture = factor < 1 ? await img.resize(Math.max(1, Math.round(img.width * factor)),
       Math.max(1, Math.round(img.height * factor))) : img;
@@ -128,7 +129,7 @@ async function infer({id, which, screenshot, prompt}) {
         {type:'text',text:String(prompt || 'Describe el gráfico visible en español brevemente.').slice(0, 1300)}
       ]
     }];
-    const isQwen35 = which === 'qwen35' || which === 'qwen35pro';
+    const isQwen35 = which === 'qwen08' || which === 'qwen35' || which === 'qwen35pro';
     const formatted = state.processor.apply_chat_template(messages,
       isQwen35 ? {add_generation_prompt:true,enable_thinking:false} : {tokenize:false,add_generation_prompt:true});
     // Qwen3.5 usa la firma processor(texto, imagen). Los modelos previos
@@ -151,7 +152,7 @@ async function infer({id, which, screenshot, prompt}) {
             }
           }
         }) : null;
-    const maxTokens = isQwen35 ? 90 : which === 'qwen' ? 110 : 80;
+    const maxTokens = which === 'qwen08' ? 110 : isQwen35 ? 105 : which === 'qwen' ? 110 : 80;
     const output = await state.model.generate({
       ...inputs, max_new_tokens:maxTokens, do_sample:false,
       ...(streamer ? {streamer} : {})
