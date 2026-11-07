@@ -7,6 +7,19 @@ const {join} = require('node:path');
 const vm = require('node:vm');
 const read = p => readFileSync(join(__dirname, '..', p), 'utf8');
 
+// Un Worker con promesas asíncronas puede completar después de varias
+// vueltas del event loop. Esperar el mensaje final en lugar de contar microtasks.
+async function awaitWorkerFinish(messages, timeoutMs=1500) {
+  const start=Date.now();
+  while (Date.now()-start<timeoutMs) {
+    const last=messages.find(x=>x.type==='result'||x.type==='error');
+    if(last)return last;
+    await new Promise(resolve=>setTimeout(resolve,5));
+  }
+  throw Error('Worker no terminó en la prueba: '+JSON.stringify(messages.slice(-8)));
+}
+
+
 test('cliente local captura solicitud, muestra progreso y quita indicadores inventados', async () => {
   const calls = [];
   class FakeURL { constructor(p, base) { this.href = base + p; } }
@@ -56,7 +69,7 @@ test('worker interpreta PNG mediante SmolVLM sin una clave API', async () => {
   vm.runInNewContext(source, {self,navigator:self.navigator,fakeImport:async()=>T});
   self.onmessage({data:{id:1,type:'analyze',which:'smol',
     screenshot:'data:image/png;base64,AAAA',prompt:'Describe'}});
-  for (let i = 0; i < 12; i++) await Promise.resolve();
+  await awaitWorkerFinish(posted);
   assert.equal(loaded[0].device,'wasm');
   assert.ok(posted.some(x=>x.type==='result' && /velas bajistas/.test(x.text)));
 });
@@ -71,7 +84,7 @@ test('worker permite Qwen3-VL únicamente con WebGPU', async () => {
   });
   self.onmessage({data:{id:2,type:'analyze',which:'qwen',
     screenshot:'data:image/png;base64,AAAA',prompt:'Describe'}});
-  for (let i = 0; i < 10; i++) await Promise.resolve();
+  await awaitWorkerFinish(posted);
   assert.ok(posted.some(x=>x.type==='error' && /WebGPU/.test(x.message)));
 });
 
@@ -165,7 +178,7 @@ test('Qwen3.5 2B carga el motor compatible y procesa imagen como indica el model
   vm.runInNewContext(source,{self,navigator:self.navigator,fakeImport:async()=>T});
   self.onmessage({data:{id:21,type:'analyze',which:'qwen35',
     screenshot:'data:image/png;base64,AAAA',prompt:'Analiza el soporte de las velas'}});
-  for(let i=0;i<18;i++)await Promise.resolve();
+  await awaitWorkerFinish(posted);
   assert.equal(loads.length,1);
   assert.equal(loads[0].id,'huggingworld/Qwen3.5-2B-ONNX');
   assert.equal(loads[0].opts.device,'webgpu');
@@ -192,7 +205,7 @@ test('Qwen3.5 4B usa modelo avanzado sin cargarlo en otros navegadores', async (
     {self,navigator:self.navigator,fakeImport:async()=>T});
   self.onmessage({data:{id:22,type:'analyze',which:'qwen35pro',
     screenshot:'data:image/png;base64,AAAA',prompt:'Describe el volumen'}});
-  for(let i=0;i<18;i++)await Promise.resolve();
+  await awaitWorkerFinish(posted);
   assert.equal(loads[0].id,'huggingworld/Qwen3.5-4B-ONNX');
   assert.ok(posted.some(x=>x.type==='result'));
 });
@@ -204,7 +217,7 @@ test('Qwen3.5 sin WebGPU falla antes de descargar pesos', async () => {
     {self,navigator:self.navigator,fakeImport:async()=>{fetched=true;return {}}});
   self.onmessage({data:{id:23,type:'analyze',which:'qwen35',
     screenshot:'data:image/png;base64,AAAA',prompt:'Analiza la gráfica'}});
-  for(let i=0;i<12;i++)await Promise.resolve();
+  await awaitWorkerFinish(posted);
   assert.equal(fetched,false);
   assert.ok(posted.some(x=>x.type==='error'&&/WebGPU/.test(x.message)));
 });

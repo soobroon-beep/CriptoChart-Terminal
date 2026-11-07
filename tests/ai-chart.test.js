@@ -65,3 +65,23 @@ test('el chat reconoce preguntas comunes y no interfiere con noticias ni briefin
 test('no inventa señal ni precio sin velas suficientes',()=>{
  assert.match(A.answer('¿Long o short?',{candles:[]}),/12 velas/);
 });
+
+test('distingue rebote breve dentro de caída visible fuerte',()=>{
+ const cs=Array.from({length:120},(_,i)=>{const p=i<96?90000-i*150:75600+(i-96)*23;
+   return {t:i*3600000,c:p,o:p+20,h:p+120,l:p-120,v:1000};});
+ const c=ctx(cs,{active:['volume'],nova:null,drawings:[],pine:[]});
+ const r=A.answer('Analiza el gráfico',c);
+ assert.match(r,/20 velas tienen sesgo \*\*alcista\*\*/);
+ assert.match(r,/contexto de 80 velas sigue \*\*bajista\*\*/);
+ assert.match(r,/rebote no confirma/);
+});
+test('la trayectoria dibujada no se confunde con un movimiento de mercado confirmado',()=>{
+ const c=ctx();
+ c.chart.drawings.push({type:'brush',brushPath:{
+   start:{t:c.chart.candles[50].t,p:1.22},
+   end:{t:c.chart.candles[75].t,p:1.38}
+ }});
+ const r=A.answer('Analiza el gráfico',c);
+ assert.match(r,/proyección hacia arriba/);
+ assert.match(r,/no una señal confirmada/);
+});

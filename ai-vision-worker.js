@@ -13,7 +13,7 @@ const MODELS = Object.freeze({
   qwen35pro: 'huggingworld/Qwen3.5-4B-ONNX'
 });
 let current = null, loading = null, active = false;
-const report = (id, message) => self.postMessage({id, type:'progress', message});
+const report = (id, message, stage = 'load') => self.postMessage({id, type:'progress', message, stage});
 const errText = e => String((e && e.message) || e || 'Error desconocido').slice(0, 300);
 
 async function load(which, id) {
@@ -37,6 +37,10 @@ async function load(which, id) {
     const processor = await T.AutoProcessor.from_pretrained(modelId, {progress_callback:onProgress});
     let model, device;
     if (which === 'qwen35' || which === 'qwen35pro') {
+      if (typeof navigator.gpu.requestAdapter === 'function') {
+        const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
+        if (!adapter) throw Error('No hay un adaptador WebGPU disponible. Se conserva la lectura por datos.');
+      }
       // Modelo Apache-2.0 de visión y lenguaje (NO requiere clave API).
       // No se descarga automáticamente en equipos sin WebGPU.
       if (!self.navigator || !navigator.gpu) throw Error(
@@ -94,10 +98,10 @@ async function infer({id, which, screenshot, prompt}) {
   active = true;
   try {
     const state = await load(which, id);
-    report(id, 'Interpretando la captura de tu gráfico…');
+    report(id, 'Procesando imagen, velas e indicadores…', 'inference');
     const img = await state.T.RawImage.fromURL(screenshot);
     // Reducir imagen para evitar consumo excesivo de memoria con gráficos ultrapanorámicos.
-    const limit = which === 'qwen35' || which === 'qwen35pro' ? 1024 : which === 'qwen' ? 1152 : 896; // conserva más detalle de paneles y dibujos
+    const limit = which === 'qwen35' ? 896 : which === 'qwen35pro' ? 1024 : which === 'qwen' ? 1024 : 768; // conserva más detalle de paneles y dibujos
     const factor = Math.min(1, limit / Math.max(img.width, img.height));
     const picture = factor < 1 ? await img.resize(Math.max(1, Math.round(img.width * factor)),
       Math.max(1, Math.round(img.height * factor))) : img;
@@ -109,13 +113,29 @@ async function infer({id, which, screenshot, prompt}) {
     }];
     const isQwen35 = which === 'qwen35' || which === 'qwen35pro';
     const formatted = state.processor.apply_chat_template(messages,
-      isQwen35 ? {add_generation_prompt:true} : {tokenize:false,add_generation_prompt:true});
+      isQwen35 ? {add_generation_prompt:true,enable_thinking:false} : {tokenize:false,add_generation_prompt:true});
     // Qwen3.5 usa la firma processor(texto, imagen). Los modelos previos
     // mantienen su propia ruta para no romper la compatibilidad existente.
     const inputs = isQwen35
       ? await state.processor(formatted, picture)
       : await state.processor(formatted, [picture], {return_tensors:'pt'});
-    const output = await state.model.generate({...inputs, max_new_tokens:isQwen35 ? 190 : which === 'qwen' ? 210 : 135, do_sample:false});
+        let emitted = 0, lastTick = 0;
+    const streamer = state.T.TextStreamer && state.processor.tokenizer
+      ? new state.T.TextStreamer(state.processor.tokenizer, {
+          skip_prompt:true, skip_special_tokens:true,
+          callback_function: part => {
+            emitted += typeof part === 'string' ? part.length : 0;
+            if (emitted >= lastTick + 48) {
+              lastTick = emitted;
+              report(id, 'Qwen está leyendo los detalles del gráfico…', 'inference');
+            }
+          }
+        }) : null;
+    const maxTokens = isQwen35 ? 120 : which === 'qwen' ? 160 : 110;
+    const output = await state.model.generate({
+      ...inputs, max_new_tokens:maxTokens, do_sample:false,
+      ...(streamer ? {streamer} : {})
+    });
     const inputLength = inputs.input_ids.dims[inputs.input_ids.dims.length - 1];
     const onlyNew = output.slice(null, [inputLength, null]);
     const decoded = await state.processor.batch_decode(onlyNew, {skip_special_tokens:true});

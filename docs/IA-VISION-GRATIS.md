@@ -28,6 +28,23 @@ El chat de IA admite preguntas como «¿Es buena zona para entrar en long o shor
 
 **Limitación de la visión:** SmolVLM-256M es demasiado pequeño para confiar en su lectura financiera. Qwen3.5 tiene mejor capacidad multimodal, pero **no es un modelo afinado específicamente para trading ni puede garantizar precisión o rentabilidad**. La comprensión de pantallas complejas y las recomendaciones basadas en imágenes pueden fallar. Por eso Vortex antepone el análisis por datos de las velas reales y muestra la visión solo como complemento. Qwen3.5 requiere WebGPU; la versión preliminar de Transformers.js también puede tener problemas en algunos navegadores.
 
+## Corrección del bloqueo de Qwen y pruebas (noviembre 2026)
+
+Si la aplicación mostraba «Interpretando la captura de tu gráfico…» sin terminar, el chat podía quedar ocupado hasta 8 minutos. Ahora el análisis técnico basado en las velas y los indicadores visibles se publica inmediatamente. La inferencia visual:
+
+- transcurre en un Web Worker independiente, de forma que **el chat sigue disponible** mientras procesa la imagen;
+- tiene botón **«Cancelar visión»** y corta una inferencia estancada tras 45 segundos sin progreso, o la operación completa tras 3 minutos;
+- muestra mensajes de progreso de descarga/procesamiento y, si el modelo falla, deja intacto el resultado por datos;
+- recibe la **captura PNG real de todo el lienzo** (velas, volumen, panel de oscilador y dibujos), además del símbolo, temporalidad y lista de indicadores visibles;
+- distingue una subida corta de un descenso pronunciado de las últimas 80 velas, y reconoce trayectorias dibujadas como **hipótesis**, no predicciones confirmadas.
+
+Pruebas automatizadas del proyecto en Node 22:
+\`node --test tests/ai-vision.test.js tests/ai-vision-timeouts.test.js tests/ai-ui-flow.test.js tests/ai-capture.test.js tests/ai-chart.test.js\`
+
+Estas verifican cancelación, límite de tiempo, fallo del Worker, capturas PNG, cambio de preguntas, datos técnicos y cálculos de tendencia; además hay un flujo de GitHub Actions dedicado a IA.
+
+**No confundir:** las pruebas de Node usan un motor de visión simulado. No prueban que Qwen3.5 haya descargado, cargado los pesos y completado la inferencia en la GPU específica del usuario. Las conexiones externas y la GPU son condiciones que se verifican en el equipo al ejecutar Vortex. No se promete que el modelo pequeño produzca una explicación correcta de cada gráfico.
+
 ## Privacidad y limitaciones
 
 - El PNG no se envía a un proveedor de inferencia remoto por esta ruta. **Sí** se descarga la librería desde jsDelivr y los pesos del modelo desde Hugging Face; son proveedores externos de distribución.

@@ -33,7 +33,12 @@ function facts(ctx){
  const pine=view.pine||ctx.pine||[],nova=view.nova||(active.some(k=>/^nn/.test(k))?ctx.nova:null);
  const vp=view.vp||(active.some(k=>k==='vpvr'||k==='nnVP')?ctx.vp:null);
  const n20=Math.min(20,n-1),n5=Math.min(5,n-1),change=pct(price,cs[n-1-n20].c),short=pct(price,cs[n-1-n5].c);
- const trend=change<-0.45?'bajista':change>0.45?'alcista':'lateral / transición';
+ const recentTrend=change<-0.45?'bajista':change>0.45?'alcista':'lateral / transición';
+ const contextBars=Math.min(80,n-1),contextChange=pct(price,cs[n-1-contextBars].c);
+ const contextTrend=contextChange<-1.8?'bajista':contextChange>1.8?'alcista':'lateral / transición';
+ // Una subida de 20 velas no borra una caída fuerte de toda la vista: el
+ // contexto pesa cuando su desplazamiento es considerable.
+ const trend=Math.abs(contextChange)>=2.5?contextTrend:recentTrend;
  const last20=cs.slice(-Math.min(20,n)),lo=Math.min(...last20.map(x=>x.l)),hi=Math.max(...last20.map(x=>x.h));
  const volumes=last20.map(x=>x.v).filter(ok),avgVol=volumes.length>7?volumes.reduce((a,b)=>a+b,0)/volumes.length:null;
  const volRatio=ok(cur.v)&&ok(avgVol)&&avgVol>0?cur.v/avgVol:null;
@@ -73,7 +78,7 @@ function facts(ctx){
  const osc=pine.find(x=>/nova.*oscil|oscil.*nova/i.test(x.name||''));
  const positions=draw.filter(x=>x&&(x.type==='long'||x.type==='short')&&x.a&&ok(x.a.p));
  const regions=draw.filter(x=>x&&x.type==='rect'&&x.a&&x.b&&ok(x.a.p)&&ok(x.b.p));
- return {ctx,view,cs,cur,price,active,vals,draw,pine,nova,vp,change,short,trend,lo,hi,volRatio,ema,cloud,supports,resistances,osc,positions,regions,historical:!!view.historical};
+ return {ctx,view,cs,cur,price,active,vals,draw,pine,nova,vp,change,short,trend,recentTrend,contextTrend,contextChange,contextBars,lo,hi,volRatio,ema,cloud,supports,resistances,osc,positions,regions,historical:!!view.historical};
 }
 function intro(f){return '**'+safe(f.ctx.symbol||'Gráfico')+' · '+safe(f.ctx.interval||'')+'**'+
  (f.historical?' (tramo histórico, no precio actual)':'')+': '+money(f.price)+'.';}
@@ -117,12 +122,27 @@ function drawing(f){
  if(p)out.push('Dibujo '+p.type.toUpperCase()+' con entrada '+money(p.a.p)+' (no es una orden ejecutada)');
  if(region){const low=Math.min(region.a.p,region.b.p),high=Math.max(region.a.p,region.b.p);
   out.push('precio '+(f.price<low?'debajo':f.price>high?'encima':'dentro')+' de tu rectángulo '+fmt(low)+'–'+fmt(high));}
+ const brush=f.draw.filter(x=>x&&x.type==='brush'&&x.brushPath&&x.brushPath.start&&x.brushPath.end)
+   .slice(-1)[0];
+ if(brush){
+   const first=brush.brushPath.start.p,last=brush.brushPath.end.p;
+   if(ok(first)&&ok(last)&&first>0){
+     const delta=pct(last,first);
+     out.push('tu trazo a mano dibuja una proyección '+(delta>0.2?'hacia arriba':delta<-.2?'hacia abajo':'lateral')+
+       ' (es un escenario dibujado, no una señal confirmada)');
+   } else out.push('hay un trazo a mano visible (no confirma por sí solo la dirección)');
+ }
  return out.length?out.join('; ')+'.':'';
 }
 function answer(q,ctx){
  const f=facts(ctx);if(!f)return 'Abre el gráfico y espera a que carguen por lo menos 12 velas.';
- const mode=kind(q),base=intro(f),direction='Las velas mostradas tienen estructura **'+f.trend+'**'+
-  ' ('+f.change.toFixed(1)+'% en '+Math.min(20,f.cs.length-1)+' velas).';
+ const mode=kind(q),base=intro(f),
+  direction = f.contextTrend !== f.recentTrend && Math.abs(f.contextChange) >= 2.5
+    ? 'Las últimas 20 velas tienen sesgo **'+f.recentTrend+'** ('+f.change.toFixed(1)+'%), pero el contexto de '+
+      f.contextBars+' velas sigue **'+f.contextTrend+'** ('+f.contextChange.toFixed(1)+'%). '+
+      'Un rebote no confirma por sí solo un cambio de tendencia.'
+    : 'Las velas mostradas tienen estructura **'+f.trend+'** ('+f.change.toFixed(1)+
+      '% en '+Math.min(20,f.cs.length-1)+' velas).';
  const ids=indicators(f),dr=drawing(f);
  if(mode==='trade'){
   const long=/\b(long|comprar|compra)\b/.test(normal(q)),short=/\b(short|vender|venta)\b/.test(normal(q));
