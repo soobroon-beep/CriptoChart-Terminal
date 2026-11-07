@@ -29,9 +29,22 @@
       'Dibujos visibles registrados: ' + JSON.stringify(d).slice(0, 1000)
     ].join(' ');
   }
+  function promptSmol(ctx) {
+    const active = (ctx.active || []).map(short).slice(0, 12).join(', ') || 'ninguno';
+    return 'Responde EXCLUSIVAMENTE en español. Mira esta imagen de un gráfico de ' +
+      short(ctx.symbol) + ' en ' + short(ctx.interval) + '. ' +
+      'Describe en dos frases concretas si las últimas velas suben, bajan o están laterales, ' +
+      'y qué señalan las líneas, zonas o dibujos que puedas distinguir. ' +
+      'No repitas frases ni digas solamente que el gráfico muestra una tendencia. ' +
+      'No inventes precios ni menciones indicadores que no estén activados. ' +
+      'Indicadores activos: ' + active + '.';
+  }
   function cleanResponse(raw, ctx) {
-    let s = String(raw || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    // Un modelo pequeño puede atribuir a la captura un indicador no activado.
+    let s = String(raw || '').replace(/<[^>]*>/g, ' ')
+      .replace(/(?:<\|[^>]+\|>|\[\/?INST\]|###\s*(?:Assistant|Usuario))/gi, ' ')
+      .replace(/\s+/g, ' ').trim();
+    if (!s) return null;
+    // Los modelos pequeños pueden mencionar indicadores que NO se muestran.
     const shown = ((ctx.active || []).join(' ') + ' ' +
       (ctx.pine || []).map(x => x.name || '').join(' ')).toLowerCase();
     const tags = [
@@ -45,7 +58,33 @@
         .filter(sentence => !tag.pattern.test(sentence))
         .join(' ').trim();
     }
-    return s.split(/\s+/).slice(0, 85).join(' ').trim();
+    if (!s) return null;
+    // La imagen no debe terminar exponiendo una respuesta en inglés u otro idioma.
+    // No es traducción automática: se descarta y se usa el resumen basado en datos.
+    const norm = s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const english = (norm.match(/\b(the|chart|shows|price|currency|pair|shows|trend|this|that|which|with|from|going|there|and|market|candlesticks|drawing|zone|support|resistance|rising|falling|downward|upward|clearly|current)\b/g) || []).length;
+    const spanish = (norm.match(/\b(el|la|los|las|un|una|de|del|en|por|con|se|y|que|esta|son|muestra|precio|grafico|velas|tendencia|bajista|alcista|zona|dibujada|sube|baja|cae|lineas|senal|fuerte|descenso|caida|movimiento)\b/g) || []).length;
+    if (spanish < 2 || (english >= 3 && english >= spanish * 0.65)) return null;
+    // Rechazar frases repetidas o paráfrasis casi idénticas como «The chart shows...».
+    const sentences = s.split(/(?<=[.!?])\s+/).filter(Boolean);
+    const canon = t => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^\p{L}\p{N} ]/gu,'').split(/\s+/).filter(Boolean);
+    for (let i = 0; i < sentences.length; i++) {
+      for (let j = i + 1; j < sentences.length; j++) {
+        const a = new Set(canon(sentences[i])), b = new Set(canon(sentences[j]));
+        if (a.size >= 5 && b.size >= 5) {
+          const common = [...a].filter(w => b.has(w)).length;
+          if (common / Math.min(a.size,b.size) > .82) return null;
+        }
+      }
+    }
+    const words = canon(s);
+    if (words.length >= 22 && new Set(words).size / words.length < .47) return null;
+    // «El gráfico muestra la tendencia del precio» no es un análisis del gráfico.
+    const evidence = /\b(bajista|alcista|baja|bajan|cae|caen|cayo|caida|descenso|retroceso|rompe|rompio|ruptura|sube|suben|subida|rebote|rebotan|lateral|laterales|consolidacion|nube|rectangulo|dibujad|marcad|linea|lineas|senal|flecha|volumen|poc|vela|velas|canal|zona|zonas|vela roja|vela verde)\b/i;
+    const vague = /\b(el grafico muestra (?:la )?tendencia|muestra la tendencia del precio|el precio de la moneda|el par de divisas)\b/i;
+    if (!evidence.test(norm) || (vague.test(norm) && sentences.length <= 1)) return null;
+    return s.split(/\s+/).slice(0, 75).join(' ').trim();
   }
   function getWorker() {
     if (worker) return worker;
@@ -62,7 +101,7 @@
         if (m.type === 'error') current.reject(Error(m.message || 'Error al analizar la captura'));
         else {
           const text = cleanResponse(m.text, current.ctx);
-          if (!text) current.reject(Error('El modelo produjo una lectura vacía o mencionó indicadores no activos.'));
+          if (!text) current.reject(Error('La respuesta visual no fue fiable, estaba repetida o no estaba en español.'));
           else current.resolve({text,model:label(m.which),device:m.device});
         }
       }
@@ -93,7 +132,7 @@
       }, 8 * 60 * 1000);
       job = {id,resolve,reject,onProgress,ctx,timer};
       if (typeof onProgress === 'function') onProgress('Iniciando ' + label(model) + ' en tu dispositivo…');
-      try { w.postMessage({id,type:'analyze',which:model,screenshot,prompt:prompt(ctx)}); }
+      try { w.postMessage({id,type:'analyze',which:model,screenshot,prompt:model === 'smol' ? promptSmol(ctx) : prompt(ctx)}); }
       catch (e) { clearTimeout(timer); job = null; reject(e); }
     });
   }

@@ -397,7 +397,8 @@ FORMATO: Markdown simple (negritas, listas, ###). Máximo ~350 palabras salvo qu
     const cs = ctx.candles, n = cs.length, latest = cs[n - 1], price = latest.c;
     if (!Number.isFinite(price) || price <= 0) return 'El precio del gráfico no está disponible todavía.';
     const change = (from, to) => Number.isFinite(from) && from > 0 ? (to - from) / from * 100 : 0;
-    const delta = change(cs[n - 12].c, price);
+    // Contexto de hasta 36 velas: evita llamar lateral a un gráfico tras una caída fuerte.
+    const delta = change(cs[n - 1 - Math.min(35, n - 1)].c, price);
     const shortMove = change(cs[n - 5].c, price);
     const trend = delta < -1 ? 'presión bajista marcada' : delta < -.25 ? 'sesgo bajista' :
       delta > 1 ? 'impulso alcista marcado' : delta > .25 ? 'sesgo alcista' : 'movimiento lateral';
