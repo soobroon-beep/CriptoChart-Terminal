@@ -52,7 +52,7 @@ test('worker interpreta PNG mediante SmolVLM sin una clave API', async () => {
     RawImage:{fromURL:async()=>({width:400,height:250})}
   };
   const self = {postMessage:x=>posted.push(x),navigator:{}};
-  const source = read('ai-vision-worker.js').replace('await import(LIBRARY)', 'await fakeImport()');
+  const source = read('ai-vision-worker.js').replace(/await import\([^\n]+\)/, 'await fakeImport()');
   vm.runInNewContext(source, {self,navigator:self.navigator,fakeImport:async()=>T});
   self.onmessage({data:{id:1,type:'analyze',which:'smol',
     screenshot:'data:image/png;base64,AAAA',prompt:'Describe'}});
@@ -64,7 +64,7 @@ test('worker interpreta PNG mediante SmolVLM sin una clave API', async () => {
 test('worker permite Qwen3-VL únicamente con WebGPU', async () => {
   const posted = [];
   const self = {postMessage:x=>posted.push(x),navigator:{}};
-  vm.runInNewContext(read('ai-vision-worker.js').replace('await import(LIBRARY)', 'await fakeImport()'), {
+  vm.runInNewContext(read('ai-vision-worker.js').replace(/await import\([^\n]+\)/, 'await fakeImport()'), {
     self,navigator:self.navigator,fakeImport:async()=>({
       AutoProcessor:{from_pretrained:async()=>({})}
     })
@@ -141,4 +141,70 @@ test('acepta explicación visual específica en español, sin indicadores que no
   })).text;
   assert.match(text,/velas caen con fuerza/);
   assert.doesNotMatch(text,/MACD|The chart/);
+});
+
+
+test('Qwen3.5 2B carga el motor compatible y procesa imagen como indica el modelo', async () => {
+  const posted=[], loads=[], processed=[];
+  const processor=(formatted,image)=>{processed.push({formatted,image});return {input_ids:{dims:[1,8]}}};
+  processor.apply_chat_template=(messages,opts)=>{
+    assert.ok(messages[0].content.some(x=>x.type==='image'));
+    assert.equal(opts.add_generation_prompt,true);
+    return 'PROMPT MULTIMODAL';
+  };
+  processor.batch_decode=()=>['Las últimas velas bajan y se observa una zona marcada.'];
+  const T={
+    AutoProcessor:{from_pretrained:async()=>processor},
+    Qwen3_5ForConditionalGeneration:{from_pretrained:async(id,opts)=>{
+      loads.push({id,opts});return {generate:async()=>({slice:()=>({})})};
+    }},
+    RawImage:{fromURL:async()=>({width:1100,height:900,resize:async(w,h)=>({width:w,height:h})})}
+  };
+  const self={navigator:{gpu:{}},postMessage:x=>posted.push(x)};
+  const source=read('ai-vision-worker.js').replace(/await import\([^\n]+\)/, 'await fakeImport()');
+  vm.runInNewContext(source,{self,navigator:self.navigator,fakeImport:async()=>T});
+  self.onmessage({data:{id:21,type:'analyze',which:'qwen35',
+    screenshot:'data:image/png;base64,AAAA',prompt:'Analiza el soporte de las velas'}});
+  for(let i=0;i<18;i++)await Promise.resolve();
+  assert.equal(loads.length,1);
+  assert.equal(loads[0].id,'huggingworld/Qwen3.5-2B-ONNX');
+  assert.equal(loads[0].opts.device,'webgpu');
+  assert.equal(loads[0].opts.dtype.decoder_model_merged,'q4');
+  assert.equal(processed.length,1);
+  assert.ok(processed[0].image && !Array.isArray(processed[0].image));
+  assert.ok(posted.some(x=>x.type==='result'&&x.which==='qwen35'));
+});
+
+test('Qwen3.5 4B usa modelo avanzado sin cargarlo en otros navegadores', async () => {
+  const posted=[],loads=[];
+  const processor=()=>({input_ids:{dims:[1,6]}});
+  processor.apply_chat_template=()=> 'PROMPT';
+  processor.batch_decode=()=>['Se observan velas bajistas y una zona marcada.'];
+  const T={
+    AutoProcessor:{from_pretrained:async()=>processor},
+    Qwen3_5ForConditionalGeneration:{from_pretrained:async(id,opt)=>{
+      loads.push({id,opt});return {generate:async()=>({slice:()=>({})})};
+    }},
+    RawImage:{fromURL:async()=>({width:640,height:360})}
+  };
+  const self={navigator:{gpu:{}},postMessage:x=>posted.push(x)};
+  vm.runInNewContext(read('ai-vision-worker.js').replace(/await import\([^\n]+\)/, 'await fakeImport()'),
+    {self,navigator:self.navigator,fakeImport:async()=>T});
+  self.onmessage({data:{id:22,type:'analyze',which:'qwen35pro',
+    screenshot:'data:image/png;base64,AAAA',prompt:'Describe el volumen'}});
+  for(let i=0;i<18;i++)await Promise.resolve();
+  assert.equal(loads[0].id,'huggingworld/Qwen3.5-4B-ONNX');
+  assert.ok(posted.some(x=>x.type==='result'));
+});
+
+test('Qwen3.5 sin WebGPU falla antes de descargar pesos', async () => {
+  const posted=[];let fetched=false;
+  const self={navigator:{},postMessage:x=>posted.push(x)};
+  vm.runInNewContext(read('ai-vision-worker.js').replace(/await import\([^\n]+\)/,'await fakeImport()'),
+    {self,navigator:self.navigator,fakeImport:async()=>{fetched=true;return {}}});
+  self.onmessage({data:{id:23,type:'analyze',which:'qwen35',
+    screenshot:'data:image/png;base64,AAAA',prompt:'Analiza la gráfica'}});
+  for(let i=0;i<12;i++)await Promise.resolve();
+  assert.equal(fetched,false);
+  assert.ok(posted.some(x=>x.type==='error'&&/WebGPU/.test(x.message)));
 });
