@@ -169,7 +169,8 @@
           if (!blocked) {
             const tryS = side => { const L = side === 'long' ? spec.entry.long : spec.entry.short; return L.length && L.every(cd => condOk(cd, i, C, ctx)); };
             const mk = side => ({type: 'enter', side, atr: atrS[i], reason: entryReason(side), ctx: {trend: isNum(ema200[i]) ? (c.c > ema200[i] ? 'alcista' : 'bajista') : 'sin dato', vol: ap == null ? 'sin dato' : ap < .3 ? 'baja' : ap < .8 ? 'media' : 'alta', hour: hr}});
-            if (spec.sides !== 'short' && tryS('long')) pend = mk('long'); else if (spec.sides !== 'long' && tryS('short')) pend = mk('short');
+            const sd = (spec.sides !== 'short' && tryS('long')) ? 'long' : (spec.sides !== 'long' && tryS('short')) ? 'short' : null;
+            if (sd) { const why = opts.gate ? opts.gate(c.t, sd) : null; if (why) { if (avoid.length < 400 && i >= tradeFrom) avoid.push([c.t, 'Riesgo global: ' + why, sd]); } else pend = mk(sd); } // gate: veto del módulo de riesgo independiente (paper trading)
           } else if (avoid.length < 400 && i >= tradeFrom) { const w = wouldEnter(i); if (w) avoid.push([c.t, f.minVolRatio && !(volR[i] >= f.minVolRatio) ? 'Volumen por debajo del mínimo' : (f.minAtrPct && !(ap >= f.minAtrPct)) || (f.maxAtrPct && !(ap <= f.maxAtrPct)) ? 'Volatilidad fuera de rango' : 'Fuera del horario permitido', w]); }
         } else if (avoid.length < 400 && i >= tradeFrom) { const w = wouldEnter(i); if (w) avoid.push([c.t, halted ? 'Bot detenido por límite de drawdown' : 'Límite de pérdida diaria alcanzado', w]); }
       }
