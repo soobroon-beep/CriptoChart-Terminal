@@ -24,7 +24,7 @@
     let ai = C.findIndex(c => c.t >= s.anchorT); if (ai < 0) return {changed: false, newTrades: 0}; // aún no cerró ninguna vela después del inicio
     if (ai < 300 && need > CAP) { const na = C[Math.min(C.length - 1, 300)].t; s.gaps.push({from: s.anchorT, to: na, why: 'Hueco de datos: la app estuvo cerrada más tiempo del que se puede recalcular'}); s.open = null; s.anchorT = na; ai = C.findIndex(c => c.t >= na); }
     const ropts2 = ropts && ropts.user ? ropts.user : null, sp = clone(spec); sp.risk.capital = s.cash;
-    const res = B.backtest(C, sp, {nova: ropts && ropts.nova, user: ropts2 || undefined, tradeFrom: s.halted ? C.length : ai, peak: s.peak});
+    const res = B.backtest(C, sp, {nova: ropts && ropts.nova, user: ropts2 || undefined, tradeFrom: s.halted ? C.length : ai, peak: s.peak, gate: ropts && ropts.gate});
     const oldAnchor = s.anchorT, closed = res.trades.filter(t => !t.open), openT = res.trades.find(t => t.open); let h = s.ledger.length ? s.ledger[s.ledger.length - 1].h : '0';
     for (const t of closed) { h = fnv(h + core(t)); s.ledger.push({n: s.ledger.length + 1, side: t.side, entryT: t.entryT, exitT: t.exitT, entry: t.entry, exit: t.exit, qty: t.qty, sl: t.sl, tp: t.tp, net: t.net, fees: t.fees, r: t.r, bars: t.bars, why: t.why, reasonIn: t.reasonIn, ctx: t.ctx, h}); s.cash += t.net; }
     if (closed.length) { const lastX = closed[closed.length - 1].exitT; for (const p of res.equity) if (p.t <= lastX && p.e > s.peak) s.peak = p.e; s.anchorT = lastX; }
