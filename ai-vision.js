@@ -8,23 +8,20 @@
   const short = s => String(s || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 100);
   // Prompt visual conciso: Qwen recibe los píxeles reales; los cálculos
   // de niveles precisos los aporta el analista técnico de Vortex.
+  // Pregunta visual reducida a tareas comprobables: dirección y volumen.
+  // Los niveles, EMAs, POC y entradas se calculan en CCTChartAnalyst a partir
+  // de OHLCV y dibujos reales. Pedirle al modelo ligero que deduzca todo a la
+  // vez empeoraba su precisión (demostrado con dos gráficos opuestos).
   function prompt(ctx, question) {
-    const active = Array.isArray(ctx.chart && ctx.chart.active) ? ctx.chart.active : ctx.active || [];
-    const names = Array.isArray(ctx.chart && ctx.chart.names) ? ctx.chart.names : active;
-    const scripts = (ctx.chart && ctx.chart.pine || ctx.pine || [])
-      .map(x => short(x.name)).slice(0, 4);
-    const q = short(question || '¿Qué hacen las velas y el volumen?');
     return [
-      'Lee ESTA IMAGEN real de un gráfico de trading, no solo sus etiquetas.',
-      'Sin saludos, títulos ni listas. Responde SOLO EN ESPAÑOL en dos frases cortas.',
-      'Primero: ¿las últimas velas suben, bajan o están laterales, y dónde está el precio respecto a las zonas dibujadas?',
-      'Segundo: ¿qué observas del volumen y del oscilador visibles?',
-      'Si un detalle no es legible, admítelo. No inventes cifras, señales ni entradas.',
-      'No menciones MACD, RSI ni Bollinger salvo que aparezcan activados.',
-      'Activo: '+short(ctx.symbol)+'. Temporalidad: '+short(ctx.interval)+'.',
-      'Indicadores visibles: '+names.map(short).slice(0,9).join(', ')+'.',
-      'Scripts visibles: '+(scripts.join(', ')||'ninguno')+'.',
-      'Pregunta del usuario: '+q+'.'
+      'Sin saludos, títulos ni listas.',
+      'Observa esta imagen de velas de trading de izquierda a derecha.',
+      'Responde únicamente en dos frases breves en español:',
+      '1) ¿El precio termina más arriba o más abajo que al inicio?',
+      '2) ¿Se ven barras de volumen debajo de las velas?',
+      'No inventes precios.',
+      'Activo: '+short(ctx && ctx.symbol || '')+'.',
+      'Temporalidad: '+short(ctx && ctx.interval || '')+'.'
     ].join(' ');
   }
   function promptSmol(ctx, question) {
