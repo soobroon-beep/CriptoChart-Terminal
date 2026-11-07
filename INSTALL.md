@@ -63,3 +63,7 @@ Publicación (una sola vez):
 3. GitHub → Actions → «Publicar servidor de avisos (vortex-push)» → Run workflow. Se vuelve a publicar solo cuando cambia `worker/push-alerts.mjs`.
 
 Android: Chrome necesita permiso de notificaciones y conviene quitarle la optimización de batería. iPhone (iOS 16.4+): solo desde la app añadida a la pantalla de inicio.
+
+## Optimizador ampliado
+
+El reentrenamiento (diario en el servidor y «Optimizar ahora» en el panel) ajusta ahora: stop loss, take profit, trailing, tiempo máximo en operación, filtros de volumen/volatilidad, periodos de los indicadores, desviaciones de Bollinger y umbrales de RSI/ADX/volumen. No toca el tamaño de la posición ni los parámetros de tus indicadores propios. Cuantos más parámetros se ajustan, mayor ventaja fuera de muestra se exige para proponer una candidata (control de sobreajuste). Nunca reemplaza la versión principal.

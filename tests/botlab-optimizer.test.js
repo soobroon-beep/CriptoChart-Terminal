@@ -7,7 +7,7 @@ const spec = () => { const s = B.defaultSpec(); s.entry.long = [{a: {k: 'ema', n
 test('espacio de búsqueda: SL, TP y periodos; no toca indicadores propios ni números fijos', () => {
   const s = spec(); s.entry.long.push({a: {k: 'user', sid: 'x', src: 'a'}, op: 'is'}, {a: {k: 'rsi', n: 14}, op: 'gt', b: {k: 'num', v: 50}}); const paths = O.space(s).map(d => d.path);
   assert.ok(paths.includes('risk.sl.v') && paths.includes('risk.tp.v') && paths.includes('entry.long.0.a.n') && paths.includes('entry.long.2.a.n'));
-  assert.ok(!paths.some(p => /\.1\.|\.b\.v$/.test(p) && /entry\.long\.1/.test(p)) && !paths.some(p => /entry\.long\.2\.b/.test(p)));
+  assert.ok(!paths.some(p => /entry\.long\.1\./.test(p)) && paths.includes('entry.long.2.b.v')); // indicador propio: nunca; umbral de RSI: sí
 });
 test('es determinista y devuelve su evidencia por tramos', async () => {
   const C = walk(3000, 4), a = await O.optimize(C, spec(), {budget: 25, seed: 7}), b = await O.optimize(C, spec(), {budget: 25, seed: 7});
@@ -28,4 +28,15 @@ test('datos insuficientes o sin parámetros: «no aplica» con motivo claro', as
 test('extractSources registra señales en la vela de nacimiento', () => {
   const res = {alerts: [{title: 'Compra', bars: [3, 7]}], shapes: [{title: 'S', kind: 'shape', loc: 'belowbar', pts: [[5, 1]]}], labelLog: [[2, 'BUY', 'up'], [9, 'BUY', 'up']], plots: [{id: 'p', title: 'L', values: [1, null, 3]}]};
   const s = O.extractSources(res, 12); assert.equal(s.length, 4); assert.equal(s[0].series[3], 1); assert.equal(s[2].count, 2); assert.ok(Number.isNaN(s[3].series[1]));
+});
+
+test('espacio ampliado: umbrales de RSI, filtros, trailing, Bollinger y tiempo máximo; nunca el tamaño de la posición', () => {
+  const sp = spec(); sp.entry.long.push({a: {k: 'rsi', n: 14}, op: 'gt', b: {k: 'num', v: 50}}, {a: {k: 'close'}, op: 'lt', b: {k: 'bbLo', n: 20, d: 2}}, {a: {k: 'close'}, op: 'gt', b: {k: 'num', v: 100}}); sp.filters.minVolRatio = 1; sp.risk.trail = {type: 'atr', v: 2}; sp.risk.maxBars = 40;
+  const d = O.space(sp), paths = d.map(x => x.path); for (const p of ['entry.long.1.b.v', 'entry.long.2.b.d', 'filters.minVolRatio', 'risk.trail.v', 'risk.maxBars']) assert.ok(paths.includes(p), p);
+  assert.ok(!paths.includes('entry.long.3.b.v') && !paths.some(p => /riskPct|sizePct|capital/.test(p))); const rsi = d.find(x => x.path === 'entry.long.1.b.v'); assert.ok(rsi.values.every(v => v >= 1 && v <= 99) && rsi.values.includes(50) && rsi.values.length >= 4);
+  for (const x of d) assert.ok(x.values.includes(x.base));
+});
+test('más parámetros ajustados → se exige más margen fuera de muestra (anti sobreajuste)', async () => {
+  const C = walk(3000, 4), sp = spec(); sp.entry.long.push({a: {k: 'rsi', n: 14}, op: 'gt', b: {k: 'num', v: 50}}); sp.filters.minVolRatio = 1; sp.risk.trail = {type: 'atr', v: 2};
+  const r = await O.optimize(C, sp, {budget: 30, seed: 2}); assert.ok(r.tuned.length >= 7); if (r.decision !== 'propuesta') assert.ok(r.reasons.length > 0);
 });

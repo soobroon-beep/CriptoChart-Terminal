@@ -28,9 +28,19 @@
 
   /* ───────── Espacio de búsqueda derivado de la propia estrategia ───────── */
   function space(spec) {
-    const dims = [], add = (path, base, mults, int) => { const vals = [...new Set(mults.map(m => { let v = base * m; v = int ? Math.max(2, Math.round(v)) : Math.round(v * 100) / 100; return v; }).concat([base]))].filter(v => v > 0).sort((a, b) => a - b); if (vals.length > 1) dims.push({path, base, values: vals}); };
-    const r = spec.risk; if (r.sl && r.sl.v) add('risk.sl.v', r.sl.v, [.6, .8, 1.25, 1.5, 2]); if (r.tp && r.tp.v) add('risk.tp.v', r.tp.v, [.6, .8, 1.25, 1.5, 2, 2.5]);
-    for (const g of ['entry', 'exit']) for (const side of ['long', 'short']) (spec[g][side] || []).forEach((c, i) => { for (const ab of ['a', 'b']) { const o = c[ab]; if (!o) continue; const def = B.OPERANDS[o.k]; if (!def || !def.p || o.k === 'num' || o.k === 'user') continue; for (const pk of Object.keys(def.p)) { if (pk === 'd' || typeof o[pk] !== 'number') continue; add(`${g}.${side}.${i}.${ab}.${pk}`, o[pk], [.6, .8, 1.25, 1.6], true); } } });
+    const dims = [], uniq = (vals, base) => [...new Set(vals.concat([base]))].filter(v => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
+    const add = (path, base, mults, int) => { const vals = uniq(mults.map(m => { const v = base * m; return int ? Math.max(2, Math.round(v)) : Math.round(v * 100) / 100; }), base); if (vals.length > 1) dims.push({path, base, values: vals}); };
+    const addAbs = (path, base, deltas, lo, hi) => { const vals = uniq(deltas.map(d => Math.min(hi, Math.max(lo, base + d))), base); if (vals.length > 1) dims.push({path, base, values: vals}); };
+    const r = spec.risk, f = spec.filters || {}; // el tamaño de la posición (riesgo por operación, capital) NO se optimiza a propósito: subirlo «mejora» el resultado sin mejorar la estrategia
+    if (r.sl && r.sl.v) add('risk.sl.v', r.sl.v, [.6, .8, 1.25, 1.5, 2]); if (r.tp && r.tp.v) add('risk.tp.v', r.tp.v, [.6, .8, 1.25, 1.5, 2, 2.5]); if (r.trail && r.trail.v) add('risk.trail.v', r.trail.v, [.6, .8, 1.25, 1.6]); if (r.maxBars > 0) add('risk.maxBars', r.maxBars, [.5, .75, 1.5, 2], true);
+    if (f.minVolRatio > 0) add('filters.minVolRatio', f.minVolRatio, [.6, .8, 1.25, 1.5]); if (f.minAtrPct > 0) add('filters.minAtrPct', f.minAtrPct, [.6, .8, 1.25, 1.5]); if (f.maxAtrPct > 0) add('filters.maxAtrPct', f.maxAtrPct, [.6, .8, 1.25, 1.5]);
+    const OSC = /^(rsi|adx)$/, RATIO = /^volRatio$/;
+    for (const g of ['entry', 'exit']) for (const side of ['long', 'short']) (spec[g][side] || []).forEach((c, i) => {
+      for (const ab of ['a', 'b']) { const o = c[ab]; if (!o) continue; const def = B.OPERANDS[o.k]; if (!def || !def.p || o.k === 'user') continue;
+        if (o.k === 'num') { const other = c[ab === 'a' ? 'b' : 'a']; if (!other || typeof o.v !== 'number') continue; const base = `${g}.${side}.${i}.${ab}.v`; // umbrales fijos: solo si se comparan con un oscilador/ratio (con precios no tienen sentido)
+          if (OSC.test(other.k)) addAbs(base, o.v, [-10, -5, 5, 10], 1, 99); else if (RATIO.test(other.k) && o.v > 0) add(base, o.v, [.7, .85, 1.2, 1.5]); continue; }
+        for (const pk of Object.keys(def.p)) { if (typeof o[pk] !== 'number') continue; if (pk === 'd') add(`${g}.${side}.${i}.${ab}.d`, o[pk], [.75, .9, 1.1, 1.25]); else add(`${g}.${side}.${i}.${ab}.${pk}`, o[pk], [.6, .8, 1.25, 1.6], true); } }
+    });
     return dims;
   }
   const apply = (spec, assign) => { const s = clone(spec); for (const [p, v] of Object.entries(assign)) setP(s, p, v); return s; };
@@ -58,11 +68,12 @@
   /* ───────── Walk-forward ───────── */
   async function optimize(candles, spec, opts) {
     opts = Object.assign({budget: 60, seed: 1, trainFrac: .5, testFrac: .1, holdFrac: .15, minOosTrades: 30, onProgress: null, yield: null, ropts: {}}, opts || {});
-    const N = candles.length, cap = spec.risk.capital, out = {at: Date.now(), bars: N, from: N ? candles[0].t : null, to: N ? candles[N - 1].t : null, folds: [], oos: null, holdout: null, candidate: null, changes: [], decision: 'sin_mejora', reasons: [], dims: 0};
+    const N = candles.length, cap = spec.risk.capital, out = {tuned: null, at: Date.now(), bars: N, from: N ? candles[0].t : null, to: N ? candles[N - 1].t : null, folds: [], oos: null, holdout: null, candidate: null, changes: [], decision: 'sin_mejora', reasons: [], dims: 0};
     const dims = space(spec); out.dims = dims.length; if (!dims.length) { out.decision = 'no_aplica'; out.reasons.push('La estrategia no tiene parámetros numéricos ajustables (periodos, stop loss o take profit).'); return out; }
     if (N < 1200) { out.decision = 'no_aplica'; out.reasons.push(`Solo hay ${N} velas: se necesitan al menos 1.200 para validar sin mirar al futuro.`); return out; }
+    const budget = Math.max(opts.budget, Math.min(140, dims.length * 7)), tuneMargin = .02 * (1 + Math.max(0, dims.length - 4) / 8); // cuantos más parámetros se ajustan, más ventaja se exige (más riesgo de sobreajuste)
     const trainLen = Math.floor(N * opts.trainFrac), testLen = Math.floor(N * opts.testFrac), H0 = Math.floor(N * (1 - opts.holdFrac)), stepLen = testLen, ropts = opts.ropts;
-    const o2 = {seed: opts.seed, budget: opts.budget, ropts, yield: opts.yield}, foldsN = Math.max(0, Math.floor((H0 - trainLen - testLen) / stepLen) + 1);
+    const o2 = {seed: opts.seed, budget, ropts, yield: opts.yield}, foldsN = Math.max(0, Math.floor((H0 - trainLen - testLen) / stepLen) + 1);
     let oosCand = [], oosBase = [], wins = 0, valid = 0; const total = foldsN + 1;
     for (let k = 0; k < foldsN; k++) {
       const s = k * stepLen, te = s + trainLen, ee = te + testLen; if (ee > H0) break; if (opts.onProgress) opts.onProgress(k, total, `Tramo ${k + 1}/${foldsN}`);
@@ -75,12 +86,12 @@
     if (opts.onProgress) opts.onProgress(foldsN, total, 'Candidata final');
     const fs = Math.max(0, H0 - trainLen), f = await fit(candles, spec, fs, H0, dims, o2), cs = apply(spec, f.assign), hc = stats(runWin(candles, cs, fs, N, ropts), H0 - fs, cap), hb = stats(runWin(candles, spec, fs, N, ropts), H0 - fs, cap);
     out.holdout = {from: candles[H0].t, to: candles[N - 1].t, cand: {n: hc.n, net: hc.net, retPct: hc.retPct, maxDDPct: hc.maxDDPct, pf: hc.pfInf ? 99 : hc.profitFactor}, base: {n: hb.n, net: hb.net, retPct: hb.retPct, maxDDPct: hb.maxDDPct, pf: hb.pfInf ? 99 : hb.profitFactor}};
-    out.changes = diff(spec, f.assign); const why = out.reasons;
+    out.changes = diff(spec, f.assign); out.tuned = dims.map(d => d.path); const why = out.reasons;
     if (!out.changes.length) why.push('El ajuste con datos recientes no encontró nada mejor que los parámetros actuales.');
     if (valid < 3) why.push(`Solo ${valid} tramos de validación (se necesitan 3 o más).`);
     if (out.oos.cand.n < opts.minOosTrades) why.push(`Solo ${out.oos.cand.n} operaciones fuera de muestra (mínimo ${opts.minOosTrades}).`);
     if (!(out.oos.cand.net > 0)) why.push('Fuera de muestra el procedimiento no gana dinero.');
-    if (!(out.oos.cand.net > out.oos.base.net + .02 * cap)) why.push('Fuera de muestra no supera a la versión actual por un margen claro (2 % del capital).');
+    if (!(out.oos.cand.net > out.oos.base.net + tuneMargin * cap)) why.push(`Fuera de muestra no supera a la versión actual por un margen claro (${(tuneMargin * 100).toFixed(1)} % del capital; se exige más cuantos más parámetros se ajustan).`);
     if (valid && wins / valid < .6) why.push(`Solo mejoró a la versión actual en ${wins} de ${valid} tramos (se exige al menos el 60 %).`);
     if (!(hc.n >= 5 && hc.net > hb.net && hc.net > 0)) why.push('En el tramo reservado más reciente la candidata no supera a la versión actual.');
     if (hc.maxDDPct > hb.maxDDPct * 1.25 + 1) why.push('La candidata aumenta el drawdown más de lo aceptable en el tramo reservado.');
