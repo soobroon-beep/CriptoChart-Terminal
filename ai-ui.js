@@ -129,7 +129,7 @@
       extra.screenshot = captureChart(ctx);
     if (isChart) extra.chartSnapshotMode = true;
     const typing = push('bot', '…', 'typing');
-    let out;
+    let out, showedCore = false;
     try {
       if (!ctx && isBrief) out = AI.briefLocal(null, extra);
       else if (!ctx) out = 'Todavía no hay velas cargadas. Abre **Gráfico** y vuelve a intentarlo.';
@@ -137,12 +137,19 @@
         // El análisis contrastable siempre se calcula del MISMO tramo visible,
         // sin consultar RSI/MACD/Bollinger a menos que se hayan activado.
         out = analyst.answer(q, ctx);
+        // Mostrar ya el resultado calculado, sin bloquear la lectura mientras
+        // el modelo visual descarga sus pesos o procesa la captura.
+        typing.classList.remove('typing'); typing.innerHTML = md(out); showedCore = true;
         if (st.vision !== 'off' && window.CCTFreeVision && extra.screenshot) {
+          const progress = document.createElement('p');
+          progress.className = 'ai-vision-progress';
+          progress.textContent = 'Comprobando detalles visuales…';
+          typing.appendChild(progress);
           try {
             const response = await window.CCTFreeVision.analyze({
               ctx,screenshot:extra.screenshot,model:st.vision,question:q,
               onProgress: message => {
-                if (typing.isConnected) typing.textContent = String(message || 'Analizando el gráfico…');
+                if (typing.isConnected) progress.textContent = String(message || 'Analizando el gráfico…');
               }
             });
             const observation = String(response.text || '').trim();
@@ -167,7 +174,8 @@
     if (mostlyEnglish(out)) out = ctx
       ? (isChart ? analyst.answer(q,ctx) : AI.answerLocal(q,ctx,extra))
       : 'No pude obtener una respuesta en español. Vuelve a intentarlo.';
-    typing.remove(); push('bot', out);
+    if (showedCore) typing.innerHTML = md(out);
+    else { typing.remove(); push('bot', out); }
     st.hist.push({role:'user',text:q},{role:'assistant',text:out});
     if(st.hist.length>16)st.hist.splice(0,2);
     st.busy = false; $('#aiSend').disabled = false; badge();
