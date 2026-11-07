@@ -48,6 +48,6 @@ jobs:
         with:
           node-version: '22'
       - name: Instalar procesador multimodal real
-        run: npm install --no-save --no-package-lock @huggingface/transformers@4.4.0-next.0 pngjs
+        run: npm install --no-save --no-package-lock @huggingface/transformers@4.4.0-next.0 pngjs @napi-rs/canvas
       - name: Decodificar imagen y preparar tensores Qwen3.5
         run: node tests/ai-processor-real.mjs
