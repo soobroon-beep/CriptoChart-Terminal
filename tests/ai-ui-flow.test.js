@@ -6,7 +6,7 @@ const vm=require('node:vm');
 const {readFileSync}=require('node:fs');
 const {join}=require('node:path');
 const source=readFileSync(join(__dirname,'..','ai-ui.js'),'utf8');
-const start=source.indexOf('  function launchVisual('),end=source.indexOf('  function init() {',start);
+const start=source.indexOf('  function screenshotPreview('),end=source.indexOf('  function init() {',start);
 assert.ok(start>=0&&end>start,'El módulo debe exponer launchVisual y ask');
 
 function harness() {
